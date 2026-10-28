@@ -5,6 +5,12 @@ const str = z.string().min(1);
 const source = z.object({ entryIds: z.array(str), by: str });
 const baseItem = z.object({ text: str, source, supersedes: str.optional() });
 const affects = z.array(str).min(1);
+const SUPERSEDE_FIELDS = {
+  conventions: [],
+  decisions: ['rationale', 'rejected', 'affects'],
+  facts: ['affects'],
+  failures: ['reason', 'affects'],
+} as const satisfies Record<string, readonly string[]>;
 
 export const boardOpSchema = z.discriminatedUnion('op', [
   z.object({
@@ -24,12 +30,31 @@ export const boardOpSchema = z.discriminatedUnion('op', [
     op: z.literal('addFailure'),
     failure: baseItem.extend({ reason: str, affects }),
   }),
-  z.object({
-    op: z.literal('supersede'),
-    section: z.enum(['conventions', 'decisions', 'facts', 'failures']),
-    id: str,
-    item: baseItem,
-  }),
+  z
+    .object({
+      op: z.literal('supersede'),
+      section: z.enum(['conventions', 'decisions', 'facts', 'failures']),
+      id: str,
+      // Type-specific fields are optional here; omitted ones are inherited from the superseded item.
+      item: baseItem.extend({
+        rationale: str.optional(),
+        rejected: z.array(str).optional(),
+        affects: affects.optional(),
+        reason: str.optional(),
+      }),
+    })
+    .superRefine((val, ctx) => {
+      const allowed: readonly string[] = SUPERSEDE_FIELDS[val.section];
+      for (const key of ['rationale', 'rejected', 'affects', 'reason'] as const) {
+        if (val.item[key] !== undefined && !allowed.includes(key)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['item', key],
+            message: `"${key}" is not valid for section ${val.section}`,
+          });
+        }
+      }
+    }),
   z.object({ op: z.literal('closeQuestion'), id: str }),
   z.object({
     op: z.literal('setWorkstreamStatus'),

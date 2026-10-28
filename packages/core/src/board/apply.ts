@@ -89,8 +89,8 @@ export function applyOp(board: ProjectBoard, op: BoardOp, meta: ApplyMeta): Appl
     }
     case 'closeQuestion': {
       const index = next.openQuestions.findIndex((q) => q.id === op.id);
+      if (index < 0) invalid(`Cannot close unknown open question "${op.id}"`, op);
       const [closed] = next.openQuestions.splice(index, 1);
-      if (!closed) invalid(`Cannot close unknown open question "${op.id}"`, op);
       archived.push({ section: 'openQuestions', item: closed });
       break;
     }

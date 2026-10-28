@@ -139,6 +139,15 @@ describe('applyOp', () => {
     expect(archived[0]).toMatchObject({ section: 'openQuestions', item: { id: 'q1' } });
   });
 
+  test('closeQuestion with an unknown id throws and leaves the questions untouched', () => {
+    const b: ProjectBoard = { ...empty(), openQuestions: [item('q1'), item('q2')] };
+    const snapshot = structuredClone(b);
+    expect(() => applyOp(b, { op: 'closeQuestion', id: 'nope' }, bot('x'))).toThrow(
+      expect.objectContaining({ code: 'INVALID_OP' }),
+    );
+    expect(b).toEqual(snapshot);
+  });
+
   test('addDeliverable appends with incrementing version', () => {
     const b: ProjectBoard = { ...empty(), workstreams: [ws('w1')] };
     const r1 = applyOp(b, { op: 'addDeliverable', workstreamId: 'w1', summary: 's1', ref: 'r1' }, bot('art'));
@@ -227,6 +236,33 @@ describe('parseOps', () => {
     ]);
     expect(r.ok).toEqual([]);
     expect(r.rejected.map((x) => x.index)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  test('supersede via parseOps: supplied type-specific fields override, omitted ones are inherited', () => {
+    const base = { op: 'supersede', section: 'decisions', id: 'd1' };
+    const r = parseOps([
+      { ...base, item: { text: 'new', source: src(), rationale: 'new reason', rejected: ['x'], affects: ['w2'] } },
+      { ...base, item: { text: 'new', source: src() } },
+    ]);
+    expect(r.rejected).toEqual([]);
+    const b1 = withDecision('d1');
+    const withNew = applyOp(b1, r.ok[0]!, bot('art')).board.decisions[0]!;
+    expect(withNew).toMatchObject({ rationale: 'new reason', rejected: ['x'], affects: ['w2'], supersedes: 'd1' });
+    const inherited = applyOp(b1, r.ok[1]!, bot('art')).board.decisions[0]!;
+    expect(inherited).toMatchObject({ rationale: 'because', rejected: ['16x16'], affects: ['w1'] });
+  });
+
+  test('supersede via parseOps: facts and failures fields, empty affects and wrong-section fields rejected', () => {
+    const r = parseOps([
+      { op: 'supersede', section: 'facts', id: 'f1', item: { text: 't', source: src(), affects: ['w1'] } },
+      { op: 'supersede', section: 'failures', id: 'x1', item: { text: 't', source: src(), reason: 'r', affects: ['w1'] } },
+      { op: 'supersede', section: 'facts', id: 'f1', item: { text: 't', source: src(), affects: [] } },
+      { op: 'supersede', section: 'facts', id: 'f1', item: { text: 't', source: src(), rationale: 'no' } },
+      { op: 'supersede', section: 'conventions', id: 'c1', item: { text: 't', source: src(), affects: ['w1'] } },
+      { op: 'supersede', section: 'decisions', id: 'd1', item: { text: 't', source: src(), rationale: '' } },
+    ]);
+    expect(r.ok).toHaveLength(2);
+    expect(r.rejected.map((x) => x.index)).toEqual([2, 3, 4, 5]);
   });
 
   test('accepts every valid op shape', () => {
