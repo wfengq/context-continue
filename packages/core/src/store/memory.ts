@@ -48,12 +48,15 @@ export function memoryStore(): Store {
       return copy(limit === undefined ? out : out.slice(0, limit));
     },
     async search(projectId, query, limit) {
-      const q = query.toLowerCase();
+      const words = query.toLowerCase().split(/\s+/).filter(w => w !== '');
+      if (words.length === 0) return [];
       const out: LedgerEntry[] = [];
       for (const e of ledgers.get(projectId) ?? []) {
         if (limit !== undefined && out.length >= limit) break;
         const text = searchableText(e);
-        if (text !== null && text.toLowerCase().includes(q)) out.push(e);
+        if (text === null) continue;
+        const lower = text.toLowerCase();
+        if (words.every(w => lower.includes(w))) out.push(e);
       }
       return copy(out);
     },

@@ -197,6 +197,57 @@ export function runStoreContract(name: string, make: () => Promise<Store>): void
     expect(await s.search('p1', 'absent')).toEqual([]);
   });
 
+  test(`[${name}] search requires every whitespace-separated word, in any order and position`, async () => {
+    const s = await make();
+    await s.append(chat('p1', 'the pixel art needs a bigger sound effect'));
+    await s.append(chat('p1', 'only pixel here'));
+    await s.append(chat('p1', 'only sound here'));
+    const hits = await s.search('p1', '  SOUND   pixel ');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.body.type === 'chat' && hits[0]!.body.text).toBe('the pixel art needs a bigger sound effect');
+    // mixes a short (< 3 chars) word with a long one
+    expect((await s.search('p1', 'o pixel')).map(h => h.seq)).toEqual([1, 2]);
+  });
+
+  test(`[${name}] search takes punctuation literally and never throws`, async () => {
+    const s = await make();
+    await s.append(chat('p1', 'we use C++ and "quoted" -x:y syntax'));
+    await s.append(chat('p1', 'plain text'));
+    expect((await s.search('p1', 'C++ "quoted" -x:y')).map(h => h.seq)).toEqual([1]);
+    expect(await s.search('p1', '"nomatch')).toEqual([]);
+    expect(await s.search('p1', 'NEAR( AND OR *')).toEqual([]);
+    expect(await s.search('p1', '100% _ \\')).toEqual([]);
+  });
+
+  test(`[${name}] search treats LIKE wildcards in short words literally`, async () => {
+    const s = await make();
+    await s.append(chat('p1', 'progress 50% done'));
+    await s.append(chat('p1', 'some_name here'));
+    await s.append(chat('p1', 'abc'));
+    expect((await s.search('p1', '0%')).map(h => h.seq)).toEqual([1]);
+    expect((await s.search('p1', 'e_n')).map(h => h.seq)).toEqual([2]);
+    expect(await s.search('p1', '%')).toHaveLength(1);
+    expect(await s.search('p1', 'a_')).toEqual([]);
+  });
+
+  test(`[${name}] search finds a 2-character CJK word and returns hits oldest first`, async () => {
+    const s = await make();
+    await s.append(chat('p1', '音效再大一点'));
+    await s.append(chat('p1', '无关'));
+    await s.append(archived('p1', '{"text":"调整音效"}'));
+    await s.append(chat('p1', '音效很好，背景音乐也不错'));
+    expect((await s.search('p1', '音效')).map(h => h.seq)).toEqual([1, 3, 4]);
+    expect((await s.search('p1', '音效 背景音乐')).map(h => h.seq)).toEqual([4]);
+    expect((await s.search('p1', '音效', 2)).map(h => h.seq)).toEqual([1, 3]);
+  });
+
+  test(`[${name}] search with an empty or whitespace-only query returns nothing`, async () => {
+    const s = await make();
+    await s.append(chat('p1', 'something'));
+    expect(await s.search('p1', '')).toEqual([]);
+    expect(await s.search('p1', '   \t\n ')).toEqual([]);
+  });
+
   test(`[${name}] drainProposals empties the queue`, async () => {
     const s = await make();
     await s.enqueueProposal(proposal('p1', 'a'));
@@ -226,6 +277,9 @@ export function runStoreContract(name: string, make: () => Promise<Store>): void
     await s.deletePending('mid');
     expect((await s.listPending('p1')).map(p => p.id)).toEqual(['early', 'late']);
     await s.deletePending('does-not-exist');
+    await s.savePending(pending('p1', 'tie-b', 40));
+    await s.savePending(pending('p1', 'tie-a', 40));
+    expect((await s.listPending('p1')).map(p => p.id)).toEqual(['early', 'late', 'tie-b', 'tie-a']);
     expect((await s.listPending('p2')).map(p => p.id)).toEqual(['other']);
   });
 
