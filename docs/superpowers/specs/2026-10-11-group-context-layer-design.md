@@ -1,309 +1,476 @@
-# 多 Bot 群组上下文层 设计文档
+# 项目驱动的多 Bot 上下文层 设计文档
 
-- 日期：2026-10-11
+- 初版：2026-10-11；修订：2026-10-28
 - 状态：待审阅
 - 语言：TypeScript
 - 背景调研：`research/grok-bot-landscape-2026-10.md`、`research/group-shared-private-context.md`
 
 ---
 
-## 1. 目标与背景
+## 0. 相比上一版改了什么
 
-### 1.1 要解决的问题
-Grok Bot 这类多 Bot 群组里，每个 Bot 每次回复都要重读自己的完整对话，群里的消息也可能广播给所有 Bot。结果是 token 消耗随群聊长度和 Bot 数量一起增长，上下文窗口也很快被塞满。
+上一版以**群聊**为主体，状态板是从聊天里抽取出来的副产品。这一版以**项目**为主体：有项目才有群，群聊只是项目的一种交互界面。
 
-### 1.2 方案一句话
-群组维护一份共享的、结构化的**状态板**；每个 Bot 有自己的**私有层**；原始消息存进**日志**，默认不加载；每条消息只**唤醒**相关的 Bot。
-
-### 1.3 用户的目标（已确认）
-- 减少多 Bot 群组的 token 消耗。
-- 做成开源项目拿 star、引起大厂关注，或成为相关生态里不可缺少的组件。
-
-### 1.4 成功标准
-- 同一个群组任务，与"全量广播"相比总输入 token 明显下降（目标 ≥50%，以评测结果为准）。
-- 每次唤醒的上下文长度有上限，不随群聊变长而增长。
-- 任务质量评分不低于全量广播。
-- 以上结果有可复现的评测脚本。
-
-### 1.5 已确认的决定
-| 决定 | 结论 |
-|---|---|
-| 语言 | TypeScript |
-| 第一版宿主 | 三类都覆盖：核心库 + MCP 服务适配 + OpenClaw 插件适配 |
-| 整体架构 | 方案 A：与宿主无关的核心库，适配层只做薄包装 |
-| 状态板更新 | 混合：Bot 提交结构化变更 + 人的消息定期由抽取模型转成变更，书记员统一合并、带版本号 |
-| 唤醒策略 | 规则优先，路由模型兜底 |
-| 存储 | 可替换的 `Store` 接口，默认 SQLite，另有内存实现 |
-| 模型 | 核心库不直接调模型，路由和抽取模型由宿主以函数传入 |
-| 所有权 | 第一版每个群只有一个所有者 |
+| 方面 | 上一版 | 这一版 |
+|---|---|---|
+| 主体 | 群聊 | 项目 |
+| 共享层 | 状态板：目标、决定、任务、事实、待决问题 | 项目板：目标与约束、约定、工作块、接口约定、决定（附理由与被否决方案）、事实、待决问题 |
+| 群成员 | 手动加入 | 由拆分决定 |
+| 私有层 | 一层 | 拆成项目工作区（随项目归档）和员工长期记忆（跨项目） |
+| 唤醒 | @、话题订阅为主 | 项目事件为主（被分配、上游已交付、相关决定或接口变了），@ 为补充 |
+| 新操作 | 无 | 拆分提案（负责人 Bot 提议、人确认）、提升（私有 → 公共）、交付检查、复盘 |
+| 评测 | 全量广播 vs 本方案 | 增加"单 Agent、完整上下文、不拆分"作为对照组 |
 
 ---
 
-## 2. 三层数据模型
+## 1. 目标与背景
 
-### 2.1 L0 群组日志 `Ledger`
-只追加、永不修改，是唯一的事实来源。
+### 1.1 要解决的问题
+Grok Bot 这类多 Bot 群组里，每个 Bot 每次回复都要重读完整对话，群消息也可能广播给所有 Bot。token 消耗随对话长度和 Bot 数量一起增长，上下文窗口也很快被塞满。
+
+### 1.2 核心观点
+- 数字员工的工作是**项目驱动**的：先把项目拆成若干部分，再分配给合适的员工执行。不是项目形态的工作（处理邮件、监控等）不需要群组，交给单个 Bot 即可，不在本项目范围内。
+- 每个员工需要的不是整个项目，而是项目的**投影**：目标与约束、全局约定、自己的工作块、与相邻工作块的接口约定、影响自己的决定及理由。
+- 每个员工还有自己的私有上下文：项目内的工作过程（草稿、试错、工具输出），以及跨项目积累的长期记忆。
+- 大部分员工不需要"聊天"：拿到简报、在私有工作区里干活、把交付物和决定交回项目。
+
+### 1.3 设计时必须应对的两个反驳
+1. **隐含决定的冲突**（Cognition《Don't Build Multi-Agents》）：并行的 Agent 会各自做出命名、风格、边界情况等隐含决定，拼起来就冲突。对策：项目板包含约定和接口约定；交付时由负责人 Bot 检查是否违反；项目板只由核心库代码串行写入。
+2. **拆分会变**：执行中常发现原来的拆分不合理。对策：重新拆分是一等操作，随时可以发起。
+
+### 1.4 用户的目标
+- 减少多 Bot 协作的 token 消耗。
+- 做成开源项目拿 star、引起大厂关注，或成为相关生态里不可缺少的组件。
+
+### 1.5 成功标准（以评测结果为准）
+- 与"多员工 + 全量广播"（B 组）相比，本方案（C 组）总输入 token 至少减少 50%。
+- C 组每次唤醒的上下文长度有上限，不随项目进行而增长。
+- C 组任务质量不低于 B 组；与"单 Agent 完整上下文"（A 组）的质量差距如实报告。
+- C 组的一致性冲突数少于 B 组；总耗时少于 A 组。
+- 以上结果有可复现的评测脚本。
+
+### 1.6 已确认的决定
+| 决定 | 结论 |
+|---|---|
+| 语言 | TypeScript |
+| 宿主 | 核心库 + MCP 服务适配 + OpenClaw 插件适配 |
+| 架构 | 方案 A：与宿主无关的核心库；核心库不调用模型，模型由宿主运行或以函数传入 |
+| 谁来拆分 | 负责人 Bot 提议，人确认后生效；重新拆分走同样流程 |
+| 项目板写入 | 核心库代码串行写入；需要判断的提案交给负责人 Bot；拆分和目标变更需要人确认 |
+| 人的聊天内容 | 每 N 条由抽取模型转成提案（authority 为 human） |
+| 存储 | 可替换的 `Store` 接口，默认 SQLite，另有内存实现 |
+| 所有权 | 第一版每个项目只有一个所有者 |
+
+---
+
+## 2. 数据模型
+
+### 2.1 L0 项目日志
+只追加、永不修改，是唯一的事实来源。包含聊天消息和项目事件。
 
 ```ts
-interface Message {
+interface LedgerEntry {
   id: string;
-  groupId: string;
-  seq: number;                       // 群内单调递增
-  author: { kind: 'human' | 'bot'; id: string };
-  text: string;
-  mentions: string[];                // 被 @ 的 botId
-  replyTo?: string;
-  createdAt: number;                 // 毫秒时间戳
+  projectId: string;
+  seq: number;                          // 项目内单调递增
+  createdAt: number;
+  author: { kind: 'human' | 'bot' | 'system'; id: string };
+  body:
+    | { type: 'chat'; text: string; mentions: string[]; replyTo?: string }
+    | { type: 'event'; event: ProjectEvent };
 }
+
+type ProjectEvent =
+  | { kind: 'projectStarted' }
+  | { kind: 'planProposed'; proposalId: string }
+  | { kind: 'planApproved'; proposalId: string }
+  | { kind: 'planRejected'; proposalId: string; feedback: string }
+  | { kind: 'deliverableSubmitted'; workstreamId: string; deliverableId: string }
+  | { kind: 'reviewPassed' | 'reviewFailed'; deliverableId: string; notes: string }
+  | { kind: 'blocked'; workstreamId: string; reason: string }
+  | { kind: 'boardMerged'; version: number }
+  | { kind: 'archived'; what: string; ref: string }
+  | { kind: 'projectClosed'; forced: boolean };
 ```
 
-### 2.2 L1 群组状态板 `Board`
-结构化、带版本号，每次合并后版本号加 1。
+### 2.2 L1 项目板
 
 ```ts
-interface Board {
-  groupId: string;
+interface ProjectBoard {
+  projectId: string;
   version: number;
   updatedAt: number;
+  status: 'active' | 'closed';
+  lead: string;                         // 负责人 Bot
   goal: string;
-  members: { id: string; kind: 'human' | 'bot'; role: string }[]; // role 只写一行职责
-  decisions: Item[];
-  tasks: TaskItem[];
-  facts: Item[];
+  constraints: string[];
+  planStatus: 'none' | 'draft' | 'approved';
+  conventions: Item[];                  // 命名、风格、格式等全员遵守的规则
+  workstreams: Workstream[];
+  contracts: Contract[];
+  decisions: Decision[];
+  facts: Fact[];
   openQuestions: Item[];
 }
 
 interface Item {
   id: string;
   text: string;
-  source: { msgIds: string[]; by: string };
-  supersedes?: string;               // 覆盖的旧条目 id
-  authority: 'human' | 'bot';        // 冲突时 human 优先
+  source: { entryIds: string[]; by: string };
+  supersedes?: string;
+  authority: 'human' | 'bot';           // 由核心库根据来源设定，冲突时 human 优先
 }
 
-interface TaskItem extends Item {
-  owner?: string;
-  status: 'open' | 'doing' | 'done' | 'blocked';
+interface Decision extends Item {
+  rationale: string;
+  rejected: string[];                   // 否决过的方案
+  affects: string[];                    // 影响的工作块 id
+}
+
+interface Fact extends Item {
+  affects: string[];
+}
+
+interface Workstream {
+  id: string;
+  title: string;
+  brief: string;
+  owner: string;                        // 负责的 Bot（负责人 Bot 也可以负责工作块）
+  dependsOn: string[];
+  status: 'pending' | 'active' | 'blocked' | 'delivered';
+  reviewRounds: number;
+  deliverables: { id: string; summary: string; ref: string; version: number }[];
+}
+
+interface Contract {
+  id: string;
+  from: string;                         // 提供方工作块
+  to: string;                           // 使用方工作块
+  spec: string;                         // 交什么、什么格式
+  version: number;
 }
 ```
 
-**大小控制**：状态板设上限（默认约 3,000 token，可配置）。超出时，已完成的任务和已被覆盖的条目从状态板移除，写一条归档消息（`author.kind = 'bot'`，`id = 'clerk'`）到日志，之后可以用 `searchLedger` 查到。
+交付物全文存在 `Store` 里，项目板只放摘要和引用。
 
-### 2.3 L2 Bot 私有层 `BotPrivate`
-每个 Bot 一份，其他 Bot 读不到。
+**大小控制**：项目板公共部分（目标、约束、约定、工作块列表）默认上限约 3,000 token，可配置。超出时，已关闭的问题和已被覆盖的条目移出项目板，写入一条 `archived` 事件，之后可以用 `searchLedger` 查到。
+
+### 2.3 L2a 项目工作区（每个 Bot × 每个项目一份，私有）
 
 ```ts
-interface BotPrivate {
+interface Workspace {
+  projectId: string;
   botId: string;
-  groupId: string;
-  persona: string;                   // 角色、偏好，稳定不常变
-  notes: string;                     // Bot 自己维护的工作笔记，默认上限约 2,000 token
-  subscriptions: string[];           // 订阅的话题关键词
-  lastSeenSeq: number;               // 上次处理到的日志位置
-  lastSeenBoardVersion: number;      // 上次看到的状态板版本
+  notes: string;                        // 工作笔记、草稿要点，默认上限约 2,000 token
+  lastSeenSeq: number;
+  lastSeenBoardVersion: number;
+  promotionsThisTurn: number;
 }
 ```
+项目收尾时，工作区在复盘后归档，不跟着员工进入下一个项目。
 
-### 2.4 状态变更提案 `Proposal`
-任何人都不能直接改状态板，只能提交提案，由书记员合并。
+### 2.4 L2b 员工长期记忆（每个 Bot 一份，跨项目）
 
 ```ts
+interface EmployeeMemory {
+  botId: string;
+  persona: string;
+  skills: string[];
+  memories: { id: string; text: string; fromProject: string; createdAt: number }[];
+}
+```
+只能由该员工自己的复盘写入；默认上限约 1,500 token，超出时淘汰最早的记忆；可导出为 Markdown 供人查看和删除。
+
+### 2.5 提案
+
+```ts
+interface PlanProposal {
+  id: string;
+  projectId: string;
+  by: string;                           // 负责人 Bot
+  workstreams: Omit<Workstream, 'status' | 'reviewRounds' | 'deliverables'>[];
+  contracts: Omit<Contract, 'version'>[];
+  status: 'pending' | 'approved' | 'rejected';
+  rejectCount: number;
+}
+
 interface Proposal {
   id: string;
-  groupId: string;
+  projectId: string;
   baseVersion: number;
-  by: string;                        // botId，或 'extractor'
+  by: string;                           // botId，或 'extractor'
   ops: BoardOp[];
 }
 
-type Section = 'decisions' | 'tasks' | 'facts' | 'openQuestions';
-
 type BoardOp =
-  | { op: 'add'; section: Section; item: Omit<Item, 'id'> | Omit<TaskItem, 'id'> }
-  | { op: 'update'; section: Section; id: string; patch: Partial<TaskItem> }
-  | { op: 'supersede'; section: Section; id: string; item: Omit<Item, 'id'> }
-  | { op: 'close'; section: 'openQuestions' | 'tasks'; id: string }
-  | { op: 'setGoal'; goal: string };
+  | { op: 'add'; section: 'conventions' | 'openQuestions'; item: Omit<Item, 'id' | 'authority'> }
+  | { op: 'addFact'; fact: Omit<Fact, 'id' | 'authority'> }               // 提升操作也落在这里
+  | { op: 'addDecision'; decision: Omit<Decision, 'id' | 'authority'> }
+  | { op: 'supersede'; section: 'conventions' | 'decisions' | 'facts'; id: string; item: Omit<Item, 'id' | 'authority'> }
+  | { op: 'closeQuestion'; id: string }
+  | { op: 'setWorkstreamStatus'; id: string; status: Workstream['status'] }
+  | { op: 'addDeliverable'; workstreamId: string; summary: string; ref: string }
+  | { op: 'updateContract'; id: string; spec: string }
+  | { op: 'setGoal'; goal: string }
+  | { op: 'setConstraints'; constraints: string[] };
 ```
 
-`close` 的含义：对 `tasks` 是把 `status` 设为 `done`；对 `openQuestions` 是从状态板移除并写入归档消息。
+**提升**是 `addFact` 或 `addDecision`，必须带非空的 `affects`。
 
-每次合并后，书记员把本次实际生效的操作连同新版本号记入**变更记录**（`BoardChange { version, ops, mergedAt }`），用于生成第 3.2 节中的"状态板变化摘要"。
-
-`authority` 由书记员根据来源决定，不由提交方声明：来自人的消息（经抽取模型）的为 `human`，来自 Bot 提交的为 `bot`。
+每次合并后，核心库把生效的操作连同新版本号记入变更记录 `BoardChange { version, ops, mergedAt }`，用于生成"项目板变化摘要"。
 
 ---
 
-## 3. 消息处理流程
+## 3. 合并规则
 
-```
-① ingest(msg)        写入日志，分配 seq
-② route(msg)         返回要唤醒的 Bot 列表及原因
-③ buildContext(bot)  为每个被唤醒的 Bot 组装分段上下文
-   （宿主用自己的模型运行 Bot）
-④ commitTurn(...)    回复写入日志，更新 Bot 的指针，提案入队
-⑤ merge()            书记员合并提案，状态板版本 +1
-```
+核心库代码按项目串行处理提案队列。每条操作归入以下三类之一：
 
-### 3.1 唤醒规则（route）
-按顺序判断，命中即加入唤醒列表：
-1. 消息 `mentions` 包含该 Bot。
-2. 消息回复的是该 Bot 的消息。
-3. 消息提到某任务，该任务的 `owner` 是该 Bot（提到 = 文本包含任务 id 或任务标题关键词）。
-4. 消息文本命中该 Bot 的 `subscriptions`。
-5. 以上都没命中、消息作者是人，并且宿主提供了 `models.route` 时，调用路由模型。路由模型只接收状态板和最近 `recentForRouter` 条消息（默认 5），返回 botId 列表。
+| 类别 | 包含的操作 | 处理 |
+|---|---|---|
+| **自动合并** | `addDeliverable`；`setWorkstreamStatus`；不冲突的 `add`、`addFact`；`closeQuestion`；`affects` 只包含提交者自己工作块的 `addDecision` | 校验后直接应用 |
+| **交给负责人 Bot 判断** | 与他人修改同一条目的操作；Bot 试图 `supersede` 一条 human 级别的条目；`updateContract`；`affects` 包含其他人工作块的 `addDecision` | 进入负责人 Bot 的待处理队列，由它调用 `resolveProposal` 接受、修改或拒绝 |
+| **需要人确认** | `setGoal`、`setConstraints`、所有拆分提案 | 在群里发出确认请求，人确认后应用 |
 
-Bot 发出的消息只按规则 1–4 唤醒其他 Bot，不调用路由模型，避免 Bot 之间无限互相唤醒。另设每个群每条人类消息触发的 Bot 回合上限（默认 6），超过即停止并发出 `wakeLimitReached` 事件。
+`authority`：来自抽取器（即人的聊天）的操作为 `human`，来自 Bot 的为 `bot`。
 
-没命中任何规则时返回空列表，本条消息不消耗任何 Bot 的 token。
+---
 
-### 3.2 上下文组装（buildContext）
+## 4. 项目生命周期
+
+| 阶段 | 谁 | 触发 | 拿到的上下文 |
+|---|---|---|---|
+| ① 立项 | 人 | 调用 `start`，或在群里描述目标 | — |
+| ② 拆分 | 负责人 Bot | 立项完成；拆分被打回；重新拆分请求 | `buildPlanningContext`：目标、约束、人的原始描述、员工名录（每人一行 persona + skills）；若是打回或重拆，附上一版提案、反馈或当前项目板 |
+| ③ 确认 | 人 | 拆分提案提交 | 拆分摘要：工作块、负责人、依赖、接口约定 |
+| ④ 执行 | 工作块负责人 | 被分配，且所有 `dependsOn` 已交付 | `buildBrief`（见 5.2） |
+| ⑤ 交付检查 | 负责人 Bot | `deliverableSubmitted` | `buildReviewContext`：交付物全文、该工作块的接口约定、全局约定、影响它的决定。只检查是否违反约定和接口 |
+| ⑥ 重新拆分 | 负责人 Bot 提议，人确认 | `reportBlocked` 指出拆分不合理；人要求调整 | 同 ②。确认后，受影响工作块的负责人被唤醒，拿到变化摘要 |
+| ⑦ 收尾 | 人确认，各员工复盘 | 所有工作块已交付 | `buildRetroContext`：自己的工作区、自己工作块的结果和检查记录、现有长期记忆 |
+
+**检查发现冲突**（如两个工作块的命名风格不一致）：负责人 Bot 提交一条新约定，并以 `reviewFailed` 唤醒相关负责人修改。
+
+**负责人 Bot 的预算**：它读的是项目板、提案和交付物，不读其他员工的工作区。
+
+---
+
+## 5. 唤醒与上下文组装
+
+### 5.1 唤醒规则（route）
+按以下规则判断，命中即加入唤醒列表并标明原因：
+
+| 原因 | 条件 | 被唤醒者 |
+|---|---|---|
+| `assigned` | 拆分确认后，工作块没有依赖或依赖已全部交付 | 工作块负责人 |
+| `upstreamDelivered` | 某工作块的所有依赖刚刚全部交付 | 该工作块负责人 |
+| `decisionChanged` | 新增或覆盖的决定、事实的 `affects` 包含该工作块 | 该工作块负责人 |
+| `contractChanged` | 接口约定的 `from` 或 `to` 是该工作块 | 该工作块负责人 |
+| `reviewFailed` | 自己的交付物检查不通过 | 工作块负责人 |
+| `mentioned` | 聊天消息 @ 了该 Bot，或回复了它的消息 | 被 @ 或被回复的 Bot |
+| `needsLead` | 拆分被打回、阻塞报告、交付物待检查、有需要判断的提案 | 负责人 Bot |
+| `routed` | 人的消息没命中以上规则：若文本包含某工作块的 id 或标题，唤醒其负责人；否则若宿主提供了 `models.route`，由路由模型（只读项目板公共部分 + 最近 5 条消息）选择；都没有就唤醒负责人 Bot | 视情况 |
+
+`upstreamDelivered`、`decisionChanged`、`contractChanged` 不是独立的日志事件，而是在每次 `boardMerged` 后，由核心库对比该次的 `BoardChange` 计算得出。
+
+限制：
+- Bot 发出的聊天消息只按 `mentioned` 唤醒别人，不走 `routed`。
+- 一条人类消息引发的 Bot 回合总数有上限（默认 6），超过时停止并发出 `wakeLimitReached` 事件。
+- 状态为 `blocked` 的工作块，除 `decisionChanged`、`contractChanged`、`mentioned` 外不被唤醒。
+
+### 5.2 简报组装（buildBrief）
 返回固定顺序的分段：
 
-| 顺序 | 段 | 可缓存 |
+| 顺序 | 内容 | 可缓存 |
 |---|---|---|
-| 1 | 群组公共说明（固定模板 + 成员名录） | 是 |
-| 2 | 状态板（同一版本输出字节完全一致） | 是 |
-| 3 | Bot 角色 `persona` | 是 |
-| 4 | 私有笔记 `notes` | 否 |
-| 5 | 增量：自 `lastSeenSeq` 以来与该 Bot 相关的消息（@ 它的、回复它的、提到它负责任务的），以及自 `lastSeenBoardVersion` 以来的状态板变化摘要（由变更记录逐条渲染，不调用模型；`lastSeenBoardVersion = 0` 时省略，因为第 2 段已是完整状态板） | 否 |
-| 6 | 本次触发消息 | 否 |
+| 1 | 公共说明模板 + 成员名录 | 是（全员相同） |
+| 2 | 项目板公共部分：目标、约束、约定、工作块列表（id、标题、负责人、状态） | 是（同一版本全员相同、字节一致） |
+| 3 | 员工长期记忆：persona、skills、memories | 是（该员工固定） |
+| 4 | 自己的投影：自己的工作块、涉及自己的接口约定、`affects` 包含自己的决定和事实（含理由和被否决方案）、上游交付物的摘要和引用 | 否 |
+| 5 | 项目工作区笔记 | 否 |
+| 6 | 增量：自 `lastSeenSeq` 以来与自己相关的事件和消息，以及自 `lastSeenBoardVersion` 以来与自己相关的变化摘要（由变更记录渲染，不调用模型；`lastSeenBoardVersion = 0` 时省略） | 否 |
+| 7 | 本次触发原因与触发内容 | 否 |
 
-附带三个工具：`searchLedger`（查日志）、`proposeBoard`（提交状态变更）、`updateNotes`（改私有笔记）。
+**预算裁剪**：调用方传入 `maxTokens`。超出时依次裁剪：增量中最早的条目 → 工作区笔记 → 长期记忆中最早的记忆。第 1、2、4、7 段不裁剪；这几段已超预算时抛出 `BudgetTooSmallError`。
 
-**预算裁剪**：调用方传入 `maxTokens`。超出时依次裁剪：先丢增量里最早的消息，再截断私有笔记，第 1–3 段和第 6 段不动。如果第 1–3 段加第 6 段已经超过预算，抛出 `BudgetTooSmallError`。
+**新加入的员工**：`lastSeenSeq` 设为当前最新 seq，`lastSeenBoardVersion` 设为 0，第一次唤醒时拿到完整投影，不拿历史。
 
-**新成员入群**：Bot 加入时 `lastSeenSeq` 设为当前最新 seq，`lastSeenBoardVersion` 设为 0。首次唤醒拿到完整状态板和最近几条消息，不拿全部历史。
+**Token 估算**：使用可替换的 `countTokens`，默认按字符数近似。
 
-**Token 估算**：核心库使用可替换的 `countTokens` 函数，默认按字符数近似估算；宿主可以传入精确的分词器。
-
-### 3.3 回合提交（commitTurn）
-- 回复写入日志（`author.kind = 'bot'`）。
-- 更新该 Bot 的 `lastSeenSeq` 为当前最新 seq，`lastSeenBoardVersion` 为当前状态板版本。
-- Bot 在本回合调用 `proposeBoard` 提交的提案进入队列。
-
-### 3.4 合并（merge）
-**触发条件**：
-- 队列中有 Bot 提案时立即合并。
-- 自上次抽取以来累计 `extractEvery` 条人类消息（默认 10），或群组空闲 `idleMs`（默认 60 秒），且宿主提供了 `models.extract` 时，先调用抽取模型把这段消息转成提案，再合并。
-
-**冲突处理**：提案的 `baseVersion` 落后于当前版本时，逐条检查操作：
-- 没有修改同一条目：直接应用。
-- 修改了同一条目：`human` 优先于 `bot`；同级时后到的生效，旧条目标记为被 `supersedes`。
+### 5.3 人的聊天内容抽取
+累计 `extractEvery` 条人类聊天消息（默认 10），或项目空闲 `idleMs`（默认 60 秒），且宿主提供了 `models.extract` 时，把这段消息交给抽取模型，生成 `by: 'extractor'` 的提案，按第 3 节规则合并。
 
 ---
 
-## 4. 对外接口
+## 6. 对外接口
 
-### 4.1 核心库 `@context-continue/core`
+### 6.1 核心库 `@context-continue/core`
+
 ```ts
-const group = createGroupContext({
-  groupId: 'g1',
-  store: sqliteStore('./cc.db'),
+const employees = createEmployeeRegistry({ store });
+await employees.upsert({ botId, persona, skills });
+
+const project = createProject({
+  projectId,
+  store,
+  employees,
   models: {
     route?: (input: RouteInput) => Promise<string[]>,
-    extract?: (msgs: Message[], board: Board) => Promise<BoardOp[]>,
+    extract?: (entries: LedgerEntry[], board: ProjectBoard) => Promise<BoardOp[]>,
   },
   countTokens?: (text: string) => number,
   options?: {
-    extractEvery?: number;      // 默认 10
-    idleMs?: number;            // 默认 60_000
-    recentForRouter?: number;   // 默认 5
-    boardMaxTokens?: number;    // 默认 3_000
-    notesMaxTokens?: number;    // 默认 2_000
-    maxBotTurnsPerHumanMessage?: number; // 默认 6
+    extractEvery?: number;              // 默认 10
+    idleMs?: number;                    // 默认 60_000
+    recentForRouter?: number;           // 默认 5
+    boardMaxTokens?: number;            // 默认 3_000
+    notesMaxTokens?: number;            // 默认 2_000
+    memoryMaxTokens?: number;           // 默认 1_500
+    maxBotTurnsPerHumanMessage?: number;// 默认 6
+    maxReviewRounds?: number;           // 默认 3
+    maxPlanRejects?: number;            // 默认 3
+    maxPromotionsPerTurn?: number;      // 默认 3
   },
 });
 
-await group.addBot({ botId, persona, subscriptions });
-await group.ingest(msg);
-const wake = await group.route(msg);          // { botId, reason }[]
-const ctx = await group.buildContext(botId, { maxTokens });
-// ctx.segments: { kind, text, cacheable }[]
-// ctx.tools:    工具定义
-// ctx.stats:    各段 token 估算
-await group.commitTurn(botId, reply, proposals);
-await group.merge();
+// 生命周期
+await project.start({ goal, constraints, lead, by });
+const planCtx   = await project.buildPlanningContext();
+await project.proposePlan(plan, { by: lead });
+await project.approvePlan(proposalId, { by, edits? });
+await project.rejectPlan(proposalId, { by, feedback });
+const brief     = await project.buildBrief(botId, { maxTokens });
+await project.submit(botId, submission);
+//   submission: { type: 'deliverable', workstreamId, summary, content }
+//             | { type: 'proposal', ops }
+//             | { type: 'blocked', workstreamId, reason }
+//             | { type: 'notes', notes }
+const reviewCtx = await project.buildReviewContext(deliverableId);
+await project.submitReview(deliverableId, { passed, notes, conventions? });
+await project.resolveProposal(proposalId, { accept, edits? });
+await project.close({ by, force? });
+const retroCtx  = await project.buildRetroContext(botId);
+await project.commitRetro(botId, memories);
 
-group.board();
-group.exportMarkdown();
-group.on('boardChanged' | 'wake' | 'merged' | 'extractFailed' | 'wakeLimitReached', handler);
+// 聊天与唤醒
+await project.ingest(chatMessage);
+const wake = await project.route(entry);        // { botId, reason }[]
+
+// 查询与事件
+project.board();
+project.exportMarkdown();
+project.on('boardChanged' | 'wake' | 'merged' | 'needsHuman' | 'extractFailed' | 'wakeLimitReached', handler);
 ```
 
-`buildContext` 返回分段而不是拼好的字符串，由宿主转换成各家模型 API 的格式和缓存标记。
+所有 `build*Context` / `buildBrief` 返回 `{ segments: { kind, text, cacheable }[], tools, stats }`，由宿主转换成各家模型 API 的格式和缓存标记。
 
-### 4.2 存储接口 `Store`
+### 6.2 Bot 可用的工具
+- 所有 Bot：`searchLedger`、`getDeliverable`、`submitDeliverable`、`proposeDecision`、`promote`、`reportBlocked`、`updateNotes`
+- 负责人 Bot 额外：`proposePlan`、`resolveProposal`、`submitReview`
+
+### 6.3 存储接口 `Store`
+
 ```ts
 interface Store {
-  appendMessage(msg: Omit<Message, 'seq'>): Promise<Message>;
-  getMessages(groupId: string, fromSeq: number, limit?: number): Promise<Message[]>;
-  searchMessages(groupId: string, query: string, limit?: number): Promise<Message[]>;
-  getBoard(groupId: string): Promise<Board>;
-  saveBoard(board: Board, expectedVersion: number, change: BoardChange): Promise<void>; // 版本不符时抛错；与变更记录一起原子写入
-  getBoardChanges(groupId: string, sinceVersion: number): Promise<BoardChange[]>;
-  getBotPrivate(groupId: string, botId: string): Promise<BotPrivate | null>;
-  saveBotPrivate(p: BotPrivate): Promise<void>;
+  // 日志
+  append(entry: Omit<LedgerEntry, 'seq'>): Promise<LedgerEntry>;
+  read(projectId: string, fromSeq: number, limit?: number): Promise<LedgerEntry[]>;
+  search(projectId: string, query: string, limit?: number): Promise<LedgerEntry[]>;
+  latestSeq(projectId: string): Promise<number>;
+  // 项目板
+  getBoard(projectId: string): Promise<ProjectBoard>;
+  saveBoard(board: ProjectBoard, expectedVersion: number, change: BoardChange): Promise<void>; // 版本不符时抛错；与变更记录原子写入
+  getBoardChanges(projectId: string, sinceVersion: number): Promise<BoardChange[]>;
+  // 提案
   enqueueProposal(p: Proposal): Promise<void>;
-  drainProposals(groupId: string): Promise<Proposal[]>;
-  latestSeq(groupId: string): Promise<number>;
+  drainProposals(projectId: string): Promise<Proposal[]>;
+  savePlanProposal(p: PlanProposal): Promise<void>;
+  getPlanProposal(id: string): Promise<PlanProposal | null>;
+  // 私有层
+  getWorkspace(projectId: string, botId: string): Promise<Workspace | null>;
+  saveWorkspace(w: Workspace): Promise<void>;
+  getMemory(botId: string): Promise<EmployeeMemory | null>;
+  saveMemory(m: EmployeeMemory): Promise<void>;
+  // 交付物
+  putDeliverable(projectId: string, content: string): Promise<string>;   // 返回 ref
+  getDeliverable(projectId: string, ref: string): Promise<string>;
 }
 ```
-默认实现：`sqliteStore`（日志检索使用 SQLite FTS5）；测试用 `memoryStore`。
+默认实现 `sqliteStore`（日志检索用 SQLite FTS5），测试用 `memoryStore`。
 
-### 4.3 适配层：MCP 服务 `@context-continue/mcp`
-面向无法修改 prompt 拼装的闭源产品。暴露工具：`get_board`、`get_updates_since`、`search_ledger`、`propose_board`、`post_message`。
+### 6.4 适配层：MCP 服务 `@context-continue/mcp`
+把 6.2 的工具按 MCP 格式暴露，另加 `get_brief`、`get_updates_since`。
+- 能做到：多个 Bot 共享同一份项目板，拿到各自的投影和增量。
+- 做不到：减少闭源产品自己的全量重读。README 必须写明。
 
-- **能做到**：多个 Bot 共享同一份状态板；入群和增量更新可用。
-- **做不到**：减少宿主产品自己的全量重读。README 中必须写明这一点。
+### 6.5 适配层：OpenClaw 插件 `@context-continue/openclaw`
+在 OpenClaw 的消息处理环节调用核心库，用 `buildBrief` 替换默认的历史拼装。
+**待核实**：OpenClaw 插件和钩子 API 的具体形式，在实施计划第一步核实。若 OpenClaw 不允许替换历史拼装，退回为"MCP 服务 + OpenClaw skill"，并更新本节。
 
-### 4.4 适配层：OpenClaw 插件 `@context-continue/openclaw`
-在 OpenClaw 群聊消息处理环节调用 ①–⑤，用 `buildContext` 替换默认的历史拼装。
-**待核实**：OpenClaw 插件和钩子 API 的具体形式，在实施计划第一步核实；如果 OpenClaw 不允许替换历史拼装，退回为"MCP 服务 + OpenClaw skill"形式，并在本文档中更新。
+### 6.6 评测 `@context-continue/bench`
+三组对照，同一模型：
 
-### 4.5 评测工具 `@context-continue/bench`
-- 输入：群聊剧本（JSON：人类消息序列 + Bot 角色 + 任务的评分标准）。
-- 对同一剧本、同一模型分别运行"全量广播"和"本方案"。
-- 输出：总输入 token、缓存读取 token、每次唤醒的上下文长度分布、任务质量评分（模型按评分标准打分）。
-- 第一版提供 3 个剧本：写产品方案、排查 bug、策划活动。
+| 组 | 做法 |
+|---|---|
+| A | 单个 Agent、完整上下文、不拆分 |
+| B | 多员工 + 全量广播 |
+| C | 本方案 |
+
+三个项目剧本（JSON：项目描述、人的中途消息序列、员工名录、评分标准）：
+1. 写一份产品方案
+2. 做一个类似 Flappy Bird 的网页小游戏（针对 Cognition 提出的风格冲突反例）
+3. 策划一场活动
+
+指标：总输入 token、缓存读取 token、每次唤醒的上下文长度分布、任务质量评分（模型按评分标准打分，另加人工抽查）、一致性冲突数（检查阶段发现的违反约定或接口的次数）、总耗时。
 
 ---
 
-## 5. 错误处理
+## 7. 错误处理
 
 | 情况 | 处理 |
 |---|---|
-| 路由模型失败（超时、格式错误） | 退回只用规则唤醒，发 `wake` 事件时标注原因 |
-| 抽取模型失败 | 该段消息留在待抽取队列，下次触发时重试；连续 3 次失败发 `extractFailed` 事件 |
-| 提案中有不合法操作 | 用 schema 校验，丢弃不合法的单条操作并记录；其余操作照常合并 |
-| 并发合并 | 每个群一个串行队列；`saveBoard` 校验版本号，不符时重新读取后重试 |
-| `ingest` 写入失败 | 直接抛错给宿主，不重试（日志是唯一事实来源，不能悄悄丢失） |
-| 其他写入失败 | 重试最多 3 次后抛错 |
-| 越权读取私有层 | `buildContext` 和所有工具只能读调用者自己的私有层；`searchLedger` 只查日志 |
+| 拆分被打回 | 反馈写成 `planRejected` 事件，唤醒负责人 Bot 重拆；连续 `maxPlanRejects` 次后发 `needsHuman`，提示人手动拆分 |
+| 拆分有环形依赖，或工作块的负责人不在员工名录中 | `proposePlan` 时校验并拒绝，返回具体原因 |
+| 工作块被阻塞 | `reportBlocked` → 工作块状态设为 `blocked`，唤醒负责人 Bot 决定改接口、重拆或转人 |
+| 检查反复不通过 | 同一工作块超过 `maxReviewRounds` 轮后发 `needsHuman`，由人裁决 |
+| 负责人 Bot 超时或无响应 | 待处理提案保留在队列中不丢失；超时后发 `needsHuman` |
+| 提升过多 | 每回合超过 `maxPromotionsPerTurn` 或 `affects` 为空的提升直接拒绝 |
+| 复盘写入错误记忆 | 记忆有上限并标明来源项目；可导出供人查看和删除 |
+| 有未交付工作块时收尾 | 拒绝并列出未完成工作块；`force: true` 时强制收尾，未完成的工作块标记后归档 |
+| 路由或抽取模型失败 | 路由退回为唤醒负责人 Bot；抽取失败的消息留在队列中重试，连续 3 次失败发 `extractFailed` |
+| 提案中有不合法操作 | schema 校验，丢弃该条操作并记录，其余照常处理 |
+| 并发写入 | 每个项目一个串行队列；`saveBoard` 校验版本号，不符时重读后重试 |
+| `append` 写入失败 | 直接抛错给宿主，不重试 |
+| 其他写入失败 | 最多重试 3 次后抛错 |
+| 越权读取私有层 | 工作区只能被本人在本项目内读取；长期记忆只能被本人读取、只能由本人复盘写入；`searchLedger` 只查日志 |
 | 预算不足 | 抛出 `BudgetTooSmallError` |
 
 ---
 
-## 6. 测试
+## 8. 测试
 
-- **单元测试**（内存存储，不调真实模型）：唤醒规则 1–5、Bot 互相唤醒上限、上下文裁剪顺序、增量计算、新成员入群、合并冲突（human 优先、`supersedes`）、不合法操作丢弃、私有层隔离。
-- **一致性测试**：并发提交多个提案，检查版本号连续、操作不丢失也不重复。
-- **快照测试**：同一状态板版本下，第 1–3 段输出逐字节一致。
-- **SQLite 存储测试**：与内存存储跑同一套 `Store` 契约测试。
-- **评测**：`bench` 需要 API key，单独运行，不放进常规测试；结果写进 README。
-
----
-
-## 7. 第一版不做
-
-- 跨所有者的权限控制与加密。
-- 图形界面（只提供 Markdown 导出和事件）。
-- 向量检索（日志回查使用 SQLite 全文检索）。
-- 透明代理形式的接入。
-- OpenClaw 之外的运行时适配（Hermes 等放到第二版）。
+- **单元测试**（内存存储，不调真实模型）：拆分校验、第 5.1 节每条唤醒规则及限制、简报只包含与本人相关的投影、预算裁剪顺序、提升校验、第 3 节三类合并规则、human 优先、检查轮次上限、收尾校验。
+- **隔离测试**：A 的工作区对 B 不可见；一个项目的工作区对另一个项目不可见；长期记忆只能由本人复盘写入。
+- **快照测试**：同一项目板版本下，第 1、2 段对所有员工逐字节一致；第 3 段对同一员工逐字节一致。
+- **一致性测试**：并发提交多个提案，检查版本号连续、操作不丢失不重复。
+- **存储契约测试**：`memoryStore` 与 `sqliteStore` 跑同一套测试。
+- **生命周期集成测试**：用脚本模拟负责人 Bot 和执行者，走完立项 → 拆分 → 打回 → 确认 → 执行 → 检查失败 → 修改 → 交付 → 收尾 → 复盘。
+- **评测**：A/B/C × 三个剧本，需要 API key，单独运行，不进常规测试；结果写入 README。
 
 ---
 
-## 8. 仓库结构（monorepo）
+## 9. 第一版不做
+
+- 跨所有者的权限控制与加密
+- 图形界面（只提供 Markdown 导出和事件）
+- 向量检索（日志检索用 SQLite 全文检索）
+- 透明代理形式的接入
+- OpenClaw 以外的运行时适配
+- 嵌套项目（工作块下再拆子项目）
+- 同一 Bot 参与多个项目时的调度和排队（各项目独立运行）
+- 非项目形态的工作（交给单个 Bot）
+
+---
+
+## 10. 仓库结构
 
 ```
 packages/
