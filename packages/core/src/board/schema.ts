@@ -65,7 +65,7 @@ export const boardOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('updateContract'), id: str, spec: str }),
   z.object({ op: z.literal('setGoal'), goal: str }),
   z.object({ op: z.literal('setConstraints'), constraints: z.array(str) }),
-]) as unknown as z.ZodType<BoardOp>;
+]) satisfies z.ZodType<BoardOp>;
 
 export function parseOps(raw: unknown[]): { ok: BoardOp[]; rejected: { index: number; reason: string }[] } {
   const ok: BoardOp[] = [];

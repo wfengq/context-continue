@@ -164,7 +164,13 @@ export type BoardOp =
       op: 'supersede';
       section: 'conventions' | 'decisions' | 'facts' | 'failures';
       id: string;
-      item: Omit<Item, 'id' | 'authority'>;
+      // Type-specific fields are optional; omitted ones are inherited from the superseded item.
+      item: Omit<Item, 'id' | 'authority'> & {
+        rationale?: string;
+        rejected?: string[];
+        affects?: string[];
+        reason?: string;
+      };
     }
   | { op: 'closeQuestion'; id: string }
   | { op: 'setWorkstreamStatus'; id: string; status: Workstream['status'] }
