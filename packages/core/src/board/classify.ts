@@ -37,15 +37,17 @@ export function opTargets(op: BoardOp): string[] {
  * - human: setGoal, setConstraints (always, even for the lead);
  * - lead: ops on an item someone else modified since baseVersion, a bot superseding a
  *   human item, updateContract, addDecision whose affects reach beyond the submitter's
- *   own workstreams. The lead's own ops skip this class; extractor addDecision is a
- *   human decision and is auto, and the extractor is not a bot for the supersede rule;
+ *   own workstreams. The lead's own ops skip this class. Extractor ops (human authority)
+ *   skip the conflict check, extractor addDecision is a human decision and is auto, and
+ *   the extractor is not a bot for the supersede rule; its updateContract still goes to the lead;
  * - auto: everything else.
  */
 export function classifyOp(op: BoardOp, ctx: ClassifyContext): OpClass {
   if (op.op === 'setGoal' || op.op === 'setConstraints') return 'human';
   if (ctx.by === ctx.lead) return 'auto';
 
-  if (opTargets(op).some((id) => ctx.touchedByOthersSince.has(id))) return 'lead';
+  // Extractor ops carry human authority, and human wins on conflict (spec 2.2), so they skip this check.
+  if (!ctx.isExtractor && opTargets(op).some((id) => ctx.touchedByOthersSince.has(id))) return 'lead';
 
   switch (op.op) {
     case 'updateContract':

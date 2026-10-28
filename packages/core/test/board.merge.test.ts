@@ -163,6 +163,31 @@ describe('classifyOp', () => {
     const board = await store.getBoard('p1');
     expect(board.decisions.at(-1)).toMatchObject({ text: 'use 32x32', authority: 'human' });
   });
+
+  test('extractor ops skip the touched-by-others conflict check (human wins on conflict)', async () => {
+    const extractor = ctx({
+      by: 'extractor',
+      isExtractor: true,
+      ownWorkstreams: [],
+      touchedByOthersSince: new Set(['w1', 'c1', 'q1', 'd-bot']),
+    });
+    expect(classifyOp(SAMPLE_OPS.setWorkstreamStatus!, extractor)).toBe('auto');
+    expect(classifyOp(SAMPLE_OPS.addDeliverable!, extractor)).toBe('auto');
+    expect(classifyOp(SAMPLE_OPS.closeQuestion!, extractor)).toBe('auto');
+    expect(classifyOp(supersede('decisions', 'd-bot', 'alice'), extractor)).toBe('auto');
+    expect(classifyOp(SAMPLE_OPS.updateContract!, extractor)).toBe('lead');
+    expect(classifyOp(SAMPLE_OPS.setGoal!, extractor)).toBe('human');
+    expect(classifyOp(SAMPLE_OPS.setConstraints!, extractor)).toBe('human');
+
+    const { store, merger } = await setup();
+    await store.enqueueProposal(prop('code', [{ op: 'setWorkstreamStatus', id: 'w1', status: 'active' }]));
+    await merger.merge(); // v1: a bot touched w1
+    await store.enqueueProposal(prop('extractor', [{ op: 'setWorkstreamStatus', id: 'w1', status: 'blocked' }], 0));
+    const r = await merger.merge();
+    expect(r.pending).toEqual([]);
+    expect(r.change!.ops[0]).toMatchObject({ by: 'extractor', authority: 'human' });
+    expect((await store.getBoard('p1')).workstreams[0]!.status).toBe('blocked');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -289,6 +314,39 @@ describe('Merger.merge', () => {
       [p.id, 2],
     ]);
     expect(r.rejected[1]!.reason).toMatch(/q-missing/);
+  });
+
+  test('a malformed proposal is rejected without losing the rest of the batch', async () => {
+    const { store, merger } = await setup();
+    const bad = { ...prop('art', []), ops: 'not an array' } as unknown as Proposal;
+    const nul = { ...prop('code', []), ops: null } as unknown as Proposal;
+    const good = prop('art', [addConvention('kept')]);
+    await store.enqueueProposal(bad);
+    await store.enqueueProposal(good);
+    await store.enqueueProposal(nul);
+    const r = await merger.merge();
+    expect(r.change!.ops.map((o) => o.op)).toEqual([addConvention('kept')]);
+    expect(r.rejected).toEqual([
+      { proposalId: bad.id, index: -1, reason: expect.stringMatching(/array/) },
+      { proposalId: nul.id, index: -1, reason: expect.stringMatching(/array/) },
+    ]);
+    expect(await store.drainProposals('p1')).toEqual([]); // nothing re-queued
+  });
+
+  test('a failing re-enqueue does not mask the original merge error', async () => {
+    const { store: base, merger } = await setup({
+      wrapStore: (base) =>
+        wrap(base, {
+          async getBoard() {
+            throw new Error('disk on fire');
+          },
+          async enqueueProposal() {
+            throw new Error('queue broke too');
+          },
+        }),
+    });
+    await base.enqueueProposal(prop('art', [addConvention('a')]));
+    await expect(merger.merge()).rejects.toThrow('disk on fire');
   });
 
   test('fully rejected proposal produces no change', async () => {
@@ -548,7 +606,60 @@ describe('Merger.resolve', () => {
     const edits: BoardOp[] = [{ op: 'updateContract', id: 'c1', spec: 'svg sprites' }];
     const r = await merger.resolve(lead.id, { by: 'lead', accept: true, edits });
     expect(r.change!.ops.map((o) => o.op)).toEqual(edits);
+    // Edited ops are the lead's own (R11).
+    expect(r.change!.ops[0]).toMatchObject({ by: 'lead', authority: 'bot' });
     expect((await store.getBoard('p1')).contracts[0]!.spec).toBe('svg sprites');
+  });
+
+  test('resolve without edits keeps the original submitter as author', async () => {
+    const { merger, lead } = await withPending();
+    const r = await merger.resolve(lead.id, { by: 'lead', accept: true });
+    expect(r.change!.ops.map((o) => [o.by, o.authority])).toEqual([['art', 'bot']]);
+  });
+
+  test('lead edits that need a human become a new human pending; the rest applies', async () => {
+    const { store, merger, lead, human } = await withPending();
+    const edits: BoardOp[] = [SAMPLE_OPS.setGoal!, addConvention('from the lead', 'lead')];
+    const r = await merger.resolve(lead.id, { by: 'lead', accept: true, edits });
+    expect(r.change!.ops.map((o) => o.op)).toEqual([addConvention('from the lead', 'lead')]);
+    expect(r.change!.ops[0]).toMatchObject({ by: 'lead', authority: 'bot' });
+    expect(r.pending).toHaveLength(1);
+    expect(r.pending[0]).toMatchObject({
+      projectId: 'p1',
+      proposalId: lead.proposalId,
+      by: 'lead',
+      needs: 'human',
+      ops: [SAMPLE_OPS.setGoal],
+    });
+    const board = await store.getBoard('p1');
+    expect(board.goal).toBe('ship the game');
+    expect(board.conventions.map((c) => c.text)).toContain('from the lead');
+    const ids = (await store.listPending('p1')).map((x) => x.id).sort();
+    expect(ids).toEqual([human.id, r.pending[0]!.id].sort());
+
+    // The owner can then confirm it.
+    const confirmed = await merger.resolve(r.pending[0]!.id, { by: 'alice', accept: true });
+    expect(confirmed.change!.ops[0]).toMatchObject({ op: SAMPLE_OPS.setGoal, by: 'lead' });
+    expect((await store.getBoard('p1')).goal).toBe('ship two games');
+  });
+
+  test('lead edits consisting only of human ops apply nothing and re-queue them for the owner', async () => {
+    const { store, merger, lead } = await withPending();
+    const r = await merger.resolve(lead.id, { by: 'lead', accept: true, edits: [SAMPLE_OPS.setConstraints!] });
+    expect(r.change).toBeNull();
+    expect(r.pending.map((p) => p.needs)).toEqual(['human']);
+    const board = await store.getBoard('p1');
+    expect(board.version).toBe(0);
+    expect(board.constraints).toEqual(['no network']);
+    expect((await store.listPending('p1')).map((x) => x.id)).not.toContain(lead.id);
+  });
+
+  test('owner edits on a human pending carry the owner as author with human authority', async () => {
+    const { store, merger, human } = await withPending();
+    const edits: BoardOp[] = [{ op: 'setGoal', goal: 'ship three games' }];
+    const r = await merger.resolve(human.id, { by: 'alice', accept: true, edits });
+    expect(r.change!.ops[0]).toMatchObject({ by: 'alice', authority: 'human' });
+    expect((await store.getBoard('p1')).goal).toBe('ship three games');
   });
 
   test('resolve rejects invalid edits individually', async () => {

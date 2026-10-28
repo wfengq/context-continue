@@ -60,11 +60,20 @@ interface Attempt {
 
 const authorityOf = (by: string): 'human' | 'bot' => (by === EXTRACTOR ? 'human' : 'bot');
 
-function parseIndexed(raw: unknown[]): { ops: IndexedOp[]; rejected: { index: number; reason: string }[] } {
-  const { ok, rejected } = parseOps(raw);
-  const bad = new Set(rejected.map((r) => r.index));
-  const okIndexes = raw.map((_, i) => i).filter((i) => !bad.has(i));
-  return { ops: ok.map((op, k) => ({ op, index: okIndexes[k]! })), rejected };
+/**
+ * Validate a submitted ops array, keeping each valid op's original index. A value that is not
+ * an array, or that makes parsing throw, is reported as a single rejection with index -1.
+ */
+function parseIndexed(raw: unknown): { ops: IndexedOp[]; rejected: { index: number; reason: string }[] } {
+  if (!Array.isArray(raw)) return { ops: [], rejected: [{ index: -1, reason: 'ops must be an array' }] };
+  try {
+    const { ok, rejected } = parseOps(raw);
+    const bad = new Set(rejected.map((r) => r.index));
+    const okIndexes = raw.map((_, i) => i).filter((i) => !bad.has(i));
+    return { ops: ok.map((op, k) => ({ op, index: okIndexes[k]! })), rejected };
+  } catch (e) {
+    return { ops: [], rejected: [{ index: -1, reason: `ops could not be parsed: ${String(e)}` }] };
+  }
 }
 
 const isStale = (e: unknown) => e instanceof ContextError && e.code === 'STALE_VERSION';
@@ -103,29 +112,38 @@ export class Merger {
     const proposals = await store.drainProposals(projectId);
     if (proposals.length === 0) return { change: null, pending: [], rejected: [] };
 
-    const parsed = proposals.map((proposal) => {
-      const { ops, rejected } = parseIndexed(proposal.ops as unknown[]);
-      return { proposal, ops, rejected: rejected.map((r) => ({ proposalId: proposal.id, ...r })) };
-    });
-
-    let committed: { attempt: Attempt; change: BoardChange | null; archived: ArchivedItem[] };
+    let parsed: { proposal: Proposal; ops: IndexedOp[]; rejected: Rejection[] }[];
+    let committed: { attempt: Attempt; change: BoardChange | null; archived: ArchivedItem[] } | null;
     try {
-      committed = await this.commit((board) => this.applyProposals(board, parsed));
+      parsed = proposals.map((proposal) => {
+        const { ops, rejected } = parseIndexed(proposal.ops);
+        return { proposal, ops, rejected: rejected.map((r) => ({ proposalId: proposal.id, ...r })) };
+      });
+      // Proposals with no valid op only contribute rejections; they are dropped from the batch
+      // (their fields may be malformed too, e.g. baseVersion).
+      const usable = parsed.filter((p) => p.ops.length > 0);
+      committed = usable.length > 0 ? await this.commit((board) => this.applyProposals(board, usable)) : null;
     } catch (e) {
-      // Nothing was written: put the proposals back so a failed merge loses no ops.
-      for (const p of proposals) await store.enqueueProposal(p);
+      // Nothing was written: put the proposals back so a failed merge loses no ops. A failing
+      // re-enqueue must not hide the original error.
+      try {
+        for (const p of proposals) await store.enqueueProposal(p);
+      } catch {
+        // ignored: `e` is the error the caller needs to see
+      }
       throw e;
     }
 
-    const { attempt, change, archived } = committed;
-    for (const p of attempt.pending) await store.savePending(p);
-    await this.writeLedger(archived, change);
+    const pending = committed?.attempt.pending ?? [];
+    const change = committed?.change ?? null;
+    for (const p of pending) await store.savePending(p);
+    await this.writeLedger(committed?.archived ?? [], change);
 
     const order = new Map(proposals.map((p, i) => [p.id, i]));
-    const rejected = [...parsed.flatMap((p) => p.rejected), ...attempt.rejected].sort(
+    const rejected = [...parsed.flatMap((p) => p.rejected), ...(committed?.attempt.rejected ?? [])].sort(
       (a, b) => order.get(a.proposalId)! - order.get(b.proposalId)! || a.index - b.index,
     );
-    return { change, pending: attempt.pending, rejected };
+    return { change, pending, rejected };
   }
 
   /** Classify and apply every parsed op against `board`. Pure apart from reading the store. */
@@ -255,11 +273,43 @@ export class Merger {
       return { change: null, pending: [], rejected: [] };
     }
 
-    const { ops, rejected: schemaRejected } = parseIndexed((r.edits ?? pending.ops) as unknown[]);
-    const meta = { by: pending.by, authority: authorityOf(pending.by) };
+    const { ops, rejected: schemaRejected } = parseIndexed(r.edits ?? pending.ops);
+    // Without edits the ops stay the submitter's; edited ops are the resolver's own (R11).
+    const meta = r.edits
+      ? { by: r.by, authority: r.by === board.owner ? ('human' as const) : ('bot' as const) }
+      : { by: pending.by, authority: authorityOf(pending.by) };
     const { attempt, change, archived } = await this.commit(async (fresh) => {
       const attempt: Attempt = { next: fresh, applied: [], archived: [], rejected: [], pending: [] };
-      for (const { op, index } of ops) this.applyOne(attempt, op, meta, pending.proposalId, index);
+      const needsHuman: BoardOp[] = [];
+      for (const { op, index } of ops) {
+        // The lead cannot approve what needs the owner: those ops wait for a human (R10).
+        if (
+          pending.needs === 'lead' &&
+          classifyOp(op, {
+            by: fresh.lead,
+            lead: fresh.lead,
+            isExtractor: false,
+            ownWorkstreams: [],
+            board: attempt.next,
+            touchedByOthersSince: new Set(),
+          }) === 'human'
+        ) {
+          needsHuman.push(op);
+          continue;
+        }
+        this.applyOne(attempt, op, meta, pending.proposalId, index);
+      }
+      if (needsHuman.length > 0) {
+        attempt.pending.push({
+          id: newId('pend'),
+          projectId,
+          proposalId: pending.proposalId,
+          by: meta.by,
+          ops: needsHuman,
+          needs: 'human',
+          createdAt: this.deps.clock.now(),
+        });
+      }
       return attempt;
     });
 
@@ -267,10 +317,12 @@ export class Merger {
       ...schemaRejected.map((x) => ({ proposalId: pending.proposalId, ...x })),
       ...attempt.rejected,
     ].sort((a, b) => a.index - b.index);
+    for (const p of attempt.pending) await store.savePending(p);
     // When every op was rejected, keep the pending item so it can be resolved again with fixed edits.
-    if (change || rejected.length === 0) await store.deletePending(pendingId);
+    const nothingDone = !change && attempt.pending.length === 0;
+    if (!(nothingDone && rejected.length > 0)) await store.deletePending(pendingId);
     await this.writeLedger(archived, change);
-    return { change, pending: [], rejected };
+    return { change, pending: attempt.pending, rejected };
   }
 
   /** One `archived` event per archived item, then `boardMerged` if a change was saved. */
