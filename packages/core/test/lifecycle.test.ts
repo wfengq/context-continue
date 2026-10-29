@@ -302,6 +302,7 @@ describe('pending proposals', () => {
     fx.clock.advance(599_999);
     expect(fx.eventsOf('needsHuman')).toHaveLength(0);
     fx.clock.advance(1);
+    await new Promise<void>(r => setImmediate(r)); // the timer re-checks the store before it escalates
     expect(fx.eventsOf('needsHuman')).toEqual([expect.objectContaining({ ref: pending!.id })]);
     // the pending proposal is kept for the lead
     expect(await fx.store.listPending(fx.projectId)).toHaveLength(1);

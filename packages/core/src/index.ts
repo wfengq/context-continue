@@ -7,6 +7,7 @@ export * from './ids.js';
 export type { Store } from './store/store.js';
 export { memoryStore } from './store/memory.js';
 export { sqliteStore } from './store/sqlite.js';
+export { exportMarkdown, exportMemoryMarkdown } from './markdown.js';
 export { createEmployeeRegistry } from './employees.js';
 export type { EmployeeProfile, EmployeeRegistry } from './employees.js';
 export { createEventBus } from './events.js';

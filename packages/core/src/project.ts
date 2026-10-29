@@ -11,6 +11,7 @@ import type { EmployeeRegistry } from './employees.js';
 import { ContextError } from './errors.js';
 import { createEventBus, type EventBus } from './events.js';
 import { createExtractor } from './extract.js';
+import { exportMarkdown as boardToMarkdown } from './markdown.js';
 import { newId } from './ids.js';
 import { assertMember, botMembers, defaultWorkspace } from './members.js';
 import { resolveOptions, type Options } from './options.js';
@@ -90,6 +91,8 @@ export interface Project {
   merge(): Promise<Wake[]>;
   /** The board with `workstreams` resolved through the WorkstreamSource. */
   board(): Promise<ProjectBoard>;
+  /** The resolved board (workstreams from the WorkstreamSource) as Markdown for people to read. */
+  exportMarkdown(): Promise<string>;
   on: EventBus['on'];
   /** Resolves when no chat extraction is running or being scheduled (for tests and hosts). */
   flushExtraction(): Promise<void>;
@@ -147,6 +150,7 @@ export function createProject(cfg: ProjectConfig): Project {
   const bus = createEventBus();
   const leadTimers = new Map<string, unknown>();
   const overlapsSeen = new Set<string>();
+  let disposed = false;
 
   const getBoard = () => store.getBoard(projectId);
   const workstreamsOf = (b: ProjectBoard) => resolveWorkstreams(b, source);
@@ -356,18 +360,41 @@ export function createProject(cfg: ProjectConfig): Project {
     return wakes;
   }
 
+  /**
+   * One timer per pending proposal that waits for the lead, due `leadTimeoutMs` after it was created
+   * (R23). An overdue one is armed with 0 ms, so it still fires through the injected clock. The
+   * callback re-checks the store: a proposal resolved in the meantime, here or by another
+   * instance over the same store, must not escalate.
+   */
   function armLeadTimers(pending: PendingProposal[], lead: string): void {
     for (const p of pending) {
       if (p.needs !== 'lead' || leadTimers.has(p.id)) continue;
+      const remaining = Math.max(0, p.createdAt + options.leadTimeoutMs - clock.now());
       const handle = clock.setTimeout(() => {
         leadTimers.delete(p.id);
-        bus.emit('needsHuman', {
-          reason: `The lead (${lead}) did not resolve pending proposal ${p.id} within ${options.leadTimeoutMs} ms`,
-          ref: p.id,
-        });
-      }, options.leadTimeoutMs);
+        store
+          .listPending(projectId)
+          .then(list => {
+            if (disposed || !list.some(x => x.id === p.id)) return;
+            bus.emit('needsHuman', {
+              reason: `The lead (${lead}) did not resolve pending proposal ${p.id} within ${options.leadTimeoutMs} ms`,
+              ref: p.id,
+            });
+          })
+          .catch(() => undefined); // an unreadable store cannot be told apart from "resolved"; the next start re-arms
+      }, remaining);
       leadTimers.set(p.id, handle);
     }
+  }
+
+  /** After a restart: re-arms the timers of pending proposals still waiting for the lead (R23). */
+  async function restoreLeadTimers(): Promise<void> {
+    const board = await getBoard().catch((e: unknown) => {
+      if (e instanceof ContextError && e.code === 'NOT_FOUND') return null; // not started yet
+      throw e;
+    });
+    if (!board || board.status === 'closed' || disposed) return;
+    armLeadTimers(await store.listPending(projectId), board.lead);
   }
 
   function clearLeadTimer(id: string): void {
@@ -671,8 +698,10 @@ export function createProject(cfg: ProjectConfig): Project {
     rejected: async ref => void (await log(SYSTEM, { kind: 'archived', what: 'extractorOps', ref })),
   });
   extractor.restore().catch(() => undefined);
+  restoreLeadTimers().catch(() => undefined);
 
   const dispose = () => {
+    disposed = true;
     extractor.dispose();
     for (const id of [...leadTimers.keys()]) clearLeadTimer(id);
     unsubscribe();
@@ -857,6 +886,11 @@ export function createProject(cfg: ProjectConfig): Project {
       }),
 
     board: resolvedBoard,
+
+    async exportMarkdown() {
+      const b = await resolvedBoard();
+      return boardToMarkdown(b, b.workstreams);
+    },
 
     on: (k, h) => bus.on(k, h),
     flushExtraction: () => extractor.flush(),
