@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import { createEmployeeRegistry } from '../src/employees.js';
 import { createProject } from '../src/project.js';
+import { memoryStore } from '../src/store/memory.js';
+import type { Store } from '../src/store/store.js';
 import type { BoardOp, LedgerEntry } from '../src/types.js';
 import { makeProject, type FacadeProject } from './helpers.js';
 
@@ -182,14 +184,196 @@ describe('extraction scheduling', () => {
     expect(fx.clock.pendingTimers()).toBe(0);
   });
 
-  test('invalid ops count as a failure and are not enqueued', async () => {
+  test('invalid ops are dropped one by one: the valid ones merge, progress advances, the drop is recorded', async () => {
+    const extract = vi.fn(async () => [decision(), { op: 'nonsense' }] as unknown as BoardOp[]);
+    const fx = await setup(extract, { extractEvery: 1 });
+    const v = (await fx.p.board()).version;
+    const [e] = await say(fx, 1);
+    await fx.p.flushExtraction();
+    expect((await fx.p.board()).version).toBe(v + 1);
+    expect((await fx.p.board()).decisions).toHaveLength(1);
+    expect(await fx.store.getMeta(fx.projectId, 'extract')).toEqual({ fromSeq: e!.seq + 1, failures: 0 });
+    expect(fx.eventsOf('extractFailed')).toEqual([]);
+    const dropped = (await fx.store.read(fx.projectId, 1)).filter(
+      x => x.body.type === 'event' && x.body.event.kind === 'archived' && x.body.event.what === 'extractorOps',
+    );
+    expect(dropped).toHaveLength(1);
+  });
+
+  test('all ops invalid: success with nothing enqueued', async () => {
     const extract = vi.fn(async () => [{ op: 'nonsense' }] as unknown as BoardOp[]);
     const fx = await setup(extract, { extractEvery: 1 });
     const v = (await fx.p.board()).version;
-    await say(fx, 1);
+    const [e] = await say(fx, 1);
     await fx.p.flushExtraction();
     expect((await fx.p.board()).version).toBe(v);
+    expect(await fx.store.getMeta(fx.projectId, 'extract')).toEqual({ fromSeq: e!.seq + 1, failures: 0 });
+  });
+
+  test('a non-array result is a failure', async () => {
+    const extract = vi.fn(async () => 'nope' as unknown as BoardOp[]);
+    const fx = await setup(extract, { extractEvery: 1 });
+    await say(fx, 1);
+    await fx.p.flushExtraction();
     expect(await fx.store.getMeta(fx.projectId, 'extract')).toMatchObject({ fromSeq: 1, failures: 1 });
+  });
+
+  test('a merge failure after the proposal is queued does not re-extract: items appear once after the next merge', async () => {
+    const base = memoryStore();
+    let saves = 0;
+    const store: Store = new Proxy(base, {
+      get(t, k, r) {
+        const v: unknown = Reflect.get(t, k, r);
+        if (k !== 'saveBoard') return typeof v === 'function' ? v.bind(t) : v;
+        return async (...a: unknown[]) => {
+          if (++saves <= 3) throw new Error('disk full'); // one logical merge (the store retries writes 3 times)
+          return (v as (...x: unknown[]) => Promise<void>).apply(t, a);
+        };
+      },
+    });
+    const extract = vi.fn(async () => [decision()]);
+    const fx = await makeProject({ store: base, options: { extractEvery: 2 }, models: { extract } });
+    // set up through the real store, then drive the project through the failing wrapper
+    await fx.p.start({ goal: 'g', constraints: [], lead: 'pm', by: 'alice' });
+    fx.p.dispose();
+    const p = createProject({
+      projectId: fx.projectId,
+      store,
+      employees: createEmployeeRegistry({ store }),
+      clock: fx.clock,
+      options: { extractEvery: 2 },
+      models: { extract },
+    });
+    const needs: unknown[] = [];
+    p.on('needsHuman', e => needs.push(e));
+    await p.ingest({ author: alice, text: 'one' });
+    const e2 = await p.ingest({ author: alice, text: 'two' });
+    await p.flushExtraction();
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(needs).toHaveLength(1);
+    expect((await p.board()).decisions).toHaveLength(0);
+    expect(await store.getMeta(fx.projectId, 'extract')).toEqual({ fromSeq: e2.seq + 1, failures: 0 });
+    await p.merge();
+    expect((await p.board()).decisions).toHaveLength(1);
+    // more chat later: the old range is never offered again, nothing is applied twice
+    await p.ingest({ author: alice, text: 'three' });
+    await p.ingest({ author: alice, text: 'four' });
+    await p.flushExtraction();
+    expect(extract).toHaveBeenCalledTimes(2);
+    expect(texts((extract.mock.calls[1] as unknown as [LedgerEntry[]])[0])).toEqual(['three', 'four']);
+    p.dispose();
+  });
+
+  test('a message appended while the run ends is not stranded', async () => {
+    // The ledger read that ends the loop is where a message can slip in unseen.
+    const base = memoryStore();
+    let slip: (() => Promise<unknown>) | null = null;
+    let reads = 0;
+    const store: Store = new Proxy(base, {
+      get(t, k, r) {
+        const v: unknown = Reflect.get(t, k, r);
+        if (k !== 'read') return typeof v === 'function' ? v.bind(t) : v;
+        return async (...a: unknown[]) => {
+          const out = await (v as (...x: unknown[]) => Promise<unknown>).apply(t, a);
+          // 2nd read of the run is the loop's "anything pending?" check: slip a message in right after it
+          if (slip && ++reads === 3) {
+            const s = slip;
+            slip = null;
+            await s();
+          }
+          return out;
+        };
+      },
+    });
+    const extract = vi.fn(async () => []);
+    const fx = await makeProject({ store: base, options: { extractEvery: 2 } });
+    await fx.p.start({ goal: 'g', constraints: [], lead: 'pm', by: 'alice' });
+    fx.p.dispose();
+    const p = createProject({
+      projectId: fx.projectId,
+      store,
+      employees: createEmployeeRegistry({ store }),
+      clock: fx.clock,
+      options: { extractEvery: 2 },
+      models: { extract },
+    });
+    await p.ingest({ author: alice, text: 'one' });
+    await p.flushExtraction();
+    reads = 0;
+    slip = () => p.ingest({ author: alice, text: 'late' });
+    await p.ingest({ author: alice, text: 'two' });
+    await p.flushExtraction();
+    await p.flushExtraction();
+    // the late message is either part of a run or waits behind an idle timer: it is not lost
+    const covered = extract.mock.calls.some(c => texts((c as unknown as [LedgerEntry[]])[0]).includes('late'));
+    if (!covered) {
+      expect(fx.clock.pendingTimers()).toBe(1);
+      fx.clock.advance(60_000);
+      await p.flushExtraction();
+    }
+    expect(extract.mock.calls.some(c => texts((c as unknown as [LedgerEntry[]])[0]).includes('late'))).toBe(true);
+    p.dispose();
+  });
+
+  test('storage failures inside a run count as failures', async () => {
+    const base = memoryStore();
+    let failReads = true;
+    const store: Store = new Proxy(base, {
+      get(t, k, r) {
+        const v: unknown = Reflect.get(t, k, r);
+        if (k === 'getBoard' && typeof v === 'function') {
+          return async (...a: unknown[]) => {
+            if (failReads && extractStarted) throw new Error('db down');
+            return (v as (...x: unknown[]) => Promise<unknown>).apply(t, a);
+          };
+        }
+        return typeof v === 'function' ? v.bind(t) : v;
+      },
+    });
+    let extractStarted = false;
+    const extract = vi.fn(async () => []);
+    const fx = await makeProject({ store: base });
+    await fx.p.start({ goal: 'g', constraints: [], lead: 'pm', by: 'alice' });
+    fx.p.dispose();
+    const p = createProject({
+      projectId: fx.projectId,
+      store,
+      employees: createEmployeeRegistry({ store }),
+      clock: fx.clock,
+      options: { extractEvery: 1 },
+      models: { extract },
+    });
+    const failed: number[] = [];
+    p.on('extractFailed', e => failed.push(e.attempts));
+    await p.ingest({ author: alice, text: 'one' });
+    extractStarted = true;
+    for (let i = 0; i < 3; i++) {
+      fx.clock.advance(60_000);
+      await p.flushExtraction();
+    }
+    expect(extract).not.toHaveBeenCalled();
+    expect(failed).toEqual([3]);
+    p.dispose();
+  });
+
+  test('dispose while a run is in flight: no timer is re-armed and no further run starts', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(r => (release = r));
+    const extract = vi.fn(async () => {
+      await gate;
+      return [];
+    });
+    const fx = await setup(extract, { extractEvery: 2 });
+    await say(fx, 2);
+    await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(1));
+    await say(fx, 3, 3); // plenty pending for another run
+    fx.p.dispose();
+    release();
+    await fx.p.flushExtraction();
+    expect(fx.clock.pendingTimers()).toBe(0);
+    fx.clock.advance(120_000);
+    await fx.p.flushExtraction();
+    expect(extract).toHaveBeenCalledTimes(1);
   });
 
   test('an empty result is a success: progress advances and nothing is enqueued', async () => {

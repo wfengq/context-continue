@@ -622,9 +622,16 @@ export function createProject(cfg: ProjectConfig): Project {
     enqueue: (ops, baseVersion) =>
       serial(async () => {
         await openBoard();
-        await store.enqueueProposal({ id: newId('prop'), projectId, baseVersion, by: 'extractor', ops });
+        const id = newId('prop');
+        await store.enqueueProposal({ id, projectId, baseVersion, by: 'extractor', ops });
+        return id;
+      }),
+    merge: () =>
+      serial(async () => {
+        await openBoard();
         finish(await runMerge());
       }),
+    rejected: async ref => void (await log(SYSTEM, { kind: 'archived', what: 'extractorOps', ref })),
   });
   extractor.restore().catch(() => undefined);
 
