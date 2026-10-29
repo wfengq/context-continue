@@ -1288,6 +1288,18 @@ describe('R39: bounded bot-to-bot chat', () => {
     p2.dispose();
   });
 
+  test('R39f: terminal bot chat does not consume the un-rooted allowance; requests still stop at the cap', async () => {
+    const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 2 } });
+    const say = async (act: 'inform' | 'done' | 'agree' | 'request') =>
+      fx.p.route(await fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text: act, mentions: ['logic'], act }));
+    for (const act of ['inform', 'done', 'agree', 'inform', 'done'] as const) expect(await say(act)).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached')).toEqual([]);
+    expect(pairs(await say('request'))).toEqual([['logic', 'mentioned']]);
+    expect(pairs(await say('request'))).toEqual([['logic', 'mentioned']]);
+    expect(await say('request')).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached')).toHaveLength(1);
+  });
+
   test('R39c: a human chat message is a progress point too', async () => {
     const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 1 } });
     const ask = async () =>

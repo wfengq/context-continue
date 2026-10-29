@@ -158,7 +158,8 @@ function isProgress(e: LedgerEntry): boolean {
 
 /**
  * R39c: the latest progress point before `entry` (a human chat message or a structural event; null
- * when there is none) and how many bot chat entries with no human root lie between it and `entry`.
+ * when there is none) and how many waking bot chat entries (request, query, propose) with no human
+ * root lie between it and `entry`.
  */
 export function unrootedSinceProgress(
   entry: LedgerEntry,
@@ -175,7 +176,11 @@ export function unrootedSinceProgress(
   const from = progress?.seq ?? 0;
   const rootOf = chainRoots(ledger);
   const turns = before.filter(
-    (e) => e.seq > from && e.author.kind === 'bot' && chatBody(e) !== null && rootOf(e) === null,
+    (e) => {
+      const body = chatBody(e);
+      // R39f: only waking acts count; terminal chat cannot keep a loop going
+      return e.seq > from && e.author.kind === 'bot' && !!body?.act && WAKING_ACTS.has(body.act) && rootOf(e) === null;
+    },
   ).length;
   return { progress, turns };
 }

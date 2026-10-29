@@ -339,11 +339,11 @@ describe('unrootedSinceProgress (R39c)', () => {
 
   test('counts earlier un-rooted bot chat since the latest human chat or structural event', () => {
     const plan = event('planApproved');
-    const a = botMsg();
+    const a = botMsg({ act: 'request' });
     const h = humanMsg('go');
-    const rooted = botMsg({ replyTo: h.id, hops: 1 });
-    const b = botMsg();
-    const bReply = botMsg({ replyTo: b.id, hops: 1 });
+    const rooted = botMsg({ replyTo: h.id, hops: 1, act: 'request' });
+    const b = botMsg({ act: 'query' });
+    const bReply = botMsg({ replyTo: b.id, hops: 1, act: 'propose' });
     const noise = event('archived'); // not a progress point
     const next = botMsg();
     const all = [plan, a, h, rooted, b, bReply, noise, next];
@@ -356,8 +356,16 @@ describe('unrootedSinceProgress (R39c)', () => {
   });
 
   test('no progress point counts from the start', () => {
-    const a = botMsg();
-    const b = botMsg();
+    const a = botMsg({ act: 'request' });
+    const b = botMsg({ act: 'request' });
     expect(unrootedSinceProgress(b, [a, b])).toEqual({ progress: null, turns: 1 });
+  });
+
+  test('R39f: only waking acts (request, query, propose) count', () => {
+    const terminal = (['inform', 'agree', 'refuse', 'done'] as const).map((act) => botMsg({ act }));
+    const noAct = botMsg({ act: undefined });
+    const q = botMsg({ act: 'query' });
+    const next = botMsg({ act: 'request' });
+    expect(unrootedSinceProgress(next, [...terminal, noAct, q, next])).toEqual({ progress: null, turns: 1 });
   });
 });

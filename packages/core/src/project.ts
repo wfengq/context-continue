@@ -241,7 +241,7 @@ export function createProject(cfg: ProjectConfig): Project {
     if (changed && board.status !== 'closed') {
       ownWrites = own;
       try {
-        finish(await activateReady());
+        await finish(await activateReady());
       } finally {
         ownWrites = null;
       }
@@ -261,9 +261,22 @@ export function createProject(cfg: ProjectConfig): Project {
   // helpers
   // ---------------------------------------------------------------------------
 
-  function finish(wakes: Wake[]): Wake[] {
+  /**
+   * Emits the wakes. R39a/R39e: `chatEntryId` is the chat entry that `route` woke them for; it becomes
+   * each bot's default reply target. Every other wake (structural ones, and needsLead) clears it, so a
+   * later `sendMessage` never threads onto a stale message. The wake event is emitted even if that fails.
+   */
+  async function finish(wakes: Wake[], chatEntryId?: string): Promise<Wake[]> {
     const out = dedupeWakes(wakes);
-    if (out.length > 0) bus.emit('wake', { wakes: out });
+    try {
+      for (const w of out) {
+        const key = lastWakeKey(w.botId);
+        if (chatEntryId !== undefined && w.reason !== 'needsLead') await store.setMeta(projectId, key, chatEntryId);
+        else if ((await store.getMeta<string>(projectId, key)) !== null) await store.setMeta(projectId, key, null);
+      }
+    } finally {
+      if (out.length > 0) bus.emit('wake', { wakes: out });
+    }
     return out;
   }
 
@@ -355,7 +368,7 @@ export function createProject(cfg: ProjectConfig): Project {
         await setStatus(w.id, 'active');
       } catch (e) {
         // Dependents activated so far are no longer pending, so a retry would never wake them.
-        finish(wakes);
+        await finish(wakes).catch(() => undefined); // the original error is the one to report
         throw e;
       }
       wakes.push({ botId: w.owner, reason: 'upstreamDelivered', detail: `dependencies of ${w.id} delivered` });
@@ -706,7 +719,7 @@ export function createProject(cfg: ProjectConfig): Project {
         forbidden(`At most ${options.maxPromotionsPerTurn} promotions per turn`);
       }
       lastOutcome = null;
-      finish(await submit(botId, { type: 'proposal', ops }));
+      await finish(await submit(botId, { type: 'proposal', ops }));
       if (promotion) {
         const ws = await load();
         await store.saveWorkspace({ ...ws, promotionsThisTurn: ws.promotionsThisTurn + 1 });
@@ -738,7 +751,7 @@ export function createProject(cfg: ProjectConfig): Project {
     merge: () =>
       serial(async () => {
         await openBoard();
-        finish(await runMerge());
+        await finish(await runMerge());
       }),
     rejected: async ref => void (await log(SYSTEM, { kind: 'archived', what: 'extractorOps', ref })),
   });
@@ -930,12 +943,8 @@ export function createProject(cfg: ProjectConfig): Project {
             bus.emit('wakeLimitReached', { afterSeq: point?.seq ?? 0 });
           }
         }
-        // R39a: remember which entry woke each bot so its reply threads onto it by default. A needsLead
-        // escalation is not recorded: the lead is asked to decide, not to continue the capped chain.
-        for (const w of r.wakes) {
-          if (w.reason !== 'needsLead') await store.setMeta(projectId, lastWakeKey(w.botId), entry.id);
-        }
-        return finish(r.wakes);
+        // R39a: the entry becomes each woken bot's default reply target (needsLead clears it, R39e).
+        return finish(r.wakes, entry.id);
       }),
 
     merge: () =>

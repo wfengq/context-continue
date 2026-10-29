@@ -521,6 +521,34 @@ describe('sendMessage default threading (R39a)', () => {
     expect((await entryOf(fx, loose.entryId)).body).toMatchObject({ replyTo: undefined, hops: 0 });
   });
 
+  test('R39e: a structural wake clears the default (chat wake, then reviewFailed)', async () => {
+    const fx = await approved();
+    await send(fx, 'logic', { text: 'which palette?', act: 'query', mentions: ['art'] }); // wakes art by chat
+    await fx.p.callTool('art', 'submitDeliverable', { workstreamId: 'art', summary: 'sprites', content: 'sprites.png' });
+    const dv = (await fx.p.board()).workstreams.find(w => w.id === 'art')!.deliverables.at(-1)!;
+    const review = (await fx.p.callTool('pm', 'submitReview', { deliverableId: dv.id, passed: false, notes: 'redo' })) as {
+      wakes: { botId: string; reason: string }[];
+    };
+    expect(review.wakes.map(w => [w.botId, w.reason])).toEqual([['art', 'reviewFailed']]);
+    const r = await send(fx, 'art', { text: 'what is wrong?', act: 'request', mentions: ['pm'] });
+    expect((await entryOf(fx, r.entryId)).body).toMatchObject({ replyTo: undefined, hops: 0 });
+    expect(r.wakes.map(w => [w.botId, w.reason])).toEqual([['pm', 'mentioned']]);
+  });
+
+  test('R39e: the lead woken by a hop-cap needsLead has no default reply target', async () => {
+    const fx = await approved({ options: { maxBotTurnsPerHumanMessage: 20 } }); // 7 un-rooted requests, above the default backstop
+    await send(fx, 'art', { text: 'pm, a question', act: 'query', mentions: ['pm'] }); // pm woken by chat first
+    await send(fx, 'art', { text: 'start', act: 'request', mentions: ['logic'] });
+    for (let hop = 1; hop <= 4; hop++) {
+      const [from, to] = hop % 2 === 1 ? ['logic', 'art'] : ['art', 'logic'];
+      await send(fx, from!, { text: `round ${hop}`, act: 'request', mentions: [to!] });
+    }
+    // the last round went to the lead (needsLead); its decision starts fresh and wakes art
+    const d = await send(fx, 'pm', { text: 'stop, do it this way', act: 'request', mentions: ['art'] });
+    expect((await entryOf(fx, d.entryId)).body).toMatchObject({ replyTo: undefined, hops: 0 });
+    expect(d.wakes.map(w => [w.botId, w.reason])).toEqual([['art', 'mentioned']]);
+  });
+
   test('the last wake entry survives a restart', async () => {
     const fx = await approved();
     const q = await send(fx, 'art', { text: 'question?', act: 'query', mentions: ['logic'] });

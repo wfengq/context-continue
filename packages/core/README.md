@@ -47,7 +47,7 @@ await project.callTool('art', 'submitDeliverable', { workstreamId: 'art', summar
 
 `callTool` checks that the bot is a member of the project, that lead-only tools (`proposePlan`, `resolveProposal`, `submitReview`, `listPending`, `unblockWorkstream`) are called by the lead, and that the arguments are valid. It fails with a `ContextError` carrying a `code` such as `NOT_A_MEMBER`, `FORBIDDEN` or `INVALID_OP`. Every call also returns or emits the wake-ups it caused, so the host knows which bots to run next (`project.on('wake', ...)`).
 
-A `sendMessage` without `replyTo` replies to the chat message that woke the bot (if it has not posted since), so bot-to-bot exchanges form reply chains and stop at `maxHops`; bot chat outside any human-rooted chain is also capped at `maxBotTurnsPerHumanMessage` until the next human message or project event (plan approval, deliverable, review, block or board merge), after which `wakeLimitReached` is emitted once.
+A `sendMessage` without `replyTo` replies to the chat message that woke the bot (if it has not posted since and has not been woken for another reason since), so bot-to-bot exchanges form reply chains and stop at `maxHops`; bot requests, queries and proposals outside any human-rooted chain are also capped at `maxBotTurnsPerHumanMessage` until the next human message or project event (plan approval, deliverable, review, block or board merge), after which `wakeLimitReached` is emitted once.
 
 ## Brief segments and prompt caching
 
