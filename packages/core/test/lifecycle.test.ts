@@ -992,3 +992,92 @@ describe('fix round 2', () => {
     expect((await fx.p.board()).workstreams.find(x => x.id === 'audio')!.owner).toBe('pm');
   });
 });
+
+/** A memoryStore whose setMeta for `key` fails while `fail` is true. */
+function failingMeta(key: string) {
+  const inner = memoryStore();
+  const ctl = { fail: false };
+  const store = new Proxy(inner, {
+    get(t, k, r) {
+      const v = Reflect.get(t, k, r);
+      if (k !== 'setMeta') return v;
+      return async (projectId: string, metaKey: string, value: unknown) => {
+        if (ctl.fail && metaKey === key) throw new Error(`setMeta ${key} failed`);
+        return inner.setMeta(projectId, metaKey, value);
+      };
+    },
+  });
+  return { store, ctl };
+}
+
+describe('fix round 3', () => {
+  const twoDependents = {
+    workstreams: [
+      FIXTURE_PLAN.workstreams[0]!,
+      { ...FIXTURE_PLAN.workstreams[1]!, dependsOn: ['art'] },
+      FIXTURE_PLAN.workstreams[2]!,
+    ],
+    contracts: [],
+  };
+
+  test('R27: when the second dependent fails to activate, both owners still get upstreamDelivered exactly once', async () => {
+    const source = fakeSource();
+    const fx = await startOnly({ workstreams: source });
+    const { proposalId } = await fx.p.proposePlan(twoDependents, { by: 'pm' });
+    await fx.p.approvePlan(proposalId, { by: 'alice' });
+    const { id } = await deliverArt(fx);
+    fx.events.length = 0;
+    source.failOn = 'logic';
+    source.failSetStatus = 3;
+    await expect(fx.p.submitReview(id, { by: 'pm', passed: true, notes: '' })).rejects.toThrow('host write failed');
+    await fx.p.submitReview(id, { by: 'pm', passed: true, notes: '' });
+    const delivered = fx.eventsOf('wake').flatMap(e => e.wakes).filter(w => w.reason === 'upstreamDelivered');
+    expect(delivered.map(w => w.botId).sort()).toEqual(['audio', 'logic']);
+    expect(source.rows.filter(r => r.status === 'active').map(r => r.id).sort()).toEqual(['audio', 'logic']);
+  });
+
+  test('R27: a failed status bookkeeping write asks a human but keeps the activation and its wake', async () => {
+    const source = fakeSource();
+    const m = failingMeta('hostStatus');
+    const fx = await makeProject({ approved: true, workstreams: source, store: m.store });
+    const { id } = await deliverArt(fx);
+    fx.events.length = 0;
+    m.ctl.fail = true;
+    const w = await fx.p.submitReview(id, { by: 'pm', passed: true, notes: '' });
+    m.ctl.fail = false;
+    expect(pairs(w)).toEqual([['logic', 'upstreamDelivered']]);
+    expect(source.rows.find(r => r.id === 'logic')!.status).toBe('active');
+    expect(fx.eventsOf('needsHuman').map(e => e.ref).sort()).toEqual(['art', 'logic']);
+  });
+
+  test('R27: reconcile records a host change only after acting, so a failed activation is retried', async () => {
+    const source = fakeSource();
+    const fx = await makeProject({ approved: true, workstreams: source });
+    fx.events.length = 0;
+    source.failOn = 'logic';
+    source.failSetStatus = 3;
+    source.rows.find(r => r.id === 'art')!.status = 'delivered';
+    source.fire(['art']);
+    await fx.p.merge();
+    expect(source.rows.find(r => r.id === 'logic')!.status).toBe('pending');
+    expect(fx.eventsOf('wake')).toHaveLength(0);
+    source.fire([]); // the next notification retries
+    await fx.p.merge();
+    expect(source.rows.find(r => r.id === 'logic')!.status).toBe('active');
+    expect(fx.eventsOf('wake').flatMap(e => pairs(e.wakes))).toEqual([['logic', 'upstreamDelivered']]);
+    expect(await fx.store.getMeta(fx.projectId, 'hostStatus')).toMatchObject({ art: 'delivered', logic: 'active' });
+  });
+
+  test('R27: a second failed review with different conventions is a new review round', async () => {
+    const fx = await makeProject({ approved: true });
+    const { id } = await deliverArt(fx);
+    await fx.p.submitReview(id, { by: 'pm', passed: false, notes: 'one', conventions: ['a'] });
+    await fx.p.submitReview(id, { by: 'pm', passed: false, notes: 'two', conventions: ['b'] });
+    // the same review again is a no-op
+    await fx.p.submitReview(id, { by: 'pm', passed: false, notes: 'two', conventions: ['b'] });
+    const b = await fx.p.board();
+    expect(b.conventions.map(c => c.text)).toEqual(['a', 'b']);
+    expect(b.workstreams.find(x => x.id === 'art')!.reviewRounds).toBe(2);
+    expect(await eventCount(fx, 'reviewFailed')).toBe(2);
+  });
+});

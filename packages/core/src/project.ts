@@ -1,5 +1,6 @@
 // The project facade (design spec 4, 5.1, 6.1, 7). Orchestration only: every rule lives in the
 // modules imported below; this file sequences them, writes events and turns results into wakes.
+import { createHash } from 'node:crypto';
 import { structuralWakes, writeScopeOverlaps } from './board/diff.js';
 import { Merger, type MergeResult } from './board/merge.js';
 import { buildBrief as assembleBrief, type BriefDeps, type BriefOptions } from './brief.js';
@@ -97,7 +98,7 @@ const SYSTEM: Author = { kind: 'system', id: 'core' };
 /** Meta key: workstream statuses the core has acted on, for an external WorkstreamSource (R24). */
 const HOST_STATUS = 'hostStatus';
 type ReviewStep = 'status' | 'rounds' | 'conventions' | 'event';
-type ReviewMarker = { outcome: 'passed' | 'failed'; done: ReviewStep[] };
+type ReviewMarker = { done: ReviewStep[] };
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function forbidden(message: string): never {
@@ -189,9 +190,13 @@ export function createProject(cfg: ProjectConfig): Project {
 
   type StatusMap = Record<string, Workstream['status']>;
 
+  /** While a reconcile acts, the statuses it writes itself (merged into the map it records). */
+  let ownWrites: StatusMap | null = null;
+
   /** Records statuses the core itself wrote to the host, so they are not mistaken for host changes. */
   async function noteStatuses(entries: StatusMap): Promise<void> {
     if (!external) return;
+    if (ownWrites) Object.assign(ownWrites, entries);
     const map = (await store.getMeta<StatusMap>(projectId, HOST_STATUS)) ?? {};
     await store.setMeta(projectId, HOST_STATUS, { ...map, ...entries });
   }
@@ -210,9 +215,17 @@ export function createProject(cfg: ProjectConfig): Project {
     const known = await store.getMeta<StatusMap>(projectId, HOST_STATUS);
     const seen: StatusMap = Object.fromEntries(listed.map(w => [w.id, w.status]));
     const changed = known !== null && listed.some(w => known[w.id] !== undefined && known[w.id] !== w.status);
-    // What the host reported, plus what this run wrote itself; later host changes still differ.
-    await store.setMeta(projectId, HOST_STATUS, seen);
-    if (changed && board.status !== 'closed') finish(await activateReady());
+    const own: StatusMap = {};
+    if (changed && board.status !== 'closed') {
+      ownWrites = own;
+      try {
+        finish(await activateReady());
+      } finally {
+        ownWrites = null;
+      }
+    }
+    // Recorded only after acting: if acting fails, the next reconcile sees the same change again.
+    await store.setMeta(projectId, HOST_STATUS, { ...seen, ...own });
   }
 
   const unsubscribe = external
@@ -278,8 +291,17 @@ export function createProject(cfg: ProjectConfig): Project {
       bus.emit('needsHuman', { reason: `Writing status "${status}" of workstream ${id} failed: ${errText(e)}`, ref: id });
       throw e;
     }
-    if (external) await noteStatuses({ [id]: status });
-    else bus.emit('boardChanged', { version: (await getBoard()).version });
+    if (!external) {
+      bus.emit('boardChanged', { version: (await getBoard()).version });
+      return;
+    }
+    try {
+      await noteStatuses({ [id]: status });
+    } catch (e) {
+      // The host has the status, so the step counts as done. A stale map entry only makes a
+      // later reconcile re-check readiness, which is derived from state and finds nothing to do.
+      bus.emit('needsHuman', { reason: `Status "${status}" of workstream ${id} was written but not recorded: ${errText(e)}`, ref: id });
+    }
   }
 
   function checkOverlaps(ws: Workstream[]): void {
@@ -307,7 +329,13 @@ export function createProject(cfg: ProjectConfig): Project {
     );
     const wakes: Wake[] = [];
     for (const w of ready) {
-      await setStatus(w.id, 'active');
+      try {
+        await setStatus(w.id, 'active');
+      } catch (e) {
+        // Dependents activated so far are no longer pending, so a retry would never wake them.
+        finish(wakes);
+        throw e;
+      }
       wakes.push({ botId: w.owner, reason: 'upstreamDelivered', detail: `dependencies of ${w.id} delivered` });
     }
     checkOverlaps(ready.length > 0 ? await workstreamsOf(await getBoard()) : ws);
@@ -512,9 +540,9 @@ export function createProject(cfg: ProjectConfig): Project {
   }
 
   /**
-   * R26: idempotent per (deliverable, outcome). Each side effect records a marker in meta
-   * `review:<deliverableId>` and is skipped when a retry finds it done; activation is derived from
-   * state (R25), so it completes on a retry too.
+   * R26/R27: idempotent per (deliverable, outcome, conventions). Each side effect records a marker
+   * in meta `review:<deliverableId>:<outcome>:<conventions hash>` and is skipped when a retry finds it
+   * done; activation is derived from state (R25), so it completes on a retry too.
    */
   async function review(
     deliverableId: string,
@@ -523,10 +551,15 @@ export function createProject(cfg: ProjectConfig): Project {
     const board = await openBoard();
     if (r.by !== board.lead) forbidden(`Only the lead (${board.lead}) can review deliverables`);
     const { w } = findDeliverable(await workstreamsOf(board), deliverableId);
-    const outcome = r.passed ? 'passed' : 'failed';
-    const key = `review:${deliverableId}`;
-    const saved = await store.getMeta<ReviewMarker>(projectId, key);
-    const marker: ReviewMarker = saved?.outcome === outcome ? saved : { outcome, done: [] };
+    // Idempotency rule: calls with the same deliverable, outcome and set of conventions are one
+    // review. A retry completes the steps not yet marked done, and repeating a completed review
+    // changes nothing. Any difference (another outcome, other conventions) is a new review round.
+    const conventionsHash = createHash('sha256')
+      .update(JSON.stringify([...new Set(r.conventions ?? [])].sort()))
+      .digest('hex')
+      .slice(0, 16);
+    const key = `review:${deliverableId}:${r.passed ? 'passed' : 'failed'}:${conventionsHash}`;
+    const marker: ReviewMarker = (await store.getMeta<ReviewMarker>(projectId, key)) ?? { done: [] };
     const step = async (name: ReviewStep, fn: () => Promise<void>) => {
       if (marker.done.includes(name)) return;
       await fn();
