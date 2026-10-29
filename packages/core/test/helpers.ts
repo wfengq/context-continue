@@ -1,8 +1,13 @@
-// Shared test fixtures. `seedProject` writes straight through a memoryStore (no facade).
+// Shared test fixtures. `seedProject` writes straight through a memoryStore (no facade);
+// `makeProject` drives a project only through `createProject`.
 import { applyOp } from '../src/board/apply.js';
 import type { BriefDeps } from '../src/brief.js';
+import type { Clock } from '../src/clock.js';
 import { createEmployeeRegistry, type EmployeeRegistry } from '../src/employees.js';
-import { resolveOptions } from '../src/options.js';
+import type { CoreEvents } from '../src/events.js';
+import { resolveOptions, type Options } from '../src/options.js';
+import type { PlanInput } from '../src/plan/validate.js';
+import { createProject, type Project, type ProjectConfig } from '../src/project.js';
 import { toLedgerEntry } from '../src/route.js';
 import { memoryStore } from '../src/store/memory.js';
 import type { Store } from '../src/store/store.js';
@@ -182,4 +187,130 @@ export async function seedProject(opts: { plan?: boolean } = {}): Promise<Seeded
       await saveChange(b, []);
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Facade fixture (Task 12): a project driven only through createProject.
+// ---------------------------------------------------------------------------
+
+export interface FakeClock extends Clock {
+  /** Moves time forward and runs every timer that falls due, in due order. */
+  advance(ms: number): void;
+  /** Number of timers scheduled and not yet run or cleared. */
+  pendingTimers(): number;
+}
+
+export function fakeClock(start = 1_700_000_000_000): FakeClock {
+  let t = start;
+  let nextId = 1;
+  const timers = new Map<number, { at: number; fn: () => void }>();
+  return {
+    now: () => t,
+    setTimeout(fn, ms) {
+      const id = nextId++;
+      timers.set(id, { at: t + ms, fn });
+      return id;
+    },
+    clearTimeout(h) {
+      timers.delete(h as number);
+    },
+    advance(ms) {
+      const until = t + ms;
+      for (;;) {
+        const due = [...timers.entries()].filter(([, x]) => x.at <= until).sort((a, b) => a[1].at - b[1].at || a[0] - b[0]);
+        const first = due[0];
+        if (!first) break;
+        timers.delete(first[0]);
+        t = Math.max(t, first[1].at);
+        first[1].fn();
+      }
+      t = until;
+    },
+    pendingTimers: () => timers.size,
+  };
+}
+
+/** The fixture plan: art and audio have no dependencies; logic depends on art; one contract art -> logic. */
+export const FIXTURE_PLAN: PlanInput = {
+  workstreams: [
+    { id: 'art', title: 'Sprites', brief: 'Draw the sprites.', owner: 'art', dependsOn: [] },
+    { id: 'audio', title: 'Sound', brief: 'Make the sound.', owner: 'audio', dependsOn: [] },
+    { id: 'logic', title: 'Gameplay', brief: 'Write the rules.', owner: 'logic', dependsOn: ['art'] },
+  ],
+  contracts: [{ id: 'c1', from: 'art', to: 'logic', spec: 'PNG sprite sheets, 16x16 tiles' }],
+};
+
+export type RecordedEvent = { [K in keyof CoreEvents]: { kind: K; e: CoreEvents[K] } }[keyof CoreEvents];
+
+export interface FacadeProject {
+  p: Project;
+  store: Store;
+  clock: FakeClock;
+  employees: EmployeeRegistry;
+  projectId: string;
+  /** Every event the project emitted, in order. */
+  events: RecordedEvent[];
+  eventsOf<K extends keyof CoreEvents>(kind: K): CoreEvents[K][];
+  /** Id of the approved plan proposal when `approved: true`. */
+  planId?: string;
+}
+
+const EVENT_KINDS: (keyof CoreEvents)[] = [
+  'boardChanged',
+  'wake',
+  'merged',
+  'needsHuman',
+  'extractFailed',
+  'wakeLimitReached',
+  'writeScopeOverlap',
+  'condenseAborted',
+];
+
+export async function makeProject(
+  opts: {
+    approved?: boolean;
+    store?: Store;
+    options?: Options;
+    workstreams?: WorkstreamSource;
+    models?: ProjectConfig['models'];
+    countTokens?: (s: string) => number;
+  } = {},
+): Promise<FacadeProject> {
+  const store = opts.store ?? memoryStore();
+  const projectId = 'p1';
+  const clock = fakeClock();
+  const employees = createEmployeeRegistry({ store });
+  for (const botId of ['pm', 'art', 'logic', 'audio']) {
+    await employees.upsert({ botId, persona: PERSONAS[botId]!, skills: [] });
+  }
+  const p = createProject({
+    projectId,
+    store,
+    employees,
+    clock,
+    options: opts.options,
+    workstreams: opts.workstreams,
+    models: opts.models,
+    countTokens: opts.countTokens,
+  });
+  const events: RecordedEvent[] = [];
+  for (const kind of EVENT_KINDS) p.on(kind, e => events.push({ kind, e } as RecordedEvent));
+
+  const fx: FacadeProject = {
+    p,
+    store,
+    clock,
+    employees,
+    projectId,
+    events,
+    eventsOf: <K extends keyof CoreEvents>(kind: K) =>
+      events.filter(x => x.kind === kind).map(x => x.e as CoreEvents[K]),
+  };
+  if (opts.approved) {
+    await p.start({ goal: 'Ship a tiny platformer demo.', constraints: ['Runs in the browser'], lead: 'pm', by: 'alice' });
+    const { proposalId } = await p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    await p.approvePlan(proposalId, { by: 'alice' });
+    fx.planId = proposalId;
+  }
+  return fx;
 }
