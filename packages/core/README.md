@@ -61,7 +61,7 @@ await project.callTool('art', 'submitDeliverable', { workstreamId: 'art', summar
 | 6 | `delta` | no | events and board changes relevant to the bot since it last looked |
 | 7 | `trigger` | no | why the bot was woken |
 
-Segments 1 to 3 are the cacheable prefix. Keep them first and in this order when you build the prompt, and put the provider's cache breakpoint after segment 3 (or after segment 2 if you want the prefix shared across bots). They contain no timestamps or other volatile content: segments 1 and 2 are byte-identical for every member at the same board version, and segment 3 is stable for one bot until its memory changes. Everything that changes from turn to turn is in segments 4 to 7. Items a bot has already seen in full are shown in a short form afterwards; `peek: true` renders a brief without marking anything as seen.
+Segments 1 to 3 are the cacheable prefix. Keep them first and in this order when you build the prompt, and put the provider's cache breakpoint after segment 3 (or after segment 2 if you want the prefix shared across bots). They contain no timestamps or other volatile content: while the roster, personas, board version and workstream statuses are unchanged, and the budget does not force trimming segment 3, segments 1 and 2 are byte-identical for every member and segment 3 is stable for one bot until its memory changes. Everything that changes from turn to turn is in segments 4 to 7. Items a bot has already seen in full are shown in a short form afterwards; `peek: true` renders a brief without marking anything as seen.
 
 ## What the host does
 

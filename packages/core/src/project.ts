@@ -367,21 +367,25 @@ export function createProject(cfg: ProjectConfig): Project {
    * instance over the same store, must not escalate.
    */
   function armLeadTimers(pending: PendingProposal[], lead: string): void {
+    if (disposed) return;
     for (const p of pending) {
       if (p.needs !== 'lead' || leadTimers.has(p.id)) continue;
       const remaining = Math.max(0, p.createdAt + options.leadTimeoutMs - clock.now());
       const handle = clock.setTimeout(() => {
         leadTimers.delete(p.id);
+        const escalate = () =>
+          bus.emit('needsHuman', {
+            reason: `The lead (${lead}) did not resolve pending proposal ${p.id} within ${options.leadTimeoutMs} ms`,
+            ref: p.id,
+          });
         store
           .listPending(projectId)
           .then(list => {
-            if (disposed || !list.some(x => x.id === p.id)) return;
-            bus.emit('needsHuman', {
-              reason: `The lead (${lead}) did not resolve pending proposal ${p.id} within ${options.leadTimeoutMs} ms`,
-              ref: p.id,
-            });
+            if (!disposed && list.some(x => x.id === p.id)) escalate();
           })
-          .catch(() => undefined); // an unreadable store cannot be told apart from "resolved"; the next start re-arms
+          .catch(() => {
+            if (!disposed) escalate(); // R31: an unreadable store must not swallow the escalation
+          });
       }, remaining);
       leadTimers.set(p.id, handle);
     }
@@ -394,7 +398,9 @@ export function createProject(cfg: ProjectConfig): Project {
       throw e;
     });
     if (!board || board.status === 'closed' || disposed) return;
-    armLeadTimers(await store.listPending(projectId), board.lead);
+    const pending = await store.listPending(projectId);
+    if (disposed) return;
+    armLeadTimers(pending, board.lead);
   }
 
   function clearLeadTimer(id: string): void {
@@ -698,7 +704,9 @@ export function createProject(cfg: ProjectConfig): Project {
     rejected: async ref => void (await log(SYSTEM, { kind: 'archived', what: 'extractorOps', ref })),
   });
   extractor.restore().catch(() => undefined);
-  restoreLeadTimers().catch(() => undefined);
+  restoreLeadTimers().catch((e: unknown) => {
+    if (!disposed) bus.emit('needsHuman', { reason: `Lead timeouts could not be restored: ${errText(e)}`, ref: 'restore' });
+  });
 
   const dispose = () => {
     disposed = true;

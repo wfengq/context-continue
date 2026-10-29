@@ -122,7 +122,6 @@ describe('restart', () => {
     const extractA = vi.fn(async (_: LedgerEntry[]) => []);
     const storeA = sqliteStore(file);
     const a = await makeProject({ store: storeA, approved: true, options: { extractEvery: 2 }, models: { extract: extractA } });
-    a.clock.advance(0);
 
     // history: a decision, notes, a delivery under review, seen-compaction state, chat
     await a.p.callTool('art', 'proposeDecision', { text: 'Use PNG', rationale: 'Lossless', rejected: ['JPEG'], affects: ['art'] });
@@ -151,10 +150,10 @@ describe('restart', () => {
     a.p.dispose();
     storeA.close();
 
-    // restart on the same file; the fake clock keeps running
+    // restart on the same file; B's clock continues from A's time
     const extractB = vi.fn(async (_: LedgerEntry[]) => []);
     const b = reopen(file, clock, extractB);
-    clock.advance(200_000);
+    clock.advance(a.clock.now() - clock.now());
     const needsHuman: { ref: string }[] = [];
     b.p.on('needsHuman', e => needsHuman.push(e));
 
@@ -343,5 +342,69 @@ describe('cache-friendliness', () => {
     await p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'Hello team' });
     const again = await p.buildBrief('art', { ...BUDGET, trigger: { reason: 'mentioned', detail: 'hi' } });
     for (const kind of ['common', 'board', 'memory'] as const) expect(seg(again, kind)).toBe(seg(art, kind));
+  });
+});
+
+describe('lead timer robustness', () => {
+  async function started(store: ReturnType<typeof sqliteStore>, clock: ReturnType<typeof fakeClock>) {
+    const employees = createEmployeeRegistry({ store });
+    for (const botId of BOTS) await employees.upsert({ botId, persona: PERSONAS[botId]!, skills: [] });
+    const p = createProject({ projectId: 'p1', store, employees, clock });
+    await p.start({ goal: 'Ship it', constraints: [], lead: 'pm', by: 'alice' });
+    const { proposalId } = await p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    await p.approvePlan(proposalId, { by: 'alice' });
+    await p.callTool('art', 'proposeDecision', { text: 'Dark theme', rationale: 'Asked', affects: ['logic'] });
+    return p;
+  }
+
+  test('dispose during the restore read arms no timers', async () => {
+    const store = sqliteStore(':memory:');
+    const clock = fakeClock();
+    (await started(store, clock)).dispose();
+    const real = store.listPending.bind(store);
+    let release!: () => void;
+    const gate = new Promise<void>(r => (release = r));
+    store.listPending = async id => {
+      await gate;
+      return real(id);
+    };
+    const employees = createEmployeeRegistry({ store });
+    const p = createProject({ projectId: 'p1', store, employees, clock });
+    await tick();
+    p.dispose();
+    release();
+    await tick();
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
+  test('a store error when the timer fires still escalates', async () => {
+    const store = sqliteStore(':memory:');
+    const clock = fakeClock();
+    const p = await started(store, clock);
+    const seen: string[] = [];
+    p.on('needsHuman', e => seen.push(e.ref));
+    const [pending] = await store.listPending('p1');
+    store.listPending = async () => {
+      throw new Error('disk gone');
+    };
+    clock.advance(600_000);
+    await tick();
+    expect(seen).toEqual([pending!.id]);
+    p.dispose();
+  });
+
+  test('a store error during restore emits needsHuman with ref restore', async () => {
+    const store = sqliteStore(':memory:');
+    const clock = fakeClock();
+    (await started(store, clock)).dispose();
+    store.listPending = async () => {
+      throw new Error('disk gone');
+    };
+    const p = createProject({ projectId: 'p1', store, employees: createEmployeeRegistry({ store }), clock });
+    const seen: { ref: string; reason: string }[] = [];
+    p.on('needsHuman', e => seen.push(e));
+    await tick();
+    expect(seen).toEqual([expect.objectContaining({ ref: 'restore', reason: expect.stringContaining('disk gone') })]);
+    p.dispose();
   });
 });
