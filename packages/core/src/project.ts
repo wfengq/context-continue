@@ -10,6 +10,7 @@ import { findDeliverable, planningContext, retroContext, reviewContext, type Con
 import type { EmployeeRegistry } from './employees.js';
 import { ContextError } from './errors.js';
 import { createEventBus, type EventBus } from './events.js';
+import { createExtractor } from './extract.js';
 import { newId } from './ids.js';
 import { assertMember, botMembers } from './members.js';
 import { resolveOptions, type Options } from './options.js';
@@ -87,7 +88,9 @@ export interface Project {
   /** The board with `workstreams` resolved through the WorkstreamSource. */
   board(): Promise<ProjectBoard>;
   on: EventBus['on'];
-  /** Stops the lead-timeout timers and the host WorkstreamSource subscription. */
+  /** Resolves when no chat extraction is running or being scheduled (for tests and hosts). */
+  flushExtraction(): Promise<void>;
+  /** Stops the lead-timeout and extraction timers and the host WorkstreamSource subscription. */
   dispose(): void;
 }
 
@@ -602,7 +605,31 @@ export function createProject(cfg: ProjectConfig): Project {
     return wakes;
   }
 
+  const resolvedBoard = async (): Promise<ProjectBoard> => {
+    const b = await getBoard();
+    return { ...b, workstreams: await workstreamsOf(b) };
+  };
+
+  // Human-chat extraction (spec 5.3): the model call runs outside the queue, only the proposal is queued.
+  const extractor = createExtractor({
+    store,
+    projectId,
+    clock,
+    options,
+    extract: cfg.models?.extract,
+    board: resolvedBoard,
+    emit: bus.emit,
+    enqueue: (ops, baseVersion) =>
+      serial(async () => {
+        await openBoard();
+        await store.enqueueProposal({ id: newId('prop'), projectId, baseVersion, by: 'extractor', ops });
+        finish(await runMerge());
+      }),
+  });
+  extractor.restore().catch(() => undefined);
+
   const dispose = () => {
+    extractor.dispose();
     for (const id of [...leadTimers.keys()]) clearLeadTimer(id);
     unsubscribe();
   };
@@ -738,7 +765,9 @@ export function createProject(cfg: ProjectConfig): Project {
       serial(async () => {
         await openBoard();
         const parent = c.replyTo ? ((await ledger()).find(e => e.id === c.replyTo) ?? null) : null;
-        return store.append({ ...toLedgerEntry(c, parent), id: newId('e'), projectId, createdAt: clock.now() });
+        const entry = await store.append({ ...toLedgerEntry(c, parent), id: newId('e'), projectId, createdAt: clock.now() });
+        if (entry.author.kind === 'human' && entry.body.type === 'chat') extractor.onHumanMessage(entry).catch(() => undefined);
+        return entry;
       }),
 
     route: entry =>
@@ -781,12 +810,10 @@ export function createProject(cfg: ProjectConfig): Project {
         return finish(await runMerge());
       }),
 
-    async board() {
-      const b = await getBoard();
-      return { ...b, workstreams: await workstreamsOf(b) };
-    },
+    board: resolvedBoard,
 
     on: (k, h) => bus.on(k, h),
+    flushExtraction: () => extractor.flush(),
     dispose,
   };
 }
