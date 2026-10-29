@@ -20,7 +20,7 @@ import { validatePlan, type PlanInput } from './plan/validate.js';
 import { addMemories, appendNote, type PrivateDeps } from './private.js';
 import { renderBoardPublic } from './render.js';
 import { retryingStore, withRetry } from './retry.js';
-import { routeChat, toLedgerEntry, type RouteInput } from './route.js';
+import { humanChain, routeChat, toLedgerEntry, type RouteInput } from './route.js';
 import type { Store } from './store/store.js';
 import { defaultCountTokens } from './tokens.js';
 import { createToolDispatcher, proposalOutcome, toolDefinitions, type ProposalOutcome } from './tools.js';
@@ -89,6 +89,8 @@ export interface Project {
   ingest(c: ChatInput): Promise<LedgerEntry>;
   route(e: LedgerEntry): Promise<Wake[]>;
   merge(): Promise<Wake[]>;
+  /** Read-only: every pending board proposal, waiting for the lead or the owner (R33). */
+  pending(): Promise<PendingProposal[]>;
   /** The board with `workstreams` resolved through the WorkstreamSource. */
   board(): Promise<ProjectBoard>;
   /** The resolved board (workstreams from the WorkstreamSource) as Markdown for people to read. */
@@ -476,18 +478,25 @@ export function createProject(cfg: ProjectConfig): Project {
 
     const before = await workstreamsOf(board);
     const diff = diffPlan(plan, before, board.contracts);
-    if (external && diff.hostFieldChanges.length > 0) {
-      // R22: the host owns these fields; the core cannot apply them through WorkstreamSource.
-      throw new ContextError('INVALID_PLAN', `Invalid plan: ${diff.hostFieldChanges.join('; ')}`, {
-        reasons: diff.hostFieldChanges,
-      });
+    const inPlan = new Set(plan.workstreams.map(w => w.id));
+    // R34: undelivered workstreams the plan leaves out are removed; delivered ones stay as history.
+    const removed = before.filter(w => !inPlan.has(w.id) && w.status !== 'delivered');
+    if (external) {
+      // R22/R34: the host owns these fields and its workstream list; the core cannot change them.
+      const reasons = [
+        ...diff.hostFieldChanges,
+        ...removed.map(w => `Workstream "${w.id}" cannot be dropped by a plan; remove it in the host`),
+      ];
+      if (reasons.length > 0) throw new ContextError('INVALID_PLAN', `Invalid plan: ${reasons.join('; ')}`, { reasons });
     }
     if (diff.created.length > 0) {
       await hostWrite(() => source.create(projectId, diff.created));
       await noteStatuses(Object.fromEntries(diff.created.map(w => [w.id, 'pending' as const])));
     }
 
+    const removedIds = new Set(removed.map(w => w.id));
     const { change } = await patchBoard(b => {
+      b.workstreams = b.workstreams.filter(x => !removedIds.has(x.id));
       for (const w of plan.workstreams) {
         const row = b.workstreams.find(x => x.id === w.id);
         // External source (R14): the core still stores brief, review rounds and deliverables.
@@ -500,13 +509,17 @@ export function createProject(cfg: ProjectConfig): Project {
       return diff.updated.map(c => ({ op: { op: 'updateContract', id: c.id, spec: c.spec }, by: o.by, authority: 'human', touched: [c.id] }));
     });
     for (const c of diff.dropped) await log(SYSTEM, { kind: 'archived', what: 'contracts', ref: JSON.stringify(c) });
+    for (const w of removed) await log(SYSTEM, { kind: 'archived', what: 'workstreams', ref: JSON.stringify(w) });
+    // R35: a kept blocked workstream goes back to pending; the activation below starts it when ready.
+    for (const w of await workstreamsOf(await getBoard())) {
+      if (inPlan.has(w.id) && w.status === 'blocked') await setStatus(w.id, 'pending');
+    }
 
     const prevMeta = await store.getMeta<string>(projectId, 'approvedPlan');
     const prevPlan = prevMeta ? await store.getPlanProposal(prevMeta) : null;
     const known = new Set(prevPlan?.workstreams.map(w => w.id) ?? []);
     const mid = await workstreamsOf(await getBoard());
     const delivered = new Set(mid.filter(w => w.status === 'delivered').map(w => w.id));
-    const inPlan = new Set(plan.workstreams.map(w => w.id));
     const ready = mid.filter(
       w =>
         inPlan.has(w.id) &&
@@ -575,6 +588,14 @@ export function createProject(cfg: ProjectConfig): Project {
         // R20: delivery happens only through submitReview.
         const delivers = Array.isArray(s.ops) && s.ops.some(op => op?.op === 'setWorkstreamStatus' && op.status === 'delivered');
         if (delivers && botId !== board.lead) forbidden('Only the lead marks a workstream delivered, through submitReview');
+        // R37: a member sets the status of its own workstreams only.
+        if (botId !== board.lead && Array.isArray(s.ops)) {
+          for (const op of s.ops) {
+            if (op?.op === 'setWorkstreamStatus' && ws.find(w => w.id === op.id)?.owner !== botId) {
+              forbidden(`Workstream "${op.id}" is not owned by ${botId}; only its owner or the lead can set its status`);
+            }
+          }
+        }
         // Conflicts are judged against what the bot last saw (spec 3).
         const seen = (await store.getWorkspace(projectId, botId))?.lastSeenBoardVersion ?? 0;
         const baseVersion = seen > 0 ? seen : board.version;
@@ -657,6 +678,22 @@ export function createProject(cfg: ProjectConfig): Project {
       await log(bot(r.by), { kind: r.passed ? 'reviewPassed' : 'reviewFailed', deliverableId, notes: r.notes });
     });
     return wakes;
+  }
+
+  /** R35: blocked → pending; activated (with `assigned`) right away when every dependency is delivered. */
+  async function unblock(botId: string, workstreamId: string): Promise<Wake[]> {
+    const board = await openBoard();
+    if (botId !== board.lead) forbidden(`Only the lead (${board.lead}) can unblock a workstream`);
+    const ws = await workstreamsOf(board);
+    const w = ws.find(x => x.id === workstreamId);
+    if (!w) throw new ContextError('NOT_FOUND', `Workstream "${workstreamId}" not found`);
+    if (w.status !== 'blocked') throw new ContextError('INVALID_OP', `Workstream "${workstreamId}" is ${w.status}, not blocked`);
+    await setStatus(w.id, 'pending');
+    const delivered = new Set(ws.filter(x => x.status === 'delivered').map(x => x.id));
+    if (!w.dependsOn.every(d => delivered.has(d))) return [];
+    await setStatus(w.id, 'active');
+    checkOverlaps(await workstreamsOf(await getBoard()));
+    return [{ botId: w.owner, reason: 'assigned', detail: `workstream ${w.id} was unblocked and can start` }];
   }
 
   /** Tool path for board proposals: the same `submit`, plus the merge outcome and the promotion limit. */
@@ -859,16 +896,15 @@ export function createProject(cfg: ProjectConfig): Project {
         const ws = await workstreamsOf(board);
         const all = await ledger();
         const chats = all.filter(e => e.body.type === 'chat' && e.seq < entry.seq);
-        // R16: bot turns = bot chat entries after the last human chat entry and before this one.
-        const afterSeq = chats.findLast(e => e.author.kind === 'human')?.seq ?? 0;
-        const botTurnsSinceHuman = chats.filter(e => e.seq > afterSeq && e.author.kind === 'bot').length;
+        // R32: only bot chat descending from a human message counts against the per-message cap.
+        const chain = humanChain(entry, all);
         const replyTo = entry.body.type === 'chat' ? entry.body.replyTo : undefined;
         const members = botMembers(board, ws);
         const r = await routeChat(entry, {
           lead: board.lead,
           members: new Set(members),
           workstreams: ws,
-          botTurnsSinceHuman,
+          botTurnsUnderHuman: chain.turns,
           parent: replyTo === undefined ? null : (all.find(e => e.id === replyTo) ?? null),
           options,
           route: cfg.models?.route,
@@ -880,9 +916,12 @@ export function createProject(cfg: ProjectConfig): Project {
           }),
         });
         // Once per human message, persisted so a restart does not repeat it.
-        if (r.limitReached && (await store.getMeta<number>(projectId, 'wakeLimitReached')) !== afterSeq) {
-          await store.setMeta(projectId, 'wakeLimitReached', afterSeq);
-          bus.emit('wakeLimitReached', { afterSeq });
+        if (r.limitReached && chain.root) {
+          const key = `wakeLimitReached:${chain.root.id}`;
+          if (!(await store.getMeta<boolean>(projectId, key))) {
+            await store.setMeta(projectId, key, true);
+            bus.emit('wakeLimitReached', { afterSeq: chain.root.seq });
+          }
         }
         return finish(r.wakes);
       }),
@@ -892,6 +931,11 @@ export function createProject(cfg: ProjectConfig): Project {
         await openBoard();
         return finish(await runMerge());
       }),
+
+    async pending() {
+      await getBoard(); // NOT_FOUND before start
+      return store.listPending(projectId);
+    },
 
     board: resolvedBoard,
 
@@ -910,6 +954,7 @@ export function createProject(cfg: ProjectConfig): Project {
     store,
     projectId,
     propose,
+    unblock: (botId, workstreamId) => serial(async () => finish(await unblock(botId, workstreamId))),
     member: async botId => {
       const { board } = await memberView(botId, false);
       return { lead: board.lead };

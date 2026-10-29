@@ -108,7 +108,8 @@ const segments = (scope: string): string[] => scope.split('/').filter((s) => s !
 
 function overlap(x: string[], y: string[]): string | undefined {
   const n = Math.min(x.length, y.length);
-  if (n === 0) return undefined;
+  // R38: a root scope ('', '/', '.') covers the whole tree, so it overlaps every other scope.
+  if (n === 0) return '/';
   for (let i = 0; i < n; i++) if (x[i] !== y[i]) return undefined;
   return (x.length <= y.length ? x : y).join('/');
 }
@@ -116,7 +117,8 @@ function overlap(x: string[], y: string[]): string | undefined {
 /**
  * Pairs of `active` workstreams whose write scopes overlap, compared by path segments
  * (`src/ui` overlaps `src/ui/button`, not `src/uix`). One entry per pair, `a` before `b` in input order,
- * `prefix` being the shorter of the first overlapping scope pair. Empty scopes are ignored.
+ * `prefix` being the shorter of the first overlapping scope pair. A root scope (`''`, `'/'`, `'.'`)
+ * overlaps every other scope, reported with prefix `/` (R38). Workstreams without scopes overlap nothing.
  */
 export function writeScopeOverlaps(workstreams: Workstream[]): { a: string; b: string; prefix: string }[] {
   const active = workstreams

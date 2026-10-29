@@ -79,8 +79,10 @@ function parseIndexed(raw: unknown): { ops: IndexedOp[]; rejected: { index: numb
 const isStale = (e: unknown) => e instanceof ContextError && e.code === 'STALE_VERSION';
 
 /**
- * The only writer of a project board. Proposals are merged one batch at a time behind a
- * promise-chain lock; `merge()` and `resolve()` share that lock.
+ * Merges proposals into a project board. It is not the only board writer (the facade and the
+ * WorkstreamSource write too); safety comes from the store's version check on `saveBoard` plus the
+ * project's serial queue. Proposals are merged one batch at a time behind a promise-chain lock;
+ * `merge()` and `resolve()` share that lock.
  */
 export class Merger {
   private chain: Promise<void> = Promise.resolve();

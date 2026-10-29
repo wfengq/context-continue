@@ -274,6 +274,18 @@ describe('newlyReady', () => {
 });
 
 describe('writeScopeOverlaps', () => {
+  test('R38: a root scope overlaps every other active scope, reported as /', () => {
+    for (const root of ['', '/', '.']) {
+      expect(writeScopeOverlaps([act('a', [root]), act('b', ['src/ui']), act('c', ['/'])])).toEqual([
+        { a: 'a', b: 'b', prefix: '/' },
+        { a: 'a', b: 'c', prefix: '/' },
+        { a: 'b', b: 'c', prefix: '/' },
+      ]);
+    }
+    // a workstream without scopes overlaps nothing
+    expect(writeScopeOverlaps([act('a', []), act('b', ['/'])])).toEqual([]);
+  });
+
   test('compares path segments', () => {
     expect(writeScopeOverlaps([act('a', ['src/ui']), act('b', ['src/ui/button'])])).toEqual([
       { a: 'a', b: 'b', prefix: 'src/ui' },

@@ -15,7 +15,7 @@ const MEMBER_TOOLS = [
   'submitDeliverable',
   'updateNotes',
 ];
-const LEAD_ONLY = ['proposePlan', 'resolveProposal', 'submitReview'];
+const LEAD_ONLY = ['listPending', 'proposePlan', 'resolveProposal', 'submitReview', 'unblockWorkstream'];
 
 const names = (tools: { name: string }[]) => tools.map(t => t.name).sort();
 
@@ -46,6 +46,10 @@ describe('tool definitions', () => {
     expect(send.parameters.required).toEqual(expect.arrayContaining(['text', 'act']));
     const promote = toolDefinitions('member').find(t => t.name === 'promote')!;
     expect(promote.parameters.required).toEqual(expect.arrayContaining(['kind', 'text', 'affects']));
+  });
+
+  test('no definition carries a top-level $schema key', () => {
+    for (const t of toolDefinitions('lead')) expect(Object.keys(t.parameters)).not.toContain('$schema');
   });
 
   test('definitions are fresh copies', () => {
@@ -421,5 +425,55 @@ describe('closed project', () => {
     await expect(fx.p.callTool('art', 'updateNotes', { text: 'n' })).rejects.toMatchObject({ code: 'PROJECT_CLOSED' });
     await expect(fx.p.callTool('art', 'sendMessage', { text: 'n', act: 'inform' })).rejects.toMatchObject({ code: 'PROJECT_CLOSED' });
     expect(await fx.p.callTool('art', 'searchLedger', { query: 'zzz' })).toEqual([]);
+  });
+});
+
+describe('lead coordination tools (R33, R35)', () => {
+  test('listPending returns the items waiting for the lead only', async () => {
+    const fx = await approved();
+    expect(await fx.p.callTool('pm', 'listPending', {})).toEqual([]);
+    await fx.p.callTool('art', 'proposeDecision', { text: 'Palette is fixed', rationale: 'Consistency', affects: ['logic'] });
+    await fx.p.submit('art', { type: 'proposal', ops: [{ op: 'setGoal', goal: 'Ship a big game' }] });
+    const list = (await fx.p.callTool('pm', 'listPending', {})) as Record<string, unknown>[];
+    expect(list).toEqual([
+      {
+        id: expect.any(String),
+        by: 'art',
+        needs: 'lead',
+        ops: [expect.objectContaining({ op: 'addDecision' })],
+        createdAt: expect.any(Number),
+      },
+    ]);
+    await expect(fx.p.callTool('art', 'listPending', {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    // the lead resolves what it listed
+    await fx.p.callTool('pm', 'resolveProposal', { pendingId: list[0]!.id, accept: true });
+    expect(await fx.p.callTool('pm', 'listPending', {})).toEqual([]);
+  });
+
+  test('unblockWorkstream returns a blocked workstream to pending and activates it when ready', async () => {
+    const fx = await approved();
+    await fx.p.callTool('audio', 'reportBlocked', { workstreamId: 'audio', reason: 'No samples' });
+    await expect(fx.p.callTool('audio', 'unblockWorkstream', { workstreamId: 'audio' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const r = (await fx.p.callTool('pm', 'unblockWorkstream', { workstreamId: 'audio' })) as { wakes: { botId: string; reason: string }[] };
+    expect(r.wakes).toEqual([expect.objectContaining({ botId: 'audio', reason: 'assigned' })]);
+    expect((await fx.p.board()).workstreams.find(w => w.id === 'audio')!.status).toBe('active');
+    // not blocked any more, or unknown
+    await expect(fx.p.callTool('pm', 'unblockWorkstream', { workstreamId: 'audio' })).rejects.toMatchObject({ code: 'INVALID_OP' });
+    await expect(fx.p.callTool('pm', 'unblockWorkstream', { workstreamId: 'nope' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  test('unblockWorkstream leaves a workstream with undelivered dependencies pending until they are delivered', async () => {
+    const fx = await approved();
+    await fx.p.callTool('logic', 'reportBlocked', { workstreamId: 'logic', reason: 'Rules unclear' });
+    const r = (await fx.p.callTool('pm', 'unblockWorkstream', { workstreamId: 'logic' })) as { wakes: unknown[] };
+    expect(r.wakes).toEqual([]);
+    expect((await fx.p.board()).workstreams.find(w => w.id === 'logic')!.status).toBe('pending');
+    await fx.p.callTool('art', 'submitDeliverable', { workstreamId: 'art', summary: 's', content: 'c' });
+    const d = (await fx.p.board()).workstreams.find(w => w.id === 'art')!.deliverables[0]!;
+    const review = (await fx.p.callTool('pm', 'submitReview', { deliverableId: d.id, passed: true, notes: 'ok' })) as {
+      wakes: { botId: string; reason: string }[];
+    };
+    expect(review.wakes).toEqual(expect.arrayContaining([expect.objectContaining({ botId: 'logic', reason: 'upstreamDelivered' })]));
+    expect((await fx.p.board()).workstreams.find(w => w.id === 'logic')!.status).toBe('active');
   });
 });

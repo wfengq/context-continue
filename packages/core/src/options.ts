@@ -1,3 +1,5 @@
+import { ContextError } from './errors.js';
+
 export interface Options {
   extractEvery?: number; // default 10
   idleMs?: number; // default 60_000
@@ -14,7 +16,7 @@ export interface Options {
   leadTimeoutMs?: number; // how long to wait for the lead before escalating to a human, default 600_000
 }
 
-export const DEFAULT_OPTIONS: Required<Options> = {
+export const DEFAULT_OPTIONS: Readonly<Required<Options>> = Object.freeze({
   extractEvery: 10,
   idleMs: 60_000,
   recentForRouter: 5,
@@ -28,14 +30,19 @@ export const DEFAULT_OPTIONS: Required<Options> = {
   maxHops: 4,
   recentKeep: 5,
   leadTimeoutMs: 600_000,
-};
+});
 
+/** Defaults filled in; throws INVALID_OP for a value that is not a finite positive number. */
 export function resolveOptions(o?: Options): Required<Options> {
   const resolved: Required<Options> = { ...DEFAULT_OPTIONS };
   if (o) {
     for (const key of Object.keys(DEFAULT_OPTIONS) as (keyof Options)[]) {
       const v = o[key];
-      if (v !== undefined) resolved[key] = v;
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+        throw new ContextError('INVALID_OP', `Option ${key} must be a finite positive number, got ${String(v)}`);
+      }
+      resolved[key] = v;
     }
   }
   return resolved;

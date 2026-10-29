@@ -15,8 +15,11 @@ export interface RouteContext {
   lead: string;
   members: Set<string>;
   workstreams: Workstream[];
-  /** Bot chat entries since the most recent human chat message. */
-  botTurnsSinceHuman: number;
+  /**
+   * R32: bot chat entries (before this one) in the reply tree of the human chat message this entry
+   * descends from through `replyTo`; null when its chain has no human root (only maxHops applies).
+   */
+  botTurnsUnderHuman: number | null;
   parent: LedgerEntry | null;
   options: Required<Options>;
   route?: (i: RouteInput) => Promise<string[]>;
@@ -85,9 +88,70 @@ function addressed(body: ChatBody, ctx: RouteContext): Wake[] {
   return wakes;
 }
 
+/**
+ * R32: the nearest human chat ancestor of `entry` along its `replyTo` chain (the entry itself when it
+ * is human chat), and how many bot chat entries before `entry` descend from that same human message.
+ * `turns` is null when the chain has no human root.
+ */
+export function humanChain(
+  entry: LedgerEntry,
+  ledger: LedgerEntry[],
+): { root: LedgerEntry; turns: number } | { root: null; turns: null } {
+  const byId = new Map(ledger.map((e) => [e.id, e]));
+  const roots = new Map<string, LedgerEntry | null>();
+  const rootOf = (start: LedgerEntry): LedgerEntry | null => {
+    const path: LedgerEntry[] = [];
+    let cur: LedgerEntry | undefined = start;
+    let found: LedgerEntry | null = null;
+    while (cur) {
+      const known = roots.get(cur.id);
+      if (known !== undefined) {
+        found = known;
+        break;
+      }
+      const body = chatBody(cur);
+      if (!body) break;
+      if (cur.author.kind === 'human') {
+        found = cur;
+        break;
+      }
+      path.push(cur);
+      const parent: LedgerEntry | undefined = body.replyTo === undefined ? undefined : byId.get(body.replyTo);
+      // replies point at earlier entries; anything else is treated as the end of the chain
+      cur = parent && parent.seq < cur.seq ? parent : undefined;
+    }
+    for (const e of path) roots.set(e.id, found);
+    return found;
+  };
+  const root = rootOf(entry);
+  if (!root) return { root: null, turns: null };
+  const turns = ledger.filter(
+    (e) => e.seq < entry.seq && e.author.kind === 'bot' && chatBody(e) !== null && rootOf(e)?.id === root.id,
+  ).length;
+  return { root, turns };
+}
+
 function dedupe(wakes: Wake[]): Wake[] {
   const seen = new Set<string>();
   return wakes.filter((w) => !seen.has(w.botId) && !!seen.add(w.botId));
+}
+
+/** Wakes for a bot chat message before the per-human-message cap: speech act, targets, hop cap. */
+function botWakes(entry: LedgerEntry, body: ChatBody, ctx: RouteContext): Wake[] {
+  if (!body.act || !WAKING_ACTS.has(body.act)) return [];
+  const targets = addressed(body, ctx).filter((w) => w.botId !== entry.author.id);
+  if (targets.length === 0) return [];
+  if (body.hops >= ctx.options.maxHops) {
+    if (entry.author.id === ctx.lead) return [];
+    return [
+      {
+        botId: ctx.lead,
+        reason: 'needsLead',
+        detail: `reply chain reached the hops limit (${ctx.options.maxHops}); lead to decide`,
+      },
+    ];
+  }
+  return dedupe(targets);
 }
 
 export async function routeChat(
@@ -98,24 +162,11 @@ export async function routeChat(
   if (!body) return { wakes: [], limitReached: false };
 
   if (entry.author.kind === 'bot') {
-    if (ctx.botTurnsSinceHuman >= ctx.options.maxBotTurnsPerHumanMessage) return { wakes: [], limitReached: true };
-    if (!body.act || !WAKING_ACTS.has(body.act)) return { wakes: [], limitReached: false };
-    const targets = addressed(body, ctx).filter((w) => w.botId !== entry.author.id);
-    if (targets.length === 0) return { wakes: [], limitReached: false };
-    if (body.hops >= ctx.options.maxHops) {
-      if (entry.author.id === ctx.lead) return { wakes: [], limitReached: false };
-      return {
-        wakes: [
-          {
-            botId: ctx.lead,
-            reason: 'needsLead',
-            detail: `reply chain reached the hops limit (${ctx.options.maxHops}); lead to decide`,
-          },
-        ],
-        limitReached: false,
-      };
-    }
-    return { wakes: dedupe(targets), limitReached: false };
+    const wakes = botWakes(entry, body, ctx);
+    // R32: the cap only stops an entry that would otherwise have woken someone.
+    const capped = ctx.botTurnsUnderHuman !== null && ctx.botTurnsUnderHuman >= ctx.options.maxBotTurnsPerHumanMessage;
+    if (capped && wakes.length > 0) return { wakes: [], limitReached: true };
+    return { wakes, limitReached: false };
   }
 
   // Human-authored (or system) message: never limited.

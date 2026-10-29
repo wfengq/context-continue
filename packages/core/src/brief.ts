@@ -135,6 +135,7 @@ type DeltaItem = { at: number; entry: LedgerEntry } | { at: number; change: Appl
 async function relevantEntries(
   deps: BriefDeps,
   botId: string,
+  isLead: boolean,
   own: Workstream[],
   fromSeq: number,
   toSeq: number,
@@ -163,7 +164,8 @@ async function relevantEntries(
     switch (ev.kind) {
       case 'deliverableSubmitted':
       case 'blocked':
-        return ownIds.has(ev.workstreamId);
+        // R33: the lead coordinates every workstream, so it sees these for all of them.
+        return isLead || ownIds.has(ev.workstreamId);
       case 'reviewPassed':
       case 'reviewFailed':
         return ownDeliverables.has(ev.deliverableId);
@@ -230,7 +232,7 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
 
   // Delta, oldest first (stable: entries before changes at the same instant).
   const own = workstreams.filter(w => w.owner === botId);
-  const entries = await relevantEntries(deps, botId, own, workspace.lastSeenSeq + 1, latestSeq);
+  const entries = await relevantEntries(deps, botId, botId === board.lead, own, workspace.lastSeenSeq + 1, latestSeq);
   const changes = await relevantChanges(deps, board, own, workspace.lastSeenBoardVersion);
   const delta: DeltaItem[] = [...entries.map(entry => ({ at: entry.createdAt, entry })), ...changes].sort(
     (x, y) => x.at - y.at,

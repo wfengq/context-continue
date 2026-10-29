@@ -431,17 +431,60 @@ describe('chat', () => {
   test('route emits wakeLimitReached once per human message', async () => {
     const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 2 } });
     const h = await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'go' });
-    const bot = (text: string) => fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text, mentions: ['logic'], act: 'request' });
+    const bot = (text: string, replyTo = h.id) =>
+      fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text, mentions: ['logic'], act: 'request', replyTo });
     expect(pairs(await fx.p.route(await bot('1')))).toEqual([['logic', 'mentioned']]);
     expect(pairs(await fx.p.route(await bot('2')))).toEqual([['logic', 'mentioned']]);
     expect(await fx.p.route(await bot('3'))).toEqual([]);
     expect(await fx.p.route(await bot('4'))).toEqual([]);
     expect(fx.eventsOf('wakeLimitReached')).toEqual([{ afterSeq: h.seq }]);
     const h2 = await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'again' });
-    expect(pairs(await fx.p.route(await bot('5')))).toEqual([['logic', 'mentioned']]);
-    await fx.p.route(await bot('6'));
-    await fx.p.route(await bot('7'));
+    expect(pairs(await fx.p.route(await bot('5', h2.id)))).toEqual([['logic', 'mentioned']]);
+    await fx.p.route(await bot('6', h2.id));
+    await fx.p.route(await bot('7', h2.id));
     expect(fx.eventsOf('wakeLimitReached')).toEqual([{ afterSeq: h.seq }, { afterSeq: h2.seq }]);
+  });
+
+  test('R32: bot requests with no human root keep waking their targets; the hop cap still applies per chain', async () => {
+    const fx = await makeProject({ approved: true });
+    const send = (from: string, to: string, text: string, replyTo?: string) =>
+      fx.p.ingest({ author: { kind: 'bot', id: from }, text, mentions: [to], act: 'request', ...(replyTo && { replyTo }) });
+    for (let i = 1; i <= 8; i++) {
+      expect(pairs(await fx.p.route(await send('art', 'logic', `ask ${i}`)))).toEqual([['logic', 'mentioned']]);
+    }
+    // a bot-only reply chain: hops 0..3 wake the other side, hops 4 goes to the lead
+    let prev = await send('art', 'logic', 'chain 0');
+    expect(pairs(await fx.p.route(prev))).toEqual([['logic', 'mentioned']]);
+    for (let hop = 1; hop <= 3; hop++) {
+      const [from, to] = hop % 2 === 1 ? ['logic', 'art'] : ['art', 'logic'];
+      prev = await send(from!, to!, `chain ${hop}`, prev.id);
+      expect(pairs(await fx.p.route(prev))).toEqual([[to, 'mentioned']]);
+    }
+    prev = await send('art', 'logic', 'chain 4', prev.id);
+    expect(pairs(await fx.p.route(prev))).toEqual([['pm', 'needsLead']]);
+    expect(fx.eventsOf('wakeLimitReached')).toEqual([]);
+  });
+
+  test('R32: a human-rooted reply chain stops at maxBotTurnsPerHumanMessage; unrooted bot chat is unaffected', async () => {
+    const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 2, maxHops: 10 } });
+    const h = await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'go', mentions: ['art'] });
+    const reply = (from: string, to: string, replyTo: string) =>
+      fx.p.ingest({ author: { kind: 'bot', id: from }, text: 'x', mentions: [to], act: 'request', replyTo });
+    const r1 = await reply('art', 'logic', h.id);
+    expect(pairs(await fx.p.route(r1))).toEqual([['logic', 'mentioned']]);
+    const r2 = await reply('logic', 'art', r1.id);
+    expect(pairs(await fx.p.route(r2))).toEqual([['art', 'mentioned']]);
+    // terminal chat in the chain counts as a turn but wakes nobody, so it reports no limit
+    const done = await fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text: 'ok', act: 'done', replyTo: r2.id });
+    expect(await fx.p.route(done)).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached')).toEqual([]);
+    const r3 = await reply('art', 'logic', r2.id);
+    expect(await fx.p.route(r3)).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached')).toEqual([{ afterSeq: h.seq }]);
+    expect(await fx.p.route(await reply('logic', 'art', r3.id))).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached')).toHaveLength(1);
+    const loose = await fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text: 'y', mentions: ['logic'], act: 'request' });
+    expect(pairs(await fx.p.route(loose))).toEqual([['logic', 'mentioned']]);
   });
 
   test('route with no match falls back to the routing model', async () => {
@@ -934,7 +977,8 @@ describe('fix round 2', () => {
   test('route is queued: two concurrent routes at the limit emit wakeLimitReached once', async () => {
     const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 1 } });
     const h = await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'go' });
-    const bot = (text: string) => fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text, mentions: ['logic'], act: 'request' });
+    const bot = (text: string) =>
+      fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text, mentions: ['logic'], act: 'request', replyTo: h.id });
     await bot('1');
     const [b2, b3] = [await bot('2'), await bot('3')];
     await Promise.all([fx.p.route(b2), fx.p.route(b3)]);
@@ -1080,5 +1124,121 @@ describe('fix round 3', () => {
     expect(b.conventions.map(c => c.text)).toEqual(['a', 'b']);
     expect(b.workstreams.find(x => x.id === 'art')!.reviewRounds).toBe(2);
     expect(await eventCount(fx, 'reviewFailed')).toBe(2);
+  });
+});
+
+describe('final review fixes', () => {
+  const [ART, AUDIO, LOGIC] = FIXTURE_PLAN.workstreams as [
+    (typeof FIXTURE_PLAN.workstreams)[number],
+    (typeof FIXTURE_PLAN.workstreams)[number],
+    (typeof FIXTURE_PLAN.workstreams)[number],
+  ];
+  const deliver = async (fx: FacadeProject, botId: string, wsId: string) => {
+    await fx.p.submit(botId, { type: 'deliverable', workstreamId: wsId, summary: 's', content: 'c' });
+    const d = (await fx.p.board()).workstreams.find(w => w.id === wsId)!.deliverables.at(-1)!;
+    return fx.p.submitReview(d.id, { by: 'pm', passed: true, notes: 'ok' });
+  };
+  const replan = async (fx: FacadeProject, plan: typeof FIXTURE_PLAN) => {
+    const { proposalId } = await fx.p.proposePlan(plan, { by: 'pm' });
+    return fx.p.approvePlan(proposalId, { by: 'alice' });
+  };
+  const statusOf = async (fx: FacadeProject, id: string) => (await fx.p.board()).workstreams.find(w => w.id === id)?.status;
+
+  test('R33: pending() lists every pending proposal, read-only', async () => {
+    const fx = await makeProject({ approved: true });
+    expect(await fx.p.pending()).toEqual([]);
+    await fx.p.submit('art', { type: 'proposal', ops: [{ op: 'updateContract', id: 'c1', spec: 'PNG, 32x32' }] });
+    await fx.p.submit('art', { type: 'proposal', ops: [{ op: 'setGoal', goal: 'Ship a big game' }] });
+    const list = await fx.p.pending();
+    expect(list.map(p => [p.by, p.needs]).sort()).toEqual([
+      ['art', 'human'],
+      ['art', 'lead'],
+    ]);
+    expect(list.find(p => p.needs === 'lead')!.ops).toEqual([{ op: 'updateContract', id: 'c1', spec: 'PNG, 32x32' }]);
+    expect(await fx.p.pending()).toEqual(list);
+    expect(await fx.store.listPending(fx.projectId)).toHaveLength(2);
+  });
+
+  test("R33: the lead's delta shows blocked and deliverableSubmitted for every workstream", async () => {
+    const fx = await makeProject({ approved: true });
+    await fx.p.buildBrief('pm', { maxTokens: 100_000 });
+    await fx.p.buildBrief('logic', { maxTokens: 100_000 });
+    await fx.p.submit('audio', { type: 'blocked', workstreamId: 'audio', reason: 'no samples' });
+    await fx.p.submit('art', { type: 'deliverable', workstreamId: 'art', summary: 'sheet', content: 'png' });
+    const lead = seg(await fx.p.buildBrief('pm', { maxTokens: 100_000 }), 'delta')!;
+    expect(lead).toContain('[blocked]');
+    expect(lead).toContain('"workstreamId":"audio"');
+    expect(lead).toContain('[deliverableSubmitted]');
+    expect(lead).toContain('"workstreamId":"art"');
+    const member = seg(await fx.p.buildBrief('logic', { maxTokens: 100_000 }), 'delta')!;
+    expect(member).not.toContain('[blocked]');
+    expect(member).not.toContain('[deliverableSubmitted]');
+  });
+
+  test('R34: a replan that drops a pending workstream removes and archives it; close succeeds; its owner leaves', async () => {
+    const fx = await makeProject({ approved: true });
+    await replan(fx, { workstreams: [ART, AUDIO], contracts: [] });
+    const b = await fx.p.board();
+    expect(b.workstreams.map(w => w.id)).toEqual(['art', 'audio']);
+    const archived = (await fx.store.read(fx.projectId, 1)).flatMap(e =>
+      e.body.type === 'event' && e.body.event.kind === 'archived' && e.body.event.what === 'workstreams' ? [e.body.event.ref] : [],
+    );
+    expect(archived.map(r => JSON.parse(r).id)).toEqual(['logic']);
+    await expect(fx.p.buildBrief('logic', { maxTokens: 100_000 })).rejects.toMatchObject({ code: 'NOT_A_MEMBER' });
+    await expect(fx.p.callTool('logic', 'getBoardItem', { id: 'art' })).rejects.toMatchObject({ code: 'NOT_A_MEMBER' });
+    await deliver(fx, 'art', 'art');
+    await deliver(fx, 'audio', 'audio');
+    await expect(fx.p.close({ by: 'alice' })).resolves.toBeUndefined();
+  });
+
+  test('R34: delivered workstreams stay when a replan omits them, and so does their owner', async () => {
+    const fx = await makeProject({ approved: true });
+    await deliver(fx, 'audio', 'audio');
+    await replan(fx, {
+      workstreams: [ART, { ...LOGIC, owner: 'art' }],
+      contracts: FIXTURE_PLAN.contracts,
+    });
+    const b = await fx.p.board();
+    expect(b.workstreams.map(w => [w.id, w.status])).toEqual([
+      ['art', 'active'],
+      ['audio', 'delivered'],
+      ['logic', 'pending'],
+    ]);
+    await expect(fx.p.buildBrief('audio', { maxTokens: 100_000 })).resolves.toBeDefined();
+  });
+
+  test('R34: with an external source a plan that drops a workstream is INVALID_PLAN naming it', async () => {
+    const source = fakeSource();
+    const fx = await makeProject({ approved: true, workstreams: source });
+    const { proposalId } = await fx.p.proposePlan({ workstreams: [ART, AUDIO], contracts: [] }, { by: 'pm' });
+    const err = await fx.p.approvePlan(proposalId, { by: 'alice' }).catch(e => e);
+    expect(err.code).toBe('INVALID_PLAN');
+    expect(err.details.reasons).toEqual([expect.stringContaining('"logic"')]);
+    expect(source.rows.map(r => r.id)).toEqual(['art', 'audio', 'logic']);
+  });
+
+  test('R35: an approved replan returns kept blocked workstreams to pending, then activates the ready ones', async () => {
+    const fx = await makeProject({ approved: true });
+    await fx.p.submit('audio', { type: 'blocked', workstreamId: 'audio', reason: 'no samples' });
+    await fx.p.submit('logic', { type: 'blocked', workstreamId: 'logic', reason: 'unclear rules' });
+    const w = await replan(fx, { ...FIXTURE_PLAN, workstreams: [ART, { ...AUDIO, brief: 'Use stock samples.' }, LOGIC] });
+    expect(w).toEqual(expect.arrayContaining([expect.objectContaining({ botId: 'audio', reason: 'assigned' })]));
+    expect(w.some(x => x.botId === 'logic' && x.reason === 'assigned')).toBe(false);
+    expect(await statusOf(fx, 'audio')).toBe('active');
+    expect(await statusOf(fx, 'logic')).toBe('pending'); // art is not delivered yet
+    const r = await deliver(fx, 'art', 'art');
+    expect(pairs(r)).toEqual(expect.arrayContaining([['logic', 'upstreamDelivered']]));
+    expect(await statusOf(fx, 'logic')).toBe('active');
+  });
+
+  test('R37: a non-lead bot cannot set the status of a workstream it does not own through a proposal', async () => {
+    const fx = await makeProject({ approved: true });
+    const op: BoardOp = { op: 'setWorkstreamStatus', id: 'audio', status: 'blocked' };
+    await expect(fx.p.submit('art', { type: 'proposal', ops: [op] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await statusOf(fx, 'audio')).toBe('active');
+    expect(await fx.store.drainProposals(fx.projectId)).toEqual([]);
+    // its own workstream and the lead are fine
+    await expect(fx.p.submit('audio', { type: 'proposal', ops: [op] })).resolves.toBeDefined();
+    await expect(fx.p.submit('pm', { type: 'proposal', ops: [{ ...op, id: 'art' }] })).resolves.toBeDefined();
   });
 });

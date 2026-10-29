@@ -7,6 +7,7 @@ export interface CoreEvents {
   merged: { change: BoardChange };
   needsHuman: { reason: string; ref: string };
   extractFailed: { attempts: number };
+  /** `afterSeq`: seq of the human chat message whose reply chain reached maxBotTurnsPerHumanMessage (R32). */
   wakeLimitReached: { afterSeq: number };
   writeScopeOverlap: { a: string; b: string; prefix: string };
   condenseAborted: { target: 'notes' | 'memory'; botId: string; reason: string };

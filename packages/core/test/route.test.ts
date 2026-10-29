@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { DEFAULT_OPTIONS } from '../src/options.js';
-import { matchWorkstreams, routeChat, toLedgerEntry, type RouteContext, type RouteInput } from '../src/route.js';
+import { humanChain, matchWorkstreams, routeChat, toLedgerEntry, type RouteContext, type RouteInput } from '../src/route.js';
 import type { ChatInput, LedgerEntry, SpeechAct, Workstream } from '../src/types.js';
 
 const ws = (id: string, title: string, over: Partial<Workstream> = {}): Workstream => ({
@@ -44,7 +44,7 @@ async function route(entry: LedgerEntry, over: Partial<RouteContext> = {}) {
     lead: 'pm',
     members: new Set(['pm', 'art', 'logic']),
     workstreams: [ws('ui', 'UI', { owner: 'art' }), ws('sfx', '音效', { owner: 'logic' })],
-    botTurnsSinceHuman: 0,
+    botTurnsUnderHuman: 0,
     parent: null,
     options: DEFAULT_OPTIONS,
     routeInput: async () => input,
@@ -71,7 +71,7 @@ describe('routeChat: human messages', () => {
   });
 
   test('human messages are never limited', async () => {
-    const r = await route(humanMsg('hi', { mentions: ['logic'] }), { botTurnsSinceHuman: 99 });
+    const r = await route(humanMsg('hi', { mentions: ['logic'] }), { botTurnsUnderHuman: 99 });
     expect(r.limitReached).toBe(false);
     expect(r.wakes).toHaveLength(1);
   });
@@ -192,17 +192,36 @@ describe('routeChat: bot messages', () => {
   });
 
   test('wake limit: after 6 bot turns since the last human message, nothing wakes', async () => {
-    const r = await route(botMsg({ act: 'request', mentions: ['logic'] }), { botTurnsSinceHuman: 6 });
+    const r = await route(botMsg({ act: 'request', mentions: ['logic'] }), { botTurnsUnderHuman: 6 });
     expect(r).toEqual({ wakes: [], limitReached: true });
   });
 
   test('wake limit takes precedence over the hop cap', async () => {
-    const r = await route(botMsg({ act: 'request', mentions: ['logic'], hops: 4 }), { botTurnsSinceHuman: 6 });
+    const r = await route(botMsg({ act: 'request', mentions: ['logic'], hops: 4 }), { botTurnsUnderHuman: 6 });
     expect(r).toEqual({ wakes: [], limitReached: true });
   });
 
+  test('R32: a bot message with no human root is limited only by the hop cap', async () => {
+    const r = await route(botMsg({ act: 'request', mentions: ['logic'] }), { botTurnsUnderHuman: null });
+    expect(r).toEqual({ wakes: [expect.objectContaining({ botId: 'logic', reason: 'mentioned' })], limitReached: false });
+    const capped = await route(botMsg({ act: 'request', mentions: ['logic'], hops: 4 }), { botTurnsUnderHuman: null });
+    expect(capped).toEqual({ wakes: [expect.objectContaining({ botId: 'pm', reason: 'needsLead' })], limitReached: false });
+  });
+
+  test('R32: limitReached is reported only for an entry that would otherwise have woken someone', async () => {
+    const at = { botTurnsUnderHuman: 6 };
+    expect(await route(botMsg({ act: 'inform', mentions: ['logic'] }), at)).toEqual({ wakes: [], limitReached: false });
+    expect(await route(botMsg({ act: 'request' }), at)).toEqual({ wakes: [], limitReached: false });
+    expect(await route(botMsg({ act: 'request', mentions: ['art'] }), at)).toEqual({ wakes: [], limitReached: false });
+    // the lead at the hop cap would wake nobody either
+    expect(await route(botMsg({ author: 'pm', act: 'request', mentions: ['logic'], hops: 4 }), at)).toEqual({
+      wakes: [],
+      limitReached: false,
+    });
+  });
+
   test('below the wake limit wakes still happen', async () => {
-    const r = await route(botMsg({ act: 'request', mentions: ['logic'] }), { botTurnsSinceHuman: 5 });
+    const r = await route(botMsg({ act: 'request', mentions: ['logic'] }), { botTurnsUnderHuman: 5 });
     expect(r.limitReached).toBe(false);
     expect(r.wakes).toHaveLength(1);
   });
@@ -267,5 +286,28 @@ describe('toLedgerEntry', () => {
     expect((toLedgerEntry({ ...human, act: 'request' }, null).body as { act?: SpeechAct }).act).toBe('request');
     const eventParent: LedgerEntry = { ...botMsg(), body: { type: 'event', event: { kind: 'projectStarted' } } };
     expect((toLedgerEntry(human, eventParent).body as { hops: number }).hops).toBe(0);
+  });
+});
+
+describe('humanChain (R32)', () => {
+  test('counts earlier bot chat under the nearest human ancestor; no human root gives null', () => {
+    const h = humanMsg('go');
+    const b1 = botMsg({ replyTo: h.id, hops: 1 });
+    const b2 = botMsg({ replyTo: b1.id, hops: 2 });
+    const sibling = botMsg({ replyTo: h.id, hops: 1 });
+    const loose = botMsg();
+    const looseReply = botMsg({ replyTo: loose.id, hops: 1 });
+    const h2 = humanMsg('again', { replyTo: b2.id });
+    const b3 = botMsg({ replyTo: h2.id, hops: 4 });
+    const event: LedgerEntry = { ...botMsg(), body: { type: 'event', event: { kind: 'projectStarted' } } };
+    const all = [h, b1, b2, sibling, loose, looseReply, event, h2, b3];
+    const next = botMsg({ replyTo: sibling.id, hops: 2 });
+    all.push(next);
+
+    expect(humanChain(next, all)).toEqual({ root: h, turns: 3 }); // b1, b2, sibling
+    expect(humanChain(b1, all)).toEqual({ root: h, turns: 0 });
+    expect(humanChain(looseReply, all)).toEqual({ root: null, turns: null });
+    expect(humanChain(b3, all)).toEqual({ root: h2, turns: 0 }); // a human reply starts a new chain
+    expect(humanChain(h, all)).toEqual({ root: h, turns: 0 });
   });
 });

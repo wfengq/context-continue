@@ -45,7 +45,7 @@ const brief = await project.buildBrief('art', {
 await project.callTool('art', 'submitDeliverable', { workstreamId: 'art', summary: 'sprite sheet', content: '...' });
 ```
 
-`callTool` checks that the bot is a member of the project, that lead-only tools (`proposePlan`, `resolveProposal`, `submitReview`) are called by the lead, and that the arguments are valid. It fails with a `ContextError` carrying a `code` such as `NOT_A_MEMBER`, `FORBIDDEN` or `INVALID_OP`. Every call also returns or emits the wake-ups it caused, so the host knows which bots to run next (`project.on('wake', ...)`).
+`callTool` checks that the bot is a member of the project, that lead-only tools (`proposePlan`, `resolveProposal`, `submitReview`, `listPending`, `unblockWorkstream`) are called by the lead, and that the arguments are valid. It fails with a `ContextError` carrying a `code` such as `NOT_A_MEMBER`, `FORBIDDEN` or `INVALID_OP`. Every call also returns or emits the wake-ups it caused, so the host knows which bots to run next (`project.on('wake', ...)`).
 
 ## Brief segments and prompt caching
 
@@ -67,10 +67,10 @@ Segments 1 to 3 are the cacheable prefix. Keep them first and in this order when
 
 - Runs the models. The core never calls one.
 - Turns `brief.segments` into the provider's prompt format and cache markers, and exposes `brief.tools` to the model.
-- Wakes the bots named in the returned wake-ups, and shows `needsHuman` events to a person.
+- Wakes the bots named in the returned wake-ups, and shows `needsHuman` events to a person. `project.pending()` lists the pending board proposals (those with `needs: 'human'` wait for the owner's `resolveProposal`); the lead sees its own through the `listPending` tool and returns a blocked workstream to work with `unblockWorkstream`.
 - Optionally passes `models.route(input)` (picks the bots for a chat message that mentions nobody and matches no workstream), `models.extract(entries, board)` (turns human chat into board operations) and `models.condense(input)` (writes the rolling summary when notes or memories grow too long). Without `route`, such a message goes to the lead; without `extract`, nothing is extracted from chat; without `condense`, the oldest notes are dropped when over budget. A failed `condense` keeps the original and emits `condenseAborted`.
 - Optionally passes a `workstreams` source when workstream status already lives in a host task board.
-- Calls `project.exportMarkdown()` and `employees.exportMarkdown(botId)` when a person wants to read the board or review and delete an employee's memories.
+- Calls `project.exportMarkdown()` and `employees.exportMarkdown(botId)` when a person wants to read the board or review an employee's memories, and `employees.deleteMemory(botId, memoryId)` to delete a wrong one.
 
 The state lives in the `Store`. A new `createProject` over the same store resumes with the same briefs, routing, extraction progress and pending lead timeouts.
 

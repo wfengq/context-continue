@@ -16,6 +16,8 @@ export interface EmployeeRegistry {
   roster(): Promise<EmployeeProfile[]>;
   /** The employee's memory as Markdown for people to read and delete from (spec 2.4). Throws NOT_FOUND for an unknown bot. */
   exportMarkdown(botId: string): Promise<string>;
+  /** Deletes one long-term memory, e.g. a wrong lesson (spec 2.4, 7). Throws NOT_FOUND for an unknown bot or memory id. */
+  deleteMemory(botId: string, memoryId: string): Promise<void>;
 }
 
 export function createEmployeeRegistry(deps: { store: Store }): EmployeeRegistry {
@@ -33,6 +35,14 @@ export function createEmployeeRegistry(deps: { store: Store }): EmployeeRegistry
       const m = await store.getMemory(botId);
       if (!m) throw new ContextError('NOT_FOUND', `Employee "${botId}" not found`);
       return exportMemoryMarkdown(m);
+    },
+    async deleteMemory(botId, memoryId) {
+      const m = await store.getMemory(botId);
+      if (!m) throw new ContextError('NOT_FOUND', `Employee "${botId}" not found`);
+      if (!m.memories.some(x => x.id === memoryId)) {
+        throw new ContextError('NOT_FOUND', `Memory "${memoryId}" of employee "${botId}" not found`);
+      }
+      await store.saveMemory({ ...m, memories: m.memories.filter(x => x.id !== memoryId) });
     },
     async roster() {
       const all = await store.listMemories();

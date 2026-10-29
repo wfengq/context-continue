@@ -8,7 +8,7 @@ import type { Rejection } from './board/merge.js';
 import { ContextError } from './errors.js';
 import type { Project } from './project.js';
 import type { Store } from './store/store.js';
-import type { BoardOp, PendingProposal, ProjectBoard, ToolDefinition } from './types.js';
+import type { BoardOp, PendingProposal, ProjectBoard, ToolDefinition, Wake } from './types.js';
 
 export const MEMBER_TOOL_NAMES = [
   'searchLedger',
@@ -22,7 +22,7 @@ export const MEMBER_TOOL_NAMES = [
   'updateNotes',
   'sendMessage',
 ] as const;
-export const LEAD_TOOL_NAMES = ['proposePlan', 'resolveProposal', 'submitReview'] as const;
+export const LEAD_TOOL_NAMES = ['proposePlan', 'resolveProposal', 'submitReview', 'listPending', 'unblockWorkstream'] as const;
 export type ToolName = (typeof MEMBER_TOOL_NAMES)[number] | (typeof LEAD_TOOL_NAMES)[number];
 
 /** What a bot learns about a board proposal it submitted (R30). */
@@ -54,7 +54,7 @@ export function proposalOutcome(
 
 /** What the dispatcher needs from the project facade. */
 export interface ToolHost
-  extends Pick<Project, 'board' | 'submit' | 'proposePlan' | 'resolveProposal' | 'submitReview' | 'ingest' | 'route'> {
+  extends Pick<Project, 'board' | 'pending' | 'submit' | 'proposePlan' | 'resolveProposal' | 'submitReview' | 'ingest' | 'route'> {
   store: Store;
   projectId: string;
   /** Resolves with the board's lead; throws NOT_A_MEMBER when `botId` is not a bot member. */
@@ -64,6 +64,8 @@ export interface ToolHost
    * the call counts against `maxPromotionsPerTurn` and fails with FORBIDDEN beyond it.
    */
   propose(botId: string, ops: BoardOp[], promotion: boolean): Promise<ProposalOutcome>;
+  /** R35: the lead returns a blocked workstream to `pending`; it becomes active once its dependencies are delivered. */
+  unblock(botId: string, workstreamId: string): Promise<Wake[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +308,25 @@ const TOOLS: Tool[] = [
     }),
   }),
   tool({
+    name: 'listPending',
+    description:
+      'Lead only. List the pending board proposals waiting for your decision (id, author, ops, creation time); resolve them with resolveProposal.',
+    leadOnly: true,
+    schema: z.object({}),
+    run: async c =>
+      (await c.host.pending())
+        .filter(p => p.needs === 'lead')
+        .map(p => ({ id: p.id, by: p.by, needs: p.needs, ops: p.ops, createdAt: p.createdAt })),
+  }),
+  tool({
+    name: 'unblockWorkstream',
+    description:
+      'Lead only. Return a blocked workstream to pending once the blocker is resolved. It becomes active, and its owner is woken, as soon as its dependencies are delivered.',
+    leadOnly: true,
+    schema: z.object({ workstreamId: str }),
+    run: async (c, a) => ({ wakes: await c.host.unblock(c.botId, a.workstreamId) }),
+  }),
+  tool({
     name: 'submitReview',
     description:
       'Lead only. Record the review of a deliverable. Passing it marks the workstream delivered; failing it sends it back to its owner. Conventions are new rules for everyone.',
@@ -335,11 +356,11 @@ let definitions: ToolDefinition[] | null = null;
 
 /** The tools a bot of the given role can call, with JSON Schema parameters. Fresh copies on every call. */
 export function toolDefinitions(role: 'lead' | 'member'): ToolDefinition[] {
-  definitions ??= TOOLS.map(t => ({
-    name: t.name,
-    description: t.description,
-    parameters: z.toJSONSchema(t.schema, { io: 'input' }) as Record<string, unknown>,
-  }));
+  definitions ??= TOOLS.map(t => {
+    // Some providers reject the top-level `$schema` key, so it is left out.
+    const { $schema: _, ...parameters } = z.toJSONSchema(t.schema, { io: 'input' }) as Record<string, unknown>;
+    return { name: t.name, description: t.description, parameters };
+  });
   const lead = new Set<string>(LEAD_TOOL_NAMES);
   return structuredClone(definitions.filter(d => role === 'lead' || !lead.has(d.name)));
 }
