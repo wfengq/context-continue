@@ -248,6 +248,8 @@ describe('execution and review', () => {
       ['audio', 'contractChanged'],
       ['logic', 'contractChanged'],
     ]);
+    // logic is woken once, with both reasons in the detail
+    expect(w.find(x => x.botId === 'logic')!.detail).toBe('contract c1 changed for logic; brief of logic changed');
     const b = await fx.p.board();
     const art = b.workstreams.find(x => x.id === 'art')!;
     expect(art.status).toBe('delivered');
@@ -501,12 +503,29 @@ describe('facade wiring', () => {
 });
 
 /** Records calls; keeps host-owned fields in its own list. */
-function fakeSource(): WorkstreamSource & { calls: string[]; rows: Pick<Workstream, 'id' | 'title' | 'owner' | 'dependsOn' | 'writeScopes' | 'status'>[]; failList: boolean; failSetStatus: number } {
-  const s = {
+type HostRow = Pick<Workstream, 'id' | 'title' | 'owner' | 'dependsOn' | 'writeScopes' | 'status'>;
+type FakeSource = WorkstreamSource & {
+  calls: string[];
+  rows: HostRow[];
+  failList: boolean;
+  /** setStatus failures still to come; limited to `failOn` when set. */
+  failSetStatus: number;
+  failOn?: string;
+  handlers: Set<(ids: string[]) => void>;
+  /** Simulates a host-side change notification. */
+  fire(ids: string[]): void;
+};
+
+function fakeSource(): FakeSource {
+  const s: FakeSource = {
     calls: [] as string[],
-    rows: [] as Pick<Workstream, 'id' | 'title' | 'owner' | 'dependsOn' | 'writeScopes' | 'status'>[],
+    rows: [] as HostRow[],
     failList: false,
     failSetStatus: 0,
+    handlers: new Set(),
+    fire: ids => {
+      for (const h of s.handlers) h(ids);
+    },
     async list() {
       if (s.failList) throw new Error('host down');
       return structuredClone(s.rows);
@@ -517,13 +536,18 @@ function fakeSource(): WorkstreamSource & { calls: string[]; rows: Pick<Workstre
     },
     async setStatus(_p: string, id: string, status: Workstream['status']) {
       s.calls.push(`setStatus:${id}:${status}`);
-      if (s.failSetStatus > 0) {
+      if (s.failSetStatus > 0 && (s.failOn === undefined || s.failOn === id)) {
         s.failSetStatus--;
         throw new Error('host write failed');
       }
       s.rows.find(r => r.id === id)!.status = status;
     },
-    onChange: () => () => {},
+    onChange(_p, h) {
+      s.handlers.add(h);
+      return () => {
+        s.handlers.delete(h);
+      };
+    },
   };
   return s;
 }
@@ -572,7 +596,7 @@ describe('external WorkstreamSource', () => {
 });
 
 /** Wraps a store so that `method` fails `times` times before working; counts calls. */
-function flaky(method: keyof Store, times: number): { store: Store; calls: () => number } {
+function flaky(method: keyof Store, times: number): { store: Store; calls: () => number; arm(n: number): void } {
   const inner = memoryStore();
   let left = times;
   let calls = 0;
@@ -590,7 +614,14 @@ function flaky(method: keyof Store, times: number): { store: Store; calls: () =>
       };
     },
   });
-  return { store, calls: () => calls };
+  return {
+    store,
+    calls: () => calls,
+    arm: n => {
+      left = n;
+      calls = 0;
+    },
+  };
 }
 
 describe('store write retries', () => {
@@ -627,5 +658,183 @@ describe('store write retries', () => {
     const fxa = await makeProject({ store: app.store });
     await expect(fxa.p.start({ goal: 'g', constraints: [], lead: 'pm', by: 'alice' })).rejects.toThrow('append failed');
     expect(app.calls()).toBe(1);
+  });
+});
+
+describe('fix round 1', () => {
+  test('host onChange: a host-side delivery wakes the dependent with upstreamDelivered and activates it', async () => {
+    const source = fakeSource();
+    const fx = await makeProject({ approved: true, workstreams: source });
+    fx.events.length = 0;
+    source.rows.find(r => r.id === 'art')!.status = 'delivered';
+    source.fire(['art']);
+    await fx.p.merge(); // queued behind the host-change handling
+    expect(fx.eventsOf('wake').flatMap(e => pairs(e.wakes))).toEqual([['logic', 'upstreamDelivered']]);
+    expect(source.calls.at(-1)).toBe('setStatus:logic:active');
+    // a notification with nothing new wakes nobody
+    source.fire(['logic']);
+    await fx.p.merge();
+    expect(fx.eventsOf('wake')).toHaveLength(1);
+    fx.p.dispose();
+    expect(source.handlers.size).toBe(0);
+  });
+
+  test('two concurrent approvePlan calls: one succeeds, the other fails cleanly, workstreams created once', async () => {
+    const source = fakeSource();
+    const fx = await startOnly({ workstreams: source });
+    const { proposalId } = await fx.p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    const [a, b] = await Promise.allSettled([
+      fx.p.approvePlan(proposalId, { by: 'alice' }),
+      fx.p.approvePlan(proposalId, { by: 'alice' }),
+    ]);
+    expect(a.status).toBe('fulfilled');
+    expect(b).toMatchObject({ status: 'rejected', reason: { code: 'INVALID_OP' } });
+    expect(source.calls.filter(c => c.startsWith('create:'))).toHaveLength(1);
+    const approved = (await fx.store.read(fx.projectId, 1)).filter(e => e.body.type === 'event' && e.body.event.kind === 'planApproved');
+    expect(approved).toHaveLength(1);
+  });
+
+  test('approvePlan racing rejectPlan leaves a consistent state', async () => {
+    const fx = await startOnly();
+    const { proposalId } = await fx.p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    const [a, r] = await Promise.allSettled([
+      fx.p.approvePlan(proposalId, { by: 'alice' }),
+      fx.p.rejectPlan(proposalId, { by: 'alice', feedback: 'no' }),
+    ]);
+    expect([a.status, r.status].filter(x => x === 'fulfilled')).toHaveLength(1);
+    const proposal = (await fx.store.getPlanProposal(proposalId))!;
+    const board = await fx.p.board();
+    if (a.status === 'fulfilled') {
+      expect(proposal.status).toBe('approved');
+      expect(board.planStatus).toBe('approved');
+      expect(board.workstreams).toHaveLength(3);
+    } else {
+      expect(proposal.status).toBe('rejected');
+      expect(board.workstreams).toHaveLength(0);
+    }
+  });
+
+  test('two concurrent passing reviews whose shared dependent becomes ready give exactly one upstreamDelivered', async () => {
+    const fx = await startOnly();
+    const plan = {
+      workstreams: [
+        FIXTURE_PLAN.workstreams[0]!,
+        FIXTURE_PLAN.workstreams[1]!,
+        { ...FIXTURE_PLAN.workstreams[2]!, dependsOn: ['art', 'audio'] },
+      ],
+      contracts: [],
+    };
+    const { proposalId } = await fx.p.proposePlan(plan, { by: 'pm' });
+    await fx.p.approvePlan(proposalId, { by: 'alice' });
+    const { id: artId } = await deliverArt(fx);
+    await fx.p.submit('audio', { type: 'deliverable', workstreamId: 'audio', summary: 's', content: 'c' });
+    const audioId = (await fx.p.board()).workstreams.find(w => w.id === 'audio')!.deliverables[0]!.id;
+    const results = await Promise.all([
+      fx.p.submitReview(artId, { by: 'pm', passed: true, notes: '' }),
+      fx.p.submitReview(audioId, { by: 'pm', passed: true, notes: '' }),
+    ]);
+    expect(results.flat().filter(w => w.reason === 'upstreamDelivered')).toEqual([expect.objectContaining({ botId: 'logic' })]);
+    expect((await fx.p.board()).workstreams.find(w => w.id === 'logic')!.status).toBe('active');
+  });
+
+  test('approvePlan can be retried after a partial failure and still assigns every ready workstream', async () => {
+    const source = fakeSource();
+    const fx = await startOnly({ workstreams: source });
+    const { proposalId } = await fx.p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    source.failOn = 'audio';
+    source.failSetStatus = 3; // art is activated, then audio fails three times
+    await expect(fx.p.approvePlan(proposalId, { by: 'alice' })).rejects.toThrow('host write failed');
+    expect((await fx.store.getPlanProposal(proposalId))!.status).toBe('pending');
+    const w = await fx.p.approvePlan(proposalId, { by: 'alice' });
+    expect(pairs(w)).toEqual([
+      ['art', 'assigned'],
+      ['audio', 'assigned'],
+    ]);
+    expect(source.calls.filter(c => c.startsWith('create:'))).toHaveLength(1);
+  });
+
+  test('submitReview writes the status before logging, so a failed log does not leave a logged review', async () => {
+    const app = flaky('append', 0);
+    const fx = await makeProject({ approved: true, store: app.store });
+    const { id } = await deliverArt(fx);
+    app.arm(1);
+    await expect(fx.p.submitReview(id, { by: 'pm', passed: true, notes: '' })).rejects.toThrow('append failed');
+    expect((await fx.p.board()).workstreams.find(w => w.id === 'art')!.status).toBe('delivered');
+    await fx.p.submitReview(id, { by: 'pm', passed: true, notes: '' });
+    const logged = (await fx.store.read(fx.projectId, 1)).filter(e => e.body.type === 'event' && e.body.event.kind === 'reviewPassed');
+    expect(logged).toHaveLength(1);
+  });
+
+  test('a replan that adds or drops a contract between existing workstreams wakes both endpoint owners', async () => {
+    const fx = await makeProject({ approved: true });
+    const c2 = { id: 'c2', from: 'audio', to: 'logic', spec: 'OGG cues' };
+    const add = await fx.p.proposePlan({ ...FIXTURE_PLAN, contracts: [...FIXTURE_PLAN.contracts, c2] }, { by: 'pm' });
+    expect(pairs(await fx.p.approvePlan(add.proposalId, { by: 'alice' }))).toEqual([
+      ['audio', 'contractChanged'],
+      ['logic', 'contractChanged'],
+    ]);
+    const drop = await fx.p.proposePlan({ ...FIXTURE_PLAN, contracts: [c2] }, { by: 'pm' });
+    expect(pairs(await fx.p.approvePlan(drop.proposalId, { by: 'alice' }))).toEqual([
+      ['art', 'contractChanged'],
+      ['logic', 'contractChanged'],
+    ]);
+    expect((await fx.p.board()).contracts.map(c => c.id)).toEqual(['c2']);
+  });
+
+  test('R22: with an external source a replan may not change host-owned fields; brief-only changes proceed', async () => {
+    const source = fakeSource();
+    const fx = await makeProject({ approved: true, workstreams: source });
+    const [art, audio, logic] = FIXTURE_PLAN.workstreams;
+    const bad = { ...FIXTURE_PLAN, workstreams: [art!, { ...audio!, title: 'Music' }, { ...logic!, owner: 'audio', dependsOn: [] }] };
+    const { proposalId } = await fx.p.proposePlan(bad, { by: 'pm' });
+    const err = await fx.p.approvePlan(proposalId, { by: 'alice' }).catch(e => e);
+    expect(err.code).toBe('INVALID_PLAN');
+    const reasons: string[] = err.details.reasons;
+    expect(reasons).toHaveLength(3);
+    expect(reasons.some(r => r.includes('"audio"') && r.includes('title'))).toBe(true);
+    expect(reasons.some(r => r.includes('"logic"') && r.includes('owner'))).toBe(true);
+    expect(reasons.some(r => r.includes('"logic"') && r.includes('dependsOn'))).toBe(true);
+    expect(source.calls.filter(c => c.startsWith('create:'))).toHaveLength(1);
+
+    const ok = await fx.p.proposePlan({ ...FIXTURE_PLAN, workstreams: [art!, { ...audio!, brief: 'Chiptune.' }, logic!] }, { by: 'pm' });
+    const w = await fx.p.approvePlan(ok.proposalId, { by: 'alice' });
+    expect(w).toEqual([{ botId: 'audio', reason: 'contractChanged', detail: 'brief of audio changed' }]);
+    expect((await fx.p.board()).workstreams.find(x => x.id === 'audio')!.brief).toBe('Chiptune.');
+  });
+
+  test('R20: a non-lead bot cannot mark a workstream delivered through a proposal', async () => {
+    const fx = await makeProject({ approved: true });
+    const op: BoardOp = { op: 'setWorkstreamStatus', id: 'art', status: 'delivered' };
+    await expect(fx.p.submit('art', { type: 'proposal', ops: [op] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect((await fx.p.board()).workstreams.find(w => w.id === 'art')!.status).toBe('active');
+    expect(await fx.store.drainProposals(fx.projectId)).toEqual([]);
+  });
+
+  test('R21: a new plan proposal supersedes the earlier pending one', async () => {
+    const fx = await startOnly();
+    const first = await fx.p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    const second = await fx.p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    expect((await fx.store.getPlanProposal(first.proposalId))!.status).toBe('rejected');
+    await expect(fx.p.approvePlan(first.proposalId, { by: 'alice' })).rejects.toMatchObject({ code: 'INVALID_OP' });
+    await expect(fx.p.approvePlan(second.proposalId, { by: 'alice' })).resolves.toHaveLength(2);
+  });
+
+  test('a failing local status write is retried by the store only (no nested retries)', async () => {
+    const sb = flaky('saveBoard', 0);
+    const fx = await makeProject({ approved: true, store: sb.store });
+    sb.arm(100);
+    await expect(fx.p.submit('audio', { type: 'blocked', workstreamId: 'audio', reason: 'r' })).rejects.toThrow('saveBoard failed');
+    expect(sb.calls()).toBe(3);
+    expect(fx.eventsOf('needsHuman').filter(e => e.ref === 'audio')).toHaveLength(1);
+  });
+
+  test('a rejected operation does not wedge the serial queue', async () => {
+    const fx = await makeProject({ approved: true });
+    const [bad, good] = await Promise.allSettled([
+      fx.p.submit('ghost', { type: 'notes', text: 'x' }),
+      fx.p.submit('art', { type: 'notes', text: 'still works' }),
+    ]);
+    expect(bad).toMatchObject({ status: 'rejected', reason: { code: 'NOT_A_MEMBER' } });
+    expect(good.status).toBe('fulfilled');
   });
 });

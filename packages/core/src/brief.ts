@@ -2,12 +2,12 @@
 // seen-item compaction, a relevance-filtered delta, and budget trimming.
 import { writeScopeOverlaps } from './board/diff.js';
 import type { EmployeeRegistry } from './employees.js';
-import { BudgetTooSmallError, ContextError } from './errors.js';
+import { BudgetTooSmallError } from './errors.js';
+import { assertMember, defaultMemory, defaultWorkspace, renderTeam } from './members.js';
 import type { Options } from './options.js';
 import {
   itemKey,
   renderBoardPublic,
-  renderCommon,
   renderDelta,
   renderMemory,
   renderProjection,
@@ -199,53 +199,23 @@ async function relevantChanges(
 // buildBrief
 // ---------------------------------------------------------------------------
 
-const firstLine = (s: string) => (s.split(/\r?\n/)[0] ?? '').trim();
-
 export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOptions): Promise<ContextBundle> {
   const { store, projectId } = deps;
   const board = await store.getBoard(projectId);
   const workstreams = await resolveWorkstreams(board, deps.source);
 
-  const botMembers: string[] = [];
-  for (const id of [board.lead, ...workstreams.map(w => w.owner)]) {
-    if (id && !botMembers.includes(id)) botMembers.push(id);
-  }
-  if (!botMembers.includes(botId)) {
-    throw new ContextError('NOT_A_MEMBER', `Bot "${botId}" is not a member of project ${projectId}`, {
-      botId,
-      projectId,
-    });
-  }
+  const botMembers = assertMember(board, workstreams, botId);
 
   const latestSeq = await store.latestSeq(projectId);
-  const workspace: Workspace = (await store.getWorkspace(projectId, botId)) ?? {
-    projectId,
-    botId,
-    notes: '',
-    pinnedNotes: [],
-    condensed: '',
-    seenItemIds: [],
-    lastSeenSeq: latestSeq,
-    lastSeenBoardVersion: 0,
-    promotionsThisTurn: 0,
-  };
+  const workspace: Workspace = (await store.getWorkspace(projectId, botId)) ?? defaultWorkspace(projectId, botId, latestSeq);
 
   const memories = new Map(
     await Promise.all(botMembers.map(async id => [id, await deps.employees.get(id)] as const)),
   );
-  const memory: EmployeeMemory = memories.get(botId) ?? {
-    botId,
-    persona: '',
-    skills: [],
-    memories: [],
-    condensed: '',
-  };
+  const memory: EmployeeMemory = memories.get(botId) ?? defaultMemory(botId);
 
   // Segments that are never trimmed.
-  const common = renderCommon([
-    { id: board.owner, kind: 'human', role: 'owner' },
-    ...botMembers.map(id => ({ id, kind: 'bot' as const, role: firstLine(memories.get(id)?.persona ?? '') })),
-  ]);
+  const common = renderTeam(board, botMembers, id => memories.get(id)?.persona);
   const boardText = renderBoardPublic(board, workstreams);
   const seen = new Set(workspace.seenItemIds);
   const blocks: string[] = [];
