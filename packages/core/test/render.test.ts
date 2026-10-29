@@ -11,6 +11,7 @@ import {
   renderReview,
   renderTrigger,
   renderWorkspace,
+  splitParagraphs,
   type Projection,
 } from '../src/render.js';
 import type {
@@ -268,6 +269,19 @@ describe('renderMemory', () => {
   });
 });
 
+describe('splitParagraphs', () => {
+  test('splits on blank lines (LF, CRLF, whitespace-only), trims and drops empties', () => {
+    expect(splitParagraphs('a\n\nb\r\n\r\nc\n  \t\nd\n\n\n\n  e  \n')).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(splitParagraphs('one\nline two')).toEqual(['one\nline two']);
+    expect(splitParagraphs('  \n\n ')).toEqual([]);
+  });
+  test('renderWorkspace uses it', () => {
+    expect(renderWorkspace({ ...workspace, notes: 'x\r\n \r\ny', pinnedNotes: [], condensed: '' }, 5)).toBe(
+      '# Your notes\n\nRecent:\n- x\n- y',
+    );
+  });
+});
+
 describe('renderWorkspace', () => {
   test('pinned, summary, then the last recentKeep paragraphs', () => {
     const t = renderWorkspace(workspace, 2);
@@ -313,6 +327,11 @@ describe('renderDelta', () => {
   });
   test('empty says nothing yet', () => {
     expect(renderDelta([], [])).toBe('# Since you last looked\n\n(nothing yet)');
+  });
+  test('omitted count comes first, singular and plural', () => {
+    expect(renderDelta([], [], 1)).toBe('# Since you last looked\n\n- (1 older item omitted to fit the token budget)');
+    const t = renderDelta([chat(4, 'alice', 'hi there')], [change], 3);
+    expect(t).toContain('- (3 older items omitted to fit the token budget)\n- #4 alice: hi there');
   });
 });
 

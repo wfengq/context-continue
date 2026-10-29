@@ -1,0 +1,185 @@
+// Shared test fixtures. `seedProject` writes straight through a memoryStore (no facade).
+import { applyOp } from '../src/board/apply.js';
+import type { BriefDeps } from '../src/brief.js';
+import { createEmployeeRegistry, type EmployeeRegistry } from '../src/employees.js';
+import { resolveOptions } from '../src/options.js';
+import { toLedgerEntry } from '../src/route.js';
+import { memoryStore } from '../src/store/memory.js';
+import type { Store } from '../src/store/store.js';
+import { defaultCountTokens } from '../src/tokens.js';
+import type {
+  AppliedOp,
+  BoardOp,
+  ChatInput,
+  Contract,
+  Decision,
+  LedgerEntry,
+  ProjectBoard,
+  ProjectEvent,
+  ToolDefinition,
+  Workstream,
+} from '../src/types.js';
+import { localWorkstreamSource, type WorkstreamSource } from '../src/workstreams/source.js';
+
+export const PERSONAS: Record<string, string> = {
+  pm: 'Project lead\nKeeps the team on track.',
+  art: 'Pixel artist\nDraws sprites and tiles.',
+  logic: 'Gameplay programmer\nWrites the game rules.',
+  audio: 'Sound designer\nMakes music and effects.',
+};
+
+export const TEST_TOOLS: ToolDefinition[] = [
+  { name: 'getBoardItem', description: 'Fetch a board item in full', parameters: { type: 'object' } },
+];
+
+const ws = (id: string, title: string, owner: string, over: Partial<Workstream> = {}): Workstream => ({
+  id,
+  title,
+  brief: `Brief for ${title}.`,
+  owner,
+  dependsOn: [],
+  writeScopes: [],
+  status: 'active',
+  reviewRounds: 0,
+  deliverables: [],
+  ...over,
+});
+
+export interface SeededProject {
+  store: Store;
+  projectId: string;
+  source: WorkstreamSource;
+  employees: EmployeeRegistry;
+  deps: BriefDeps;
+  /** Fixed clock: every call advances by one second. */
+  now: () => number;
+  chat(input: ChatInput): Promise<LedgerEntry>;
+  event(event: ProjectEvent, by?: string): Promise<LedgerEntry>;
+  /** Applies ops as one board change (version + 1) and returns the touched ids. */
+  apply(ops: BoardOp[], by?: string, authority?: 'human' | 'bot'): Promise<string[]>;
+  /** Adds a human decision and returns its id. */
+  decide(d: { affects: string[]; text: string; rationale?: string; rejected?: string[] }): Promise<string>;
+  /** Directly edits the board as one change without ops (for fixture shaping). */
+  patchBoard(fn: (b: ProjectBoard) => void): Promise<void>;
+}
+
+export async function seedProject(opts: { plan?: boolean } = {}): Promise<SeededProject> {
+  const store = memoryStore();
+  const projectId = 'p1';
+  let t = 1_700_000_000_000;
+  const now = () => (t += 1000);
+  const employees = createEmployeeRegistry({ store });
+  for (const botId of ['pm', 'art', 'logic', 'audio']) {
+    await employees.upsert({ botId, persona: PERSONAS[botId]!, skills: [] });
+  }
+  const source = localWorkstreamSource(store, { now });
+
+  const board: ProjectBoard = {
+    projectId,
+    version: 0,
+    updatedAt: now(),
+    status: 'active',
+    owner: 'alice',
+    lead: 'pm',
+    goal: 'Ship a tiny platformer demo.',
+    constraints: ['Runs in the browser'],
+    planStatus: 'none',
+    conventions: [],
+    workstreams: [],
+    contracts: [],
+    decisions: [],
+    facts: [],
+    failures: [],
+    openQuestions: [],
+  };
+  await store.createBoard(board);
+
+  const append = (e: Omit<LedgerEntry, 'seq' | 'id' | 'createdAt' | 'projectId'>) =>
+    store.append({ ...e, id: `e-${t}`, projectId, createdAt: now() });
+
+  const event = (ev: ProjectEvent, by = 'system') => append({ author: { kind: 'system', id: by }, body: { type: 'event', event: ev } });
+  await event({ kind: 'projectStarted' });
+
+  const saveChange = async (next: ProjectBoard, ops: AppliedOp[]) => {
+    const expected = next.version;
+    next.version = expected + 1;
+    next.updatedAt = now();
+    await store.saveBoard(next, expected, { version: next.version, mergedAt: next.updatedAt, ops });
+  };
+
+  if (opts.plan !== false) {
+    const b = await store.getBoard(projectId);
+    b.planStatus = 'approved';
+    b.workstreams = [
+      ws('art', 'Sprites', 'art'),
+      ws('audio', 'Sound', 'audio'),
+      ws('logic', 'Gameplay', 'logic', { status: 'pending', dependsOn: ['art'] }),
+    ];
+    const contract: Contract = { id: 'c1', from: 'art', to: 'logic', spec: 'PNG sprite sheets, 16x16 tiles', version: 1 };
+    b.contracts = [contract];
+    await saveChange(
+      b,
+      b.workstreams.map(w => ({
+        op: { op: 'setWorkstreamStatus', id: w.id, status: w.status },
+        by: 'system',
+        authority: 'bot',
+        touched: [w.id],
+      })),
+    );
+    await event({ kind: 'planApproved', proposalId: 'plan-1' });
+  }
+
+  const deps: BriefDeps = {
+    store,
+    projectId,
+    source,
+    employees,
+    count: defaultCountTokens,
+    options: resolveOptions(),
+    tools: () => TEST_TOOLS,
+  };
+
+  const apply = async (ops: BoardOp[], by = 'alice', authority: 'human' | 'bot' = 'human') => {
+    let b = await store.getBoard(projectId);
+    const applied: AppliedOp[] = [];
+    for (const op of ops) {
+      const r = applyOp(b, op, { by, authority });
+      b = r.board;
+      applied.push({ op, by, authority, touched: r.touched });
+    }
+    await saveChange(b, applied);
+    return applied.flatMap(a => a.touched);
+  };
+
+  return {
+    store,
+    projectId,
+    source,
+    employees,
+    deps,
+    now,
+    chat: async input => {
+      let parent: LedgerEntry | null = null;
+      if (input.replyTo) parent = (await store.read(projectId, 1)).find(e => e.id === input.replyTo) ?? null;
+      return append(toLedgerEntry(input, parent));
+    },
+    event,
+    apply,
+    async decide(d) {
+      const decision: Omit<Decision, 'id' | 'authority'> = {
+        text: d.text,
+        rationale: d.rationale ?? 'because',
+        rejected: d.rejected ?? [],
+        affects: d.affects,
+        source: { entryIds: [], by: 'alice' },
+      };
+      const [id] = await apply([{ op: 'addDecision', decision }]);
+      return id!;
+    },
+    async patchBoard(fn) {
+      const b = await store.getBoard(projectId);
+      fn(b);
+      await saveChange(b, []);
+    },
+  };
+}

@@ -95,9 +95,10 @@ function entryLine(e: LedgerEntry): string {
   return `- #${e.seq} [${kind}] ${JSON.stringify(rest)}`;
 }
 
-function paragraphs(notes: string): string[] {
+/** Splits notes into paragraphs at blank lines (LF or CRLF, whitespace-only lines count as blank); trimmed, empties dropped. */
+export function splitParagraphs(notes: string): string[] {
   return notes
-    .split('\n\n')
+    .split(/\r?\n[ \t]*\r?\n/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
 }
@@ -233,12 +234,16 @@ export function renderProjection(p: Projection, seen: Set<string>): { text: stri
 export function renderWorkspace(w: Workspace, recentKeep: number): string {
   return section(
     '# Your notes',
-    pinnedSummaryRecent(w.pinnedNotes, w.condensed, last(paragraphs(w.notes), recentKeep)),
+    pinnedSummaryRecent(w.pinnedNotes, w.condensed, last(splitParagraphs(w.notes), recentKeep)),
   );
 }
 
-export function renderDelta(entries: LedgerEntry[], changes: AppliedOp[]): string {
+/** `omitted`: how many older entries/changes were left out to fit the token budget. */
+export function renderDelta(entries: LedgerEntry[], changes: AppliedOp[], omitted = 0): string {
+  const note =
+    omitted > 0 ? [`- (${omitted} older ${omitted === 1 ? 'item' : 'items'} omitted to fit the token budget)`] : [];
   return section('# Since you last looked', [
+    ...note,
     ...entries.map(entryLine),
     ...changes.map((c) => `- board: ${c.op.op} by ${c.by} (${c.touched.join(', ')})`),
   ]);
