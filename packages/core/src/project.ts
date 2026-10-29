@@ -12,7 +12,7 @@ import { ContextError } from './errors.js';
 import { createEventBus, type EventBus } from './events.js';
 import { createExtractor } from './extract.js';
 import { newId } from './ids.js';
-import { assertMember, botMembers } from './members.js';
+import { assertMember, botMembers, defaultWorkspace } from './members.js';
 import { resolveOptions, type Options } from './options.js';
 import { diffPlan, type ApprovedPlan, type PlanWorkstream } from './plan/replan.js';
 import { validatePlan, type PlanInput } from './plan/validate.js';
@@ -22,6 +22,7 @@ import { retryingStore, withRetry } from './retry.js';
 import { routeChat, toLedgerEntry, type RouteInput } from './route.js';
 import type { Store } from './store/store.js';
 import { defaultCountTokens } from './tokens.js';
+import { createToolDispatcher, proposalOutcome, toolDefinitions, type ProposalOutcome } from './tools.js';
 import type {
   AppliedOp,
   BoardChange,
@@ -82,6 +83,8 @@ export interface Project {
   close(o: { by: string; force?: boolean }): Promise<void>;
   buildRetroContext(botId: string): Promise<ContextBundle>;
   commitRetro(botId: string, memories: { text: string; pinned?: boolean }[]): Promise<void>;
+  /** Runs a bot tool (spec 6.2): NOT_A_MEMBER, then FORBIDDEN for lead-only tools, then INVALID_OP, then the facade call. */
+  callTool(botId: string, name: string, args: unknown): Promise<unknown>;
   ingest(c: ChatInput): Promise<LedgerEntry>;
   route(e: LedgerEntry): Promise<Wake[]>;
   merge(): Promise<Wake[]>;
@@ -162,7 +165,15 @@ export function createProject(cfg: ProjectConfig): Project {
     renderPublic: b => renderBoardPublic(b, b.workstreams),
     ownWorkstreams: async botId => (await workstreamsOf(await getBoard())).filter(w => w.owner === botId).map(w => w.id),
   });
-  const briefDeps: BriefDeps = { store, projectId, source, employees, count, options, tools: () => [] };
+  const briefDeps: BriefDeps = {
+    store,
+    projectId,
+    source,
+    employees,
+    count,
+    options,
+    tools: (botId, board) => toolDefinitions(botId === board.lead ? 'lead' : 'member'),
+  };
   const contextDeps: ContextDeps = { store, projectId, employees, count };
   const privateDeps: PrivateDeps = {
     store,
@@ -389,10 +400,15 @@ export function createProject(cfg: ProjectConfig): Project {
     return wakes;
   }
 
+  /** Merge result of the latest runMerge, read by `propose` (R30) inside the same queue turn. */
+  let lastMerge: MergeResult | null = null;
+
   async function runMerge(): Promise<Wake[]> {
     const board = await getBoard();
     const before = await workstreamsOf(board);
-    return afterMerge(before, await merger.merge(), board.lead);
+    const r = await merger.merge();
+    lastMerge = r;
+    return afterMerge(before, r, board.lead);
   }
 
   async function pendingPlan(id: string): Promise<PlanProposal> {
@@ -515,6 +531,8 @@ export function createProject(cfg: ProjectConfig): Project {
     return wakes;
   }
 
+  let lastOutcome: ProposalOutcome | null = null;
+
   async function submit(botId: string, s: Submission): Promise<Wake[]> {
     const { board, ws } = await memberView(botId, true);
     switch (s.type) {
@@ -527,8 +545,11 @@ export function createProject(cfg: ProjectConfig): Project {
         // Conflicts are judged against what the bot last saw (spec 3).
         const seen = (await store.getWorkspace(projectId, botId))?.lastSeenBoardVersion ?? 0;
         const baseVersion = seen > 0 ? seen : board.version;
-        await store.enqueueProposal({ id: newId('prop'), projectId, baseVersion, by: botId, ops: s.ops });
-        return runMerge();
+        const id = newId('prop');
+        await store.enqueueProposal({ id, projectId, baseVersion, by: botId, ops: s.ops });
+        const wakes = await runMerge();
+        lastOutcome = proposalOutcome(id, Array.isArray(s.ops) ? s.ops.length : 0, lastMerge);
+        return wakes;
       }
       case 'blocked': {
         const w = ownedWorkstream(ws, botId, s.workstreamId);
@@ -605,6 +626,22 @@ export function createProject(cfg: ProjectConfig): Project {
     return wakes;
   }
 
+  /** Tool path for board proposals: the same `submit`, plus the merge outcome and the promotion limit. */
+  const propose = (botId: string, ops: BoardOp[], promotion: boolean): Promise<ProposalOutcome> =>
+    serial(async () => {
+      const load = async () => (await store.getWorkspace(projectId, botId)) ?? defaultWorkspace(projectId, botId, await store.latestSeq(projectId));
+      if (promotion && (await load()).promotionsThisTurn >= options.maxPromotionsPerTurn) {
+        forbidden(`At most ${options.maxPromotionsPerTurn} promotions per turn`);
+      }
+      lastOutcome = null;
+      finish(await submit(botId, { type: 'proposal', ops }));
+      if (promotion) {
+        const ws = await load();
+        await store.saveWorkspace({ ...ws, promotionsThisTurn: ws.promotionsThisTurn + 1 });
+      }
+      return lastOutcome ?? { applied: false, pending: [], rejected: [] };
+    });
+
   const resolvedBoard = async (): Promise<ProjectBoard> => {
     const b = await getBoard();
     return { ...b, workstreams: await workstreamsOf(b) };
@@ -645,7 +682,7 @@ export function createProject(cfg: ProjectConfig): Project {
   // the facade: every mutating method runs in the serial queue
   // ---------------------------------------------------------------------------
 
-  return {
+  const project: Project = {
     start: i =>
       serial(async () => {
         await store.createBoard({
@@ -768,6 +805,8 @@ export function createProject(cfg: ProjectConfig): Project {
         await addMemories(privateDeps, botId, memories);
       }),
 
+    callTool: (botId, name, args) => callTool(botId, name, args),
+
     ingest: c =>
       serial(async () => {
         await openBoard();
@@ -823,4 +862,16 @@ export function createProject(cfg: ProjectConfig): Project {
     flushExtraction: () => extractor.flush(),
     dispose,
   };
+
+  const callTool = createToolDispatcher({
+    ...project,
+    store,
+    projectId,
+    propose,
+    member: async botId => {
+      const { board } = await memberView(botId, false);
+      return { lead: board.lead };
+    },
+  });
+  return project;
 }

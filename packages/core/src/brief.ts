@@ -41,7 +41,7 @@ export interface BriefDeps {
   count: (s: string) => number;
   // Not read here: recentKeep is applied by condensing (Task 11), so stored notes and memories are already bounded.
   options: Required<Options>;
-  tools: (botId: string) => ToolDefinition[];
+  tools: (botId: string, board: ProjectBoard) => ToolDefinition[];
 }
 
 export interface BriefOptions {
@@ -311,7 +311,7 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
   const segments: Segment[] = kinds.map(kind => ({ kind, text: texts[kind], cacheable: CACHEABLE[kind] }));
   return {
     segments,
-    tools: deps.tools(botId),
+    tools: deps.tools(botId, board),
     stats: { bySegment: { ...counts }, total: total() },
   };
 }

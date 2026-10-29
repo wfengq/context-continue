@@ -4,6 +4,7 @@ import type { EmployeeRegistry } from './employees.js';
 import { ContextError } from './errors.js';
 import { assertMember, botMembers, defaultMemory, defaultWorkspace, renderTeam } from './members.js';
 import { renderBoardPublic, renderPlanning, renderRetro, renderReview } from './render.js';
+import { toolDefinitions } from './tools.js';
 import type { Store } from './store/store.js';
 import type { ContextBundle, PlanProposal, ProjectBoard, Segment, SegmentKind, Workstream } from './types.js';
 
@@ -25,7 +26,13 @@ export function findDeliverable(ws: Workstream[], deliverableId: string) {
   throw new ContextError('NOT_FOUND', `Deliverable "${deliverableId}" not found`);
 }
 
-async function bundle(deps: ContextDeps, board: ProjectBoard, ws: Workstream[], body: string): Promise<ContextBundle> {
+async function bundle(
+  deps: ContextDeps,
+  board: ProjectBoard,
+  ws: Workstream[],
+  body: string,
+  role: 'lead' | 'member',
+): Promise<ContextBundle> {
   const members = botMembers(board, ws);
   const personas = new Map(await Promise.all(members.map(async id => [id, (await deps.employees.get(id))?.persona] as const)));
   const segments: Segment[] = [
@@ -36,7 +43,7 @@ async function bundle(deps: ContextDeps, board: ProjectBoard, ws: Workstream[], 
   const bySegment: Partial<Record<SegmentKind, number>> = {};
   let total = 0;
   for (const s of segments) total += bySegment[s.kind] = deps.count(s.text);
-  return { segments, tools: [], stats: { bySegment, total } };
+  return { segments, tools: toolDefinitions(role), stats: { bySegment, total } };
 }
 
 export async function planningContext(deps: ContextDeps, board: ProjectBoard, ws: Workstream[]): Promise<ContextBundle> {
@@ -50,7 +57,7 @@ export async function planningContext(deps: ContextDeps, board: ProjectBoard, ws
     humanMessages,
     previous: plan ? { plan, feedback: meta?.feedback } : undefined,
   });
-  return bundle(deps, board, ws, body);
+  return bundle(deps, board, ws, body, 'lead');
 }
 
 export async function reviewContext(
@@ -67,7 +74,7 @@ export async function reviewContext(
     conventions: board.conventions,
     decisions: board.decisions.filter(x => x.affects.includes(w.id)),
   });
-  return bundle(deps, board, ws, body);
+  return bundle(deps, board, ws, body, 'lead');
 }
 
 export async function retroContext(
@@ -90,5 +97,5 @@ export async function retroContext(
     reviews,
     memory: (await deps.employees.get(botId)) ?? defaultMemory(botId),
   });
-  return bundle(deps, board, ws, body);
+  return bundle(deps, board, ws, body, 'member');
 }

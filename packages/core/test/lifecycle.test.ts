@@ -79,7 +79,7 @@ describe('start and planning', () => {
     expect(body).toContain('Ship a tiny platformer demo.');
     expect(body).toContain('- art: Pixel artist');
     expect(body).toContain('Make it cute.');
-    expect(ctx.tools).toEqual([]);
+    expect(ctx.tools.map(t => t.name)).toContain('proposePlan');
     expect(ctx.stats.total).toBe(Object.values(ctx.stats.bySegment).reduce((a, b) => a + b, 0));
   });
 
