@@ -255,22 +255,75 @@ describe('buildBrief', () => {
     expect(seen.some(x => x.includes('"notes":[],"mems":[2]'))).toBe(true);
   });
 
-  test('trimmed delta says how much was left out', async () => {
+  test('trimmed delta says how much was left out when the note still fits', async () => {
     await brief('art');
     for (let i = 1; i <= 3; i++) {
-      await p.chat({ author: { kind: 'human', id: 'alice' }, text: `DELTA-${i} ${'x'.repeat(40)}`, mentions: ['art'] });
+      await p.chat({ author: { kind: 'human', id: 'alice' }, text: `DELTA-${i} ${'x'.repeat(200)}`, mentions: ['art'] });
     }
     const full = await brief('art', { peek: true });
     const b = await brief('art', { peek: true, maxTokens: full.stats.total - 1 });
     expect(seg(b, 'delta')).not.toContain('DELTA-1');
     expect(seg(b, 'delta')).toContain('DELTA-3');
     expect(seg(b, 'delta')).toContain('1 older item omitted');
+    expect(b.stats.total).toBeLessThanOrEqual(full.stats.total - 1);
+  });
+
+  // R18: the omission note must never make trimming fail or `required` grow.
+  describe('omission note never makes the budget worse', () => {
+    const chars = (s: string) => s.length; // exact control over the arithmetic
+
+    test('the note is left out when only the note-less trim fits', async () => {
+      p.deps.count = chars;
+      await brief('art');
+      await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'hi', mentions: ['art'] });
+      const full = await brief('art', { peek: true });
+      const b = await brief('art', { peek: true, maxTokens: full.stats.total - 1 });
+      expect(seg(b, 'delta')).toBe('# Since you last looked\n\n(nothing yet)');
+      expect(b.stats.total).toBeLessThanOrEqual(full.stats.total - 1);
+    });
+
+    test('(a) one very short delta item and two notes, budget = full - 1: trims instead of throwing', async () => {
+      await brief('art');
+      const ws = (await p.store.getWorkspace(p.projectId, 'art'))!;
+      await p.store.saveWorkspace({ ...ws, notes: 'note one\n\nnote two' });
+      await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'hi', mentions: ['art'] });
+      const full = await brief('art', { peek: true });
+      const b = await brief('art', { peek: true, maxTokens: full.stats.total - 1 });
+      expect(b.stats.total).toBeLessThanOrEqual(full.stats.total - 1);
+      const trimmedNote = !seg(b, 'workspace').includes('note one');
+      const trimmedDelta = !seg(b, 'delta').includes(': hi');
+      expect(trimmedNote || trimmedDelta).toBe(true);
+    });
+
+    test('(b)+(c) no notes, one short chat: every budget either fits or throws a retryable minimal required', async () => {
+      await brief('art');
+      await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'hi', mentions: ['art'] });
+      const full = await brief('art', { peek: true });
+      let threw = false;
+      for (let budget = full.stats.total; budget >= full.stats.total - 15; budget--) {
+        const r = await brief('art', { peek: true, maxTokens: budget }).catch(e => e as BudgetTooSmallError);
+        if (r instanceof BudgetTooSmallError) {
+          threw = true;
+          expect(r.details.budget).toBe(budget);
+          expect(r.details.required).toBeGreaterThan(budget);
+          expect(r.details.required).toBeLessThanOrEqual(full.stats.total);
+          const retry = await brief('art', { peek: true, maxTokens: r.details.required });
+          expect(retry.stats.total).toBeLessThanOrEqual(r.details.required);
+        } else {
+          expect(threw).toBe(false); // once it throws, smaller budgets throw too
+          expect(r.stats.total).toBeLessThanOrEqual(budget);
+        }
+      }
+      expect(threw).toBe(true);
+    });
   });
 
   test('throws BudgetTooSmallError when fixed segments alone exceed the budget', async () => {
     await expect(brief('art', { maxTokens: 10 })).rejects.toMatchObject({ code: 'BUDGET_TOO_SMALL', details: { budget: 10 } });
+    const full = (await brief('art', { peek: true })).stats.total;
     const err = (await brief('art', { maxTokens: 10 }).catch(e => e)) as BudgetTooSmallError;
     expect(err.details.required).toBeGreaterThan(10);
+    expect(err.details.required).toBeLessThanOrEqual(full);
     await expect(brief('art', { maxTokens: err.details.required })).resolves.toBeDefined();
     // A failed brief saves nothing.
     const p2 = await seedProject();

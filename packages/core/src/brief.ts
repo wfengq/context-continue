@@ -39,6 +39,7 @@ export interface BriefDeps {
   source: WorkstreamSource;
   employees: EmployeeRegistry;
   count: (s: string) => number;
+  // Not read here: recentKeep is applied by condensing (Task 11), so stored notes and memories are already bounded.
   options: Required<Options>;
   tools: (botId: string) => ToolDefinition[];
 }
@@ -265,16 +266,19 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
     (x, y) => x.at - y.at,
   );
 
-  // Budget trimming (spec 5.2): oldest delta items, then recent notes, then recent memories.
+  // Budget trimming (spec 5.2): walk the trim states in order (oldest delta items, then recent
+  // notes, then recent memories) and stop at the first that fits. Totals are measured without the
+  // "N older items omitted" note so no step can grow the total; the note is added at the end only
+  // if the chosen state still fits with it.
   let dropped = 0;
   let notesKeep = splitParagraphs(workspace.notes).length;
   let memKeep = memory.memories.filter(m => !m.pinned).length;
-  const renderDeltaNow = () => {
+  const renderDeltaNow = (withNote: boolean) => {
     const kept = delta.slice(dropped);
     return renderDelta(
       kept.flatMap(d => ('entry' in d ? [d.entry] : [])),
       kept.flatMap(d => ('change' in d ? [d.change] : [])),
-      dropped,
+      withNote ? dropped : 0,
     );
   };
 
@@ -284,7 +288,7 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
     memory: renderMemory(memory, memKeep),
     projection,
     workspace: renderWorkspace(workspace, notesKeep),
-    delta: renderDeltaNow(),
+    delta: renderDeltaNow(false),
     trigger: triggerText,
   };
   const counts = {} as Record<SegmentKind, number>;
@@ -296,17 +300,25 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
     counts[k] = deps.count(text);
   };
 
+  let smallest = total();
   while (total() > opts.maxTokens) {
     if (dropped < delta.length) {
       dropped++;
-      set('delta', renderDeltaNow());
+      set('delta', renderDeltaNow(false));
     } else if (notesKeep > 0) {
       set('workspace', renderWorkspace(workspace, --notesKeep));
     } else if (memKeep > 0) {
       set('memory', renderMemory(memory, --memKeep));
     } else {
-      throw new BudgetTooSmallError(total(), opts.maxTokens);
+      // Every state was visited, so `smallest` is the minimum total over all of them.
+      throw new BudgetTooSmallError(smallest, opts.maxTokens);
     }
+    smallest = Math.min(smallest, total());
+  }
+  if (dropped > 0) {
+    const plain = texts.delta;
+    set('delta', renderDeltaNow(true));
+    if (total() > opts.maxTokens) set('delta', plain);
   }
 
   if (!opts.peek) {
