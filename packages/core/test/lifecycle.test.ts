@@ -7,6 +7,8 @@ import type { Store } from '../src/store/store.js';
 import type { BoardOp, ContextBundle, SegmentKind, Wake, Workstream } from '../src/types.js';
 import type { WorkstreamSource } from '../src/workstreams/source.js';
 import { withRetry } from '../src/project.js';
+import { createEmployeeRegistry } from '../src/employees.js';
+import { createProject } from '../src/project.js';
 import { FIXTURE_PLAN, makeProject, type FacadeProject } from './helpers.js';
 
 const pairs = (w: Wake[]) => w.map(x => [x.botId, x.reason]).sort();
@@ -836,5 +838,157 @@ describe('fix round 1', () => {
     ]);
     expect(bad).toMatchObject({ status: 'rejected', reason: { code: 'NOT_A_MEMBER' } });
     expect(good.status).toBe('fulfilled');
+  });
+});
+
+/** A memoryStore whose `method` waits at a gate the test opens; `reached` resolves when it is hit. */
+function gated(method: keyof Store) {
+  const inner = memoryStore();
+  let open!: () => void;
+  let hit!: () => void;
+  const gate = new Promise<void>(r => (open = r));
+  const reached = new Promise<void>(r => (hit = r));
+  let armed = false;
+  const store = new Proxy(inner, {
+    get(t, k, r) {
+      const v = Reflect.get(t, k, r);
+      if (k !== method || typeof v !== 'function') return v;
+      return async (...args: unknown[]) => {
+        if (armed) {
+          armed = false;
+          hit();
+          await gate;
+        }
+        return (v as (...a: unknown[]) => unknown).apply(t, args);
+      };
+    },
+  });
+  return { store, reached, arm: () => (armed = true), open: () => open() };
+}
+
+/** A memoryStore whose `append` of the given event kind fails `times` times. */
+function failingEvent(kind: string, times: number): Store {
+  const inner = memoryStore();
+  let left = times;
+  return new Proxy(inner, {
+    get(t, k, r) {
+      const v = Reflect.get(t, k, r);
+      if (k !== 'append') return v;
+      return async (e: Parameters<Store['append']>[0]) => {
+        if (left > 0 && e.body.type === 'event' && e.body.event.kind === kind) {
+          left--;
+          throw new Error(`append ${kind} failed`);
+        }
+        return inner.append(e);
+      };
+    },
+  });
+}
+
+const eventCount = async (fx: FacadeProject, kind: string) =>
+  (await fx.store.read(fx.projectId, 1)).filter(e => e.body.type === 'event' && e.body.event.kind === kind).length;
+
+describe('fix round 2', () => {
+  test('R24: after a restart, a host change is acted on (logic activated with upstreamDelivered)', async () => {
+    const source = fakeSource();
+    const fx = await makeProject({ approved: true, workstreams: source });
+    fx.p.dispose(); // the old process goes away
+    const p2 = createProject({ projectId: fx.projectId, store: fx.store, employees: createEmployeeRegistry({ store: fx.store }), clock: fx.clock, workstreams: source });
+    const wakes: Wake[] = [];
+    p2.on('wake', e => wakes.push(...e.wakes));
+    source.rows.find(r => r.id === 'art')!.status = 'delivered'; // host flips it right away
+    source.fire(['art']);
+    await p2.merge(); // queued behind init and the change handling
+    expect(pairs(wakes)).toEqual([['logic', 'upstreamDelivered']]);
+    expect(source.rows.find(r => r.id === 'logic')!.status).toBe('active');
+    p2.dispose();
+  });
+
+  test('R24: a host change fired while a slow core operation runs still produces its wake', async () => {
+    const source = fakeSource();
+    const g = gated('saveWorkspace');
+    const fx = await makeProject({ approved: true, workstreams: source, store: g.store });
+    fx.events.length = 0;
+    g.arm();
+    const slow = fx.p.submit('art', { type: 'notes', text: 'working' });
+    await g.reached;
+    source.rows.find(r => r.id === 'art')!.status = 'delivered';
+    source.fire(['art']);
+    g.open();
+    await slow;
+    await fx.p.merge();
+    expect(fx.eventsOf('wake').flatMap(e => pairs(e.wakes))).toEqual([['logic', 'upstreamDelivered']]);
+    expect(source.rows.find(r => r.id === 'logic')!.status).toBe('active');
+  });
+
+  test('a non-peek buildBrief is queued: a concurrent note for the same bot survives', async () => {
+    const fx = await makeProject({ approved: true });
+    await Promise.all([
+      fx.p.buildBrief('art', { maxTokens: 100_000 }),
+      fx.p.submit('art', { type: 'notes', text: 'keep me' }),
+    ]);
+    expect((await fx.store.getWorkspace(fx.projectId, 'art'))!.notes).toBe('keep me');
+  });
+
+  test('route is queued: two concurrent routes at the limit emit wakeLimitReached once', async () => {
+    const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 1 } });
+    const h = await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'go' });
+    const bot = (text: string) => fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text, mentions: ['logic'], act: 'request' });
+    await bot('1');
+    const [b2, b3] = [await bot('2'), await bot('3')];
+    await Promise.all([fx.p.route(b2), fx.p.route(b3)]);
+    expect(fx.eventsOf('wakeLimitReached')).toEqual([{ afterSeq: h.seq }]);
+  });
+
+  test('R25/R26: pass review retried after the dependent activation failed → dependent activated, one upstreamDelivered', async () => {
+    const source = fakeSource();
+    const fx = await makeProject({ approved: true, workstreams: source });
+    const { id } = await deliverArt(fx);
+    fx.events.length = 0;
+    source.failOn = 'logic';
+    source.failSetStatus = 3;
+    await expect(fx.p.submitReview(id, { by: 'pm', passed: true, notes: 'ok' })).rejects.toThrow('host write failed');
+    expect(source.rows.find(r => r.id === 'art')!.status).toBe('delivered');
+    expect(source.rows.find(r => r.id === 'logic')!.status).toBe('pending');
+    const w = await fx.p.submitReview(id, { by: 'pm', passed: true, notes: 'ok' });
+    expect(pairs(w)).toEqual([['logic', 'upstreamDelivered']]);
+    expect(source.rows.find(r => r.id === 'logic')!.status).toBe('active');
+    expect(fx.eventsOf('wake').flatMap(e => e.wakes).filter(x => x.reason === 'upstreamDelivered')).toHaveLength(1);
+    expect(source.calls.filter(c => c === 'setStatus:art:delivered')).toHaveLength(1);
+    expect(await eventCount(fx, 'reviewPassed')).toBe(1);
+  });
+
+  test('R26: failed review retried after its event failed → rounds once, one reviewFailed event, conventions once', async () => {
+    const fx = await makeProject({ approved: true, store: failingEvent('reviewFailed', 1) });
+    const { id } = await deliverArt(fx);
+    const r = { by: 'pm', passed: false, notes: 'naming', conventions: ['Use snake_case file names'] };
+    await expect(fx.p.submitReview(id, r)).rejects.toThrow('append reviewFailed failed');
+    const w = await fx.p.submitReview(id, r);
+    expect(pairs(w)).toEqual([['art', 'reviewFailed']]);
+    const b = await fx.p.board();
+    expect(b.workstreams.find(x => x.id === 'art')!.reviewRounds).toBe(1);
+    expect(b.conventions).toHaveLength(1);
+    expect(await eventCount(fx, 'reviewFailed')).toBe(1);
+  });
+
+  test('replan compares dependsOn and writeScopes as sets (host may reorder them)', async () => {
+    const source = fakeSource();
+    const fx = await startOnly({ workstreams: source });
+    const [art, audio, logic] = FIXTURE_PLAN.workstreams;
+    const plan = { ...FIXTURE_PLAN, workstreams: [{ ...art!, writeScopes: ['src/a', 'src/b'] }, audio!, logic!] };
+    const first = await fx.p.proposePlan(plan, { by: 'pm' });
+    await fx.p.approvePlan(first.proposalId, { by: 'alice' });
+    source.rows.find(r => r.id === 'art')!.writeScopes.reverse();
+    const again = await fx.p.proposePlan(plan, { by: 'pm' });
+    await expect(fx.p.approvePlan(again.proposalId, { by: 'alice' })).resolves.toEqual([]);
+  });
+
+  test('a local replan that reassigns an active workstream wakes the new owner with assigned', async () => {
+    const fx = await makeProject({ approved: true });
+    const [art, audio, logic] = FIXTURE_PLAN.workstreams;
+    const { proposalId } = await fx.p.proposePlan({ ...FIXTURE_PLAN, workstreams: [art!, { ...audio!, owner: 'pm' }, logic!] }, { by: 'pm' });
+    const w = await fx.p.approvePlan(proposalId, { by: 'alice' });
+    expect(w).toEqual([{ botId: 'pm', reason: 'assigned', detail: 'workstream audio was reassigned to you' }]);
+    expect((await fx.p.board()).workstreams.find(x => x.id === 'audio')!.owner).toBe('pm');
   });
 });

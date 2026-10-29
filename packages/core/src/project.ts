@@ -1,6 +1,6 @@
 // The project facade (design spec 4, 5.1, 6.1, 7). Orchestration only: every rule lives in the
 // modules imported below; this file sequences them, writes events and turns results into wakes.
-import { newlyReady, structuralWakes, writeScopeOverlaps } from './board/diff.js';
+import { structuralWakes, writeScopeOverlaps } from './board/diff.js';
 import { Merger, type MergeResult } from './board/merge.js';
 import { buildBrief as assembleBrief, type BriefDeps, type BriefOptions } from './brief.js';
 import { systemClock, type Clock } from './clock.js';
@@ -94,13 +94,11 @@ type Author = LedgerEntry['author'];
 const human = (id: string): Author => ({ kind: 'human', id });
 const bot = (id: string): Author => ({ kind: 'bot', id });
 const SYSTEM: Author = { kind: 'system', id: 'core' };
+/** Meta key: workstream statuses the core has acted on, for an external WorkstreamSource (R24). */
+const HOST_STATUS = 'hostStatus';
+type ReviewStep = 'status' | 'rounds' | 'conventions' | 'event';
+type ReviewMarker = { outcome: 'passed' | 'failed'; done: ReviewStep[] };
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const statusOp = (id: string, status: Workstream['status'], by: string): AppliedOp => ({
-  op: { op: 'setWorkstreamStatus', id, status },
-  by,
-  authority: 'bot',
-  touched: [id],
-});
 
 function forbidden(message: string): never {
   throw new ContextError('FORBIDDEN', message);
@@ -174,28 +172,14 @@ export function createProject(cfg: ProjectConfig): Project {
   };
 
   // ---------------------------------------------------------------------------
-  // per-project serial queue (spec 7) and the host-source snapshot
+  // per-project serial queue (spec 7) and host-source reconciliation (R24)
   // ---------------------------------------------------------------------------
 
   let chain: Promise<void> = Promise.resolve();
-  /** Last-known resolved workstreams; host changes are diffed against it (external source only). */
-  let snapshot: Workstream[] | null = null;
 
   /** Runs mutating operations one at a time; a failed one does not block the queue. */
   function serial<T>(fn: () => Promise<T>): Promise<T> {
-    const run = chain.then(async () => {
-      try {
-        return await fn();
-      } finally {
-        if (external) {
-          try {
-            snapshot = await workstreamsOf(await getBoard());
-          } catch {
-            // keep the previous snapshot; the operation's own outcome is what the caller sees
-          }
-        }
-      }
-    });
+    const run = chain.then(fn);
     chain = run.then(
       () => undefined,
       () => undefined,
@@ -203,24 +187,40 @@ export function createProject(cfg: ProjectConfig): Project {
     return run;
   }
 
-  /** Host-side status changes (spec 6.4): wake per the structural rules and activate newly ready work. */
-  async function onHostChange(): Promise<void> {
-    const before = snapshot;
-    const board = await getBoard();
-    if (!before || board.status === 'closed') return;
-    const after = await workstreamsOf(board);
-    const prev = new Map(before.map(w => [w.id, w.status]));
-    const ops = after.filter(w => prev.has(w.id) && prev.get(w.id) !== w.status).map(w => statusOp(w.id, w.status, 'host'));
-    if (ops.length === 0) return;
-    finish(structuralWakes({ version: board.version, mergedAt: clock.now(), ops }, before, after, board));
-    await activateReady(before, after);
+  type StatusMap = Record<string, Workstream['status']>;
+
+  /** Records statuses the core itself wrote to the host, so they are not mistaken for host changes. */
+  async function noteStatuses(entries: StatusMap): Promise<void> {
+    if (!external) return;
+    const map = (await store.getMeta<StatusMap>(projectId, HOST_STATUS)) ?? {};
+    await store.setMeta(projectId, HOST_STATUS, { ...map, ...entries });
+  }
+
+  /**
+   * Diffs the host's statuses against the persisted acted-on map, acts on any change (activating
+   * newly ready work, R25) and records what it saw. The first run only seeds the map.
+   */
+  async function reconcile(): Promise<void> {
+    const board = await getBoard().catch((e: unknown) => {
+      if (e instanceof ContextError && e.code === 'NOT_FOUND') return null; // not started yet
+      throw e;
+    });
+    if (!board) return;
+    const listed = await source.list(projectId);
+    const known = await store.getMeta<StatusMap>(projectId, HOST_STATUS);
+    const seen: StatusMap = Object.fromEntries(listed.map(w => [w.id, w.status]));
+    const changed = known !== null && listed.some(w => known[w.id] !== undefined && known[w.id] !== w.status);
+    // What the host reported, plus what this run wrote itself; later host changes still differ.
+    await store.setMeta(projectId, HOST_STATUS, seen);
+    if (changed && board.status !== 'closed') finish(await activateReady());
   }
 
   const unsubscribe = external
     ? source.onChange(projectId, () => {
-        serial(onHostChange).catch(() => undefined); // failures already escalate through setStatus
+        serial(reconcile).catch(() => undefined); // failures already escalate through setStatus
       })
     : () => undefined;
+  if (external) serial(reconcile).catch(() => undefined); // init: the first queued operation
 
   // ---------------------------------------------------------------------------
   // helpers
@@ -278,7 +278,8 @@ export function createProject(cfg: ProjectConfig): Project {
       bus.emit('needsHuman', { reason: `Writing status "${status}" of workstream ${id} failed: ${errText(e)}`, ref: id });
       throw e;
     }
-    if (!external) bus.emit('boardChanged', { version: (await getBoard()).version });
+    if (external) await noteStatuses({ [id]: status });
+    else bus.emit('boardChanged', { version: (await getBoard()).version });
   }
 
   function checkOverlaps(ws: Workstream[]): void {
@@ -290,11 +291,27 @@ export function createProject(cfg: ProjectConfig): Project {
     }
   }
 
-  /** Activates workstreams whose dependencies were all just delivered. */
-  async function activateReady(before: Workstream[], after: Workstream[]): Promise<void> {
-    const ready = newlyReady(before, after);
-    for (const id of ready) await setStatus(id, 'active');
-    checkOverlaps(ready.length > 0 ? await workstreamsOf(await getBoard()) : after);
+  /**
+   * R25: derived from state, not from a before/after diff, so a retry after a partial failure
+   * still finishes the job. Every pending workstream of the approved plan whose dependencies are
+   * all delivered becomes active, and its owner is woken with upstreamDelivered.
+   */
+  async function activateReady(): Promise<Wake[]> {
+    const ws = await workstreamsOf(await getBoard());
+    const approvedId = await store.getMeta<string>(projectId, 'approvedPlan');
+    const approved = approvedId ? await store.getPlanProposal(approvedId) : null;
+    const planned = new Set(approved?.workstreams.map(w => w.id) ?? []);
+    const delivered = new Set(ws.filter(w => w.status === 'delivered').map(w => w.id));
+    const ready = ws.filter(
+      w => w.status === 'pending' && planned.has(w.id) && w.dependsOn.length > 0 && w.dependsOn.every(d => delivered.has(d)),
+    );
+    const wakes: Wake[] = [];
+    for (const w of ready) {
+      await setStatus(w.id, 'active');
+      wakes.push({ botId: w.owner, reason: 'upstreamDelivered', detail: `dependencies of ${w.id} delivered` });
+    }
+    checkOverlaps(ready.length > 0 ? await workstreamsOf(await getBoard()) : ws);
+    return wakes;
   }
 
   function armLeadTimers(pending: PendingProposal[], lead: string): void {
@@ -328,8 +345,7 @@ export function createProject(cfg: ProjectConfig): Project {
       }
       const board = await getBoard();
       const after = await workstreamsOf(board);
-      wakes.push(...structuralWakes(r.change, before, after, board));
-      await activateReady(before, after);
+      wakes.push(...structuralWakes(r.change, before, after, board), ...(await activateReady()));
     }
     for (const p of r.pending) {
       if (p.needs === 'lead') {
@@ -386,7 +402,10 @@ export function createProject(cfg: ProjectConfig): Project {
         reasons: diff.hostFieldChanges,
       });
     }
-    if (diff.created.length > 0) await hostWrite(() => source.create(projectId, diff.created));
+    if (diff.created.length > 0) {
+      await hostWrite(() => source.create(projectId, diff.created));
+      await noteStatuses(Object.fromEntries(diff.created.map(w => [w.id, 'pending' as const])));
+    }
 
     const { change } = await patchBoard(b => {
       for (const w of plan.workstreams) {
@@ -415,7 +434,8 @@ export function createProject(cfg: ProjectConfig): Project {
         (w.status === 'pending' || (w.status === 'active' && !known.has(w.id))),
     );
     for (const w of ready) if (w.status === 'pending') await setStatus(w.id, 'active');
-    await store.savePlanProposal({ ...proposal, status: 'approved' });
+    // The proposal records what was approved (edits included).
+    await store.savePlanProposal({ ...proposal, ...plan, status: 'approved' });
     await store.setMeta(projectId, 'approvedPlan', id);
     await log(human(o.by), { kind: 'planApproved', proposalId: id });
 
@@ -428,6 +448,11 @@ export function createProject(cfg: ProjectConfig): Project {
     for (const { id: wsId, fields } of diff.reshaped) {
       const owner = ownerOf(wsId);
       if (owner) wakes.push({ botId: owner, reason: 'contractChanged', detail: `${fields.join(' and ')} of ${wsId} changed` });
+    }
+    for (const { id: wsId, owner } of diff.reassigned) {
+      if (afterWs.find(x => x.id === wsId)?.status === 'active') {
+        wakes.push({ botId: owner, reason: 'assigned', detail: `workstream ${wsId} was reassigned to you` });
+      }
     }
     const existed = new Set(before.map(w => w.id));
     for (const [what, list] of [['added', diff.added], ['dropped', diff.dropped]] as const) {
@@ -486,33 +511,45 @@ export function createProject(cfg: ProjectConfig): Project {
     }
   }
 
-  /** The status write comes first so that a retry after a later failure does not repeat it. */
+  /**
+   * R26: idempotent per (deliverable, outcome). Each side effect records a marker in meta
+   * `review:<deliverableId>` and is skipped when a retry finds it done; activation is derived from
+   * state (R25), so it completes on a retry too.
+   */
   async function review(
     deliverableId: string,
     r: { by: string; passed: boolean; notes: string; conventions?: string[] },
   ): Promise<Wake[]> {
     const board = await openBoard();
     if (r.by !== board.lead) forbidden(`Only the lead (${board.lead}) can review deliverables`);
-    const before = await workstreamsOf(board);
-    const { w } = findDeliverable(before, deliverableId);
+    const { w } = findDeliverable(await workstreamsOf(board), deliverableId);
+    const outcome = r.passed ? 'passed' : 'failed';
+    const key = `review:${deliverableId}`;
+    const saved = await store.getMeta<ReviewMarker>(projectId, key);
+    const marker: ReviewMarker = saved?.outcome === outcome ? saved : { outcome, done: [] };
+    const step = async (name: ReviewStep, fn: () => Promise<void>) => {
+      if (marker.done.includes(name)) return;
+      await fn();
+      marker.done.push(name);
+      await store.setMeta(projectId, key, marker);
+    };
+
     const wakes: Wake[] = [];
     if (r.passed) {
-      await setStatus(w.id, 'delivered');
-      const after = await getBoard();
-      const afterWs = await workstreamsOf(after);
-      const change: BoardChange = { version: after.version, mergedAt: clock.now(), ops: [statusOp(w.id, 'delivered', r.by)] };
-      wakes.push(...structuralWakes(change, before, afterWs, after));
-      await activateReady(before, afterWs);
+      await step('status', () => setStatus(w.id, 'delivered'));
+      wakes.push(...(await activateReady()));
     } else {
-      const { board: next } = await patchBoard(b => {
-        const row = b.workstreams.find(x => x.id === w.id);
-        if (row) row.reviewRounds += 1;
+      await step('rounds', async () => {
+        const { board: next } = await patchBoard(b => {
+          const row = b.workstreams.find(x => x.id === w.id);
+          if (row) row.reviewRounds += 1;
+        });
+        const rounds = next.workstreams.find(x => x.id === w.id)?.reviewRounds ?? 0;
+        if (rounds > options.maxReviewRounds) {
+          bus.emit('needsHuman', { reason: `Workstream ${w.id} failed review ${rounds} times`, ref: w.id });
+        }
       });
-      const rounds = next.workstreams.find(x => x.id === w.id)?.reviewRounds ?? 0;
       wakes.push({ botId: w.owner, reason: 'reviewFailed', detail: `deliverable ${deliverableId} failed review: ${r.notes}` });
-      if (rounds > options.maxReviewRounds) {
-        bus.emit('needsHuman', { reason: `Workstream ${w.id} failed review ${rounds} times`, ref: w.id });
-      }
     }
     if (r.conventions && r.conventions.length > 0) {
       const ops: BoardOp[] = r.conventions.map(text => ({
@@ -520,10 +557,15 @@ export function createProject(cfg: ProjectConfig): Project {
         section: 'conventions',
         item: { text, source: { entryIds: [], by: board.lead } },
       }));
-      await store.enqueueProposal({ id: newId('prop'), projectId, baseVersion: board.version, by: board.lead, ops });
+      // Marked once queued: the merger either commits a queued proposal or puts it back, never twice.
+      await step('conventions', () =>
+        store.enqueueProposal({ id: newId('prop'), projectId, baseVersion: board.version, by: board.lead, ops }),
+      );
       wakes.push(...(await runMerge()));
     }
-    await log(bot(r.by), { kind: r.passed ? 'reviewPassed' : 'reviewFailed', deliverableId, notes: r.notes });
+    await step('event', async () => {
+      await log(bot(r.by), { kind: r.passed ? 'reviewPassed' : 'reviewFailed', deliverableId, notes: r.notes });
+    });
     return wakes;
   }
 
@@ -610,7 +652,8 @@ export function createProject(cfg: ProjectConfig): Project {
         return finish([{ botId: board.lead, reason: 'needsLead', detail: `plan ${id} was rejected: ${o.feedback}` }]);
       }),
 
-    buildBrief: (botId, o) => assembleBrief(briefDeps, botId, o),
+    // A non-peek brief saves the workspace (seen items, pointers), so it is queued like other writes.
+    buildBrief: (botId, o) => (o.peek ? assembleBrief(briefDeps, botId, o) : serial(() => assembleBrief(briefDeps, botId, o))),
 
     submit: (botId, s) => serial(async () => finish(await submit(botId, s))),
 
@@ -665,38 +708,39 @@ export function createProject(cfg: ProjectConfig): Project {
         return store.append({ ...toLedgerEntry(c, parent), id: newId('e'), projectId, createdAt: clock.now() });
       }),
 
-    async route(entry) {
-      const board = await openBoard();
-      const ws = await workstreamsOf(board);
-      const all = await ledger();
-      const chats = all.filter(e => e.body.type === 'chat' && e.seq < entry.seq);
-      // R16: bot turns = bot chat entries after the last human chat entry and before this one.
-      const afterSeq = chats.findLast(e => e.author.kind === 'human')?.seq ?? 0;
-      const botTurnsSinceHuman = chats.filter(e => e.seq > afterSeq && e.author.kind === 'bot').length;
-      const replyTo = entry.body.type === 'chat' ? entry.body.replyTo : undefined;
-      const members = botMembers(board, ws);
-      const r = await routeChat(entry, {
-        lead: board.lead,
-        members: new Set(members),
-        workstreams: ws,
-        botTurnsSinceHuman,
-        parent: replyTo === undefined ? null : (all.find(e => e.id === replyTo) ?? null),
-        options,
-        route: cfg.models?.route,
-        routeInput: async () => ({
-          boardPublic: renderBoardPublic(board, ws),
-          recent: chats.slice(-options.recentForRouter),
-          candidates: members.map(botId => ({ botId, workstreams: ws.filter(w => w.owner === botId).map(w => w.id) })),
-          message: entry,
-        }),
-      });
-      // Once per human message, persisted so a restart does not repeat it.
-      if (r.limitReached && (await store.getMeta<number>(projectId, 'wakeLimitReached')) !== afterSeq) {
-        await store.setMeta(projectId, 'wakeLimitReached', afterSeq);
-        bus.emit('wakeLimitReached', { afterSeq });
-      }
-      return finish(r.wakes);
-    },
+    route: entry =>
+      serial(async () => {
+        const board = await openBoard();
+        const ws = await workstreamsOf(board);
+        const all = await ledger();
+        const chats = all.filter(e => e.body.type === 'chat' && e.seq < entry.seq);
+        // R16: bot turns = bot chat entries after the last human chat entry and before this one.
+        const afterSeq = chats.findLast(e => e.author.kind === 'human')?.seq ?? 0;
+        const botTurnsSinceHuman = chats.filter(e => e.seq > afterSeq && e.author.kind === 'bot').length;
+        const replyTo = entry.body.type === 'chat' ? entry.body.replyTo : undefined;
+        const members = botMembers(board, ws);
+        const r = await routeChat(entry, {
+          lead: board.lead,
+          members: new Set(members),
+          workstreams: ws,
+          botTurnsSinceHuman,
+          parent: replyTo === undefined ? null : (all.find(e => e.id === replyTo) ?? null),
+          options,
+          route: cfg.models?.route,
+          routeInput: async () => ({
+            boardPublic: renderBoardPublic(board, ws),
+            recent: chats.slice(-options.recentForRouter),
+            candidates: members.map(botId => ({ botId, workstreams: ws.filter(w => w.owner === botId).map(w => w.id) })),
+            message: entry,
+          }),
+        });
+        // Once per human message, persisted so a restart does not repeat it.
+        if (r.limitReached && (await store.getMeta<number>(projectId, 'wakeLimitReached')) !== afterSeq) {
+          await store.setMeta(projectId, 'wakeLimitReached', afterSeq);
+          bus.emit('wakeLimitReached', { afterSeq });
+        }
+        return finish(r.wakes);
+      }),
 
     merge: () =>
       serial(async () => {

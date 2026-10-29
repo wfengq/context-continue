@@ -15,6 +15,8 @@ export interface PlanChanges {
   reshaped: { id: string; fields: ('brief' | 'dependsOn')[] }[];
   /** One line per host-owned field the plan changes on an existing workstream (R22). */
   hostFieldChanges: string[];
+  /** Existing workstreams the plan gives to another owner. */
+  reassigned: { id: string; owner: string }[];
   /** The contract list after approval: unchanged ones keep their version, changed ones get version + 1. */
   contracts: Contract[];
   updated: Contract[];
@@ -22,11 +24,26 @@ export interface PlanChanges {
   dropped: Contract[];
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** Strings compare exactly; lists (dependsOn, writeScopes) compare as sets, since hosts may reorder them. */
+function same(a: string | string[], b: string | string[]): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b)) return a === b;
+  const x = new Set(a);
+  const y = new Set(b);
+  return x.size === y.size && [...x].every(v => y.has(v));
+}
 
 export function diffPlan(plan: ApprovedPlan, existing: Workstream[], current: Contract[]): PlanChanges {
   const byId = new Map(existing.map(w => [w.id, w]));
-  const out: PlanChanges = { created: [], reshaped: [], hostFieldChanges: [], contracts: [], updated: [], added: [], dropped: [] };
+  const out: PlanChanges = {
+    created: [],
+    reshaped: [],
+    hostFieldChanges: [],
+    reassigned: [],
+    contracts: [],
+    updated: [],
+    added: [],
+    dropped: [],
+  };
 
   for (const w of plan.workstreams) {
     const old = byId.get(w.id);
@@ -37,6 +54,7 @@ export function diffPlan(plan: ApprovedPlan, existing: Workstream[], current: Co
     for (const f of HOST_FIELDS) {
       if (!same(old[f], w[f])) out.hostFieldChanges.push(`Workstream "${w.id}": ${f} cannot be changed by a plan; change it in the host`);
     }
+    if (old.owner !== w.owner) out.reassigned.push({ id: w.id, owner: w.owner });
     const fields = (['brief', 'dependsOn'] as const).filter(f => !same(old[f], w[f]));
     if (fields.length > 0) out.reshaped.push({ id: w.id, fields: [...fields] });
   }
