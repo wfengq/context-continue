@@ -446,7 +446,8 @@ describe('chat', () => {
   });
 
   test('R32: bot requests with no human root keep waking their targets; the hop cap still applies per chain', async () => {
-    const fx = await makeProject({ approved: true });
+    // R39c: un-rooted chat is still bounded by the backstop; kept above the 13 messages sent here
+    const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 20 } });
     const send = (from: string, to: string, text: string, replyTo?: string) =>
       fx.p.ingest({ author: { kind: 'bot', id: from }, text, mentions: [to], act: 'request', ...(replyTo && { replyTo }) });
     for (let i = 1; i <= 8; i++) {
@@ -1240,5 +1241,62 @@ describe('final review fixes', () => {
     // its own workstream and the lead are fine
     await expect(fx.p.submit('audio', { type: 'proposal', ops: [op] })).resolves.toBeDefined();
     await expect(fx.p.submit('pm', { type: 'proposal', ops: [{ ...op, id: 'art' }] })).resolves.toBeDefined();
+  });
+});
+
+describe('R39: bounded bot-to-bot chat', () => {
+  const PROGRESS = new Set(['planApproved', 'deliverableSubmitted', 'reviewPassed', 'reviewFailed', 'blocked', 'boardMerged']);
+  const lastProgressSeq = async (fx: FacadeProject) =>
+    (await fx.store.read(fx.projectId, 1))
+      .filter(e => e.body.type === 'event' && PROGRESS.has(e.body.event.kind))
+      .at(-1)!.seq;
+
+  test('R39c: un-rooted bot requests stop at maxBotTurnsPerHumanMessage, once per progress point; a merge resets the count', async () => {
+    const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 2, maxHops: 10 } });
+    const ask = async (text: string) =>
+      fx.p.route(await fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text, mentions: ['logic'], act: 'request' }));
+    const first = await lastProgressSeq(fx);
+    expect(pairs(await ask('1'))).toEqual([['logic', 'mentioned']]);
+    expect(pairs(await ask('2'))).toEqual([['logic', 'mentioned']]);
+    expect(await ask('3')).toEqual([]);
+    expect(await ask('4')).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached')).toEqual([{ afterSeq: first }]);
+
+    // structural progress (a merged board proposal) starts a new allowance
+    await fx.p.submit('art', { type: 'proposal', ops: [fact(['art'])] });
+    const merged = await lastProgressSeq(fx);
+    expect(merged).toBeGreaterThan(first);
+    expect(pairs(await ask('5'))).toEqual([['logic', 'mentioned']]);
+    expect(pairs(await ask('6'))).toEqual([['logic', 'mentioned']]);
+    expect(await ask('7')).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached')).toEqual([{ afterSeq: first }, { afterSeq: merged }]);
+
+    // the dedupe is persisted: a restarted project does not emit it again for the same progress point
+    fx.p.dispose();
+    const p2 = createProject({
+      projectId: fx.projectId,
+      store: fx.store,
+      employees: createEmployeeRegistry({ store: fx.store }),
+      clock: fx.clock,
+      options: { maxBotTurnsPerHumanMessage: 2, maxHops: 10 },
+    });
+    const again: unknown[] = [];
+    p2.on('wakeLimitReached', e => again.push(e));
+    const e8 = await p2.ingest({ author: { kind: 'bot', id: 'art' }, text: '8', mentions: ['logic'], act: 'request' });
+    expect(await p2.route(e8)).toEqual([]);
+    expect(again).toEqual([]);
+    p2.dispose();
+  });
+
+  test('R39c: a human chat message is a progress point too', async () => {
+    const fx = await makeProject({ approved: true, options: { maxBotTurnsPerHumanMessage: 1 } });
+    const ask = async () =>
+      fx.p.route(await fx.p.ingest({ author: { kind: 'bot', id: 'art' }, text: 'x', mentions: ['logic'], act: 'request' }));
+    expect(await ask()).toHaveLength(1);
+    expect(await ask()).toEqual([]);
+    const h = await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'carry on' });
+    expect(await ask()).toHaveLength(1);
+    expect(await ask()).toEqual([]);
+    expect(fx.eventsOf('wakeLimitReached').at(-1)).toEqual({ afterSeq: h.seq });
   });
 });

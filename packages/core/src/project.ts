@@ -20,7 +20,7 @@ import { validatePlan, type PlanInput } from './plan/validate.js';
 import { addMemories, appendNote, type PrivateDeps } from './private.js';
 import { renderBoardPublic } from './render.js';
 import { retryingStore, withRetry } from './retry.js';
-import { humanChain, routeChat, toLedgerEntry, type RouteInput } from './route.js';
+import { humanChain, routeChat, toLedgerEntry, unrootedSinceProgress, type RouteInput } from './route.js';
 import type { Store } from './store/store.js';
 import { defaultCountTokens } from './tokens.js';
 import { createToolDispatcher, proposalOutcome, toolDefinitions, type ProposalOutcome } from './tools.js';
@@ -108,6 +108,8 @@ const bot = (id: string): Author => ({ kind: 'bot', id });
 const SYSTEM: Author = { kind: 'system', id: 'core' };
 /** Meta key: workstream statuses the core has acted on, for an external WorkstreamSource (R24). */
 const HOST_STATUS = 'hostStatus';
+/** Meta key (R39a): id of the chat entry that last woke `botId` through `route`. */
+const lastWakeKey = (botId: string) => `lastWakeEntry:${botId}`;
 type ReviewStep = 'status' | 'rounds' | 'conventions' | 'event';
 type ReviewMarker = { done: ReviewStep[] };
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -898,6 +900,8 @@ export function createProject(cfg: ProjectConfig): Project {
         const chats = all.filter(e => e.body.type === 'chat' && e.seq < entry.seq);
         // R32: only bot chat descending from a human message counts against the per-message cap.
         const chain = humanChain(entry, all);
+        // R39c: un-rooted bot chat is bounded since the latest human message or structural event.
+        const loose = unrootedSinceProgress(entry, all);
         const replyTo = entry.body.type === 'chat' ? entry.body.replyTo : undefined;
         const members = botMembers(board, ws);
         const r = await routeChat(entry, {
@@ -905,6 +909,7 @@ export function createProject(cfg: ProjectConfig): Project {
           members: new Set(members),
           workstreams: ws,
           botTurnsUnderHuman: chain.turns,
+          unrootedBotTurns: loose.turns,
           parent: replyTo === undefined ? null : (all.find(e => e.id === replyTo) ?? null),
           options,
           route: cfg.models?.route,
@@ -915,13 +920,20 @@ export function createProject(cfg: ProjectConfig): Project {
             message: entry,
           }),
         });
-        // Once per human message, persisted so a restart does not repeat it.
-        if (r.limitReached && chain.root) {
-          const key = `wakeLimitReached:${chain.root.id}`;
+        // Once per human message (R39c: per progress point for un-rooted chat), persisted so a restart
+        // does not repeat it.
+        if (r.limitReached) {
+          const point = chain.root ?? loose.progress;
+          const key = chain.root ? `wakeLimitReached:${chain.root.id}` : `wakeLimitReached:unrooted:${loose.progress?.id ?? 'start'}`;
           if (!(await store.getMeta<boolean>(projectId, key))) {
             await store.setMeta(projectId, key, true);
-            bus.emit('wakeLimitReached', { afterSeq: chain.root.seq });
+            bus.emit('wakeLimitReached', { afterSeq: point?.seq ?? 0 });
           }
+        }
+        // R39a: remember which entry woke each bot so its reply threads onto it by default. A needsLead
+        // escalation is not recorded: the lead is asked to decide, not to continue the capped chain.
+        for (const w of r.wakes) {
+          if (w.reason !== 'needsLead') await store.setMeta(projectId, lastWakeKey(w.botId), entry.id);
         }
         return finish(r.wakes);
       }),
@@ -953,6 +965,14 @@ export function createProject(cfg: ProjectConfig): Project {
     ...project,
     store,
     projectId,
+    defaultReplyTo: async botId => {
+      const id = await store.getMeta<string>(projectId, lastWakeKey(botId));
+      if (id === null) return undefined;
+      const all = await ledger();
+      const woke = all.find(e => e.id === id);
+      const own = all.filter(e => e.body.type === 'chat' && e.author.kind === 'bot' && e.author.id === botId).at(-1);
+      return woke && (!own || woke.seq > own.seq) ? woke.id : undefined;
+    },
     propose,
     unblock: (botId, workstreamId) => serial(async () => finish(await unblock(botId, workstreamId))),
     member: async botId => {

@@ -64,6 +64,11 @@ export interface ToolHost
    * the call counts against `maxPromotionsPerTurn` and fails with FORBIDDEN beyond it.
    */
   propose(botId: string, ops: BoardOp[], promotion: boolean): Promise<ProposalOutcome>;
+  /**
+   * R39a: the chat entry that last woke `botId` through `route`, when it is newer than the bot's own
+   * latest chat entry; `sendMessage` without `replyTo` replies to it.
+   */
+  defaultReplyTo(botId: string): Promise<string | undefined>;
   /** R35: the lead returns a blocked workstream to `pending`; it becomes active once its dependencies are delivered. */
   unblock(botId: string, workstreamId: string): Promise<Wake[]>;
 }
@@ -273,15 +278,19 @@ const TOOLS: Tool[] = [
       text: str,
       act: z.enum(['request', 'query', 'propose', 'inform', 'agree', 'refuse', 'done']),
       mentions: strList.optional().describe('Ids of the bots addressed.'),
-      replyTo: str.optional().describe('Id of the ledger entry this replies to.'),
+      replyTo: str
+        .optional()
+        .describe('Id of the ledger entry this replies to. Defaults to the message that woke you, if you have not posted since.'),
     }),
     run: async (c, a) => {
+      // R39a: an explicit replyTo wins; otherwise thread onto the message that woke this bot.
+      const replyTo = a.replyTo ?? (await c.host.defaultReplyTo(c.botId));
       const entry = await c.host.ingest({
         author: { kind: 'bot', id: c.botId },
         text: a.text,
         act: a.act,
         ...(a.mentions && { mentions: a.mentions }),
-        ...(a.replyTo && { replyTo: a.replyTo }),
+        ...(replyTo && { replyTo }),
       });
       return { entryId: entry.id, wakes: await c.host.route(entry) };
     },

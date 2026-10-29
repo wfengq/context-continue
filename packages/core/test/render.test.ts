@@ -320,10 +320,16 @@ describe('renderDelta', () => {
   test('chat, event and change lines', () => {
     const t = renderDelta([chat(4, 'alice', 'hi there'), ev], [change]);
     expect(t.startsWith('# Since you last looked\n')).toBe(true);
-    expect(t).toContain('- #4 alice: hi there');
+    expect(t).toContain('- #4 alice (id: e4): hi there');
     expect(t).toContain('- #5 [blocked] {"workstreamId":"art","reason":"no palette"}');
     expect(t).toContain('- board: setGoal by alice (goal, k1)');
     expect(t.indexOf('#5')).toBeLessThan(t.indexOf('- board:'));
+  });
+  test('R39b: chat lines show the entry id so bots can reply to it; other renderers keep the short form', () => {
+    expect(renderDelta([chat(7, 'art', 'size?', 'bot')], [])).toContain('- #7 art (id: e7): size?');
+    expect(renderPlanning({ board, roster: [], humanMessages: [chat(1, 'alice', 'Make a platformer')] })).toContain(
+      '- #1 alice: Make a platformer',
+    );
   });
   test('empty says nothing yet', () => {
     expect(renderDelta([], [])).toBe('# Since you last looked\n\n(nothing yet)');
@@ -331,7 +337,7 @@ describe('renderDelta', () => {
   test('omitted count comes first, singular and plural', () => {
     expect(renderDelta([], [], 1)).toBe('# Since you last looked\n\n- (1 older item omitted to fit the token budget)');
     const t = renderDelta([chat(4, 'alice', 'hi there')], [change], 3);
-    expect(t).toContain('- (3 older items omitted to fit the token budget)\n- #4 alice: hi there');
+    expect(t).toContain('- (3 older items omitted to fit the token budget)\n- #4 alice (id: e4): hi there');
   });
 });
 

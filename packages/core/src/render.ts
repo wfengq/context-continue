@@ -95,6 +95,12 @@ function entryLine(e: LedgerEntry): string {
   return `- #${e.seq} [${kind}] ${JSON.stringify(rest)}`;
 }
 
+/** R39b: delta chat lines carry the entry id, so a bot can pass it to `sendMessage.replyTo`. */
+function deltaLine(e: LedgerEntry): string {
+  if (e.body.type === 'chat') return `- #${e.seq} ${e.author.id} (id: ${e.id}): ${e.body.text}`;
+  return entryLine(e);
+}
+
 /** Splits notes into paragraphs at blank lines (LF or CRLF, whitespace-only lines count as blank); trimmed, empties dropped. */
 export function splitParagraphs(notes: string): string[] {
   return notes
@@ -244,7 +250,7 @@ export function renderDelta(entries: LedgerEntry[], changes: AppliedOp[], omitte
     omitted > 0 ? [`- (${omitted} older ${omitted === 1 ? 'item' : 'items'} omitted to fit the token budget)`] : [];
   return section('# Since you last looked', [
     ...note,
-    ...entries.map(entryLine),
+    ...entries.map(deltaLine),
     ...changes.map((c) => `- board: ${c.op.op} by ${c.by} (${c.touched.join(', ')})`),
   ]);
 }

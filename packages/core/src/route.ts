@@ -20,6 +20,11 @@ export interface RouteContext {
    * descends from through `replyTo`; null when its chain has no human root (only maxHops applies).
    */
   botTurnsUnderHuman: number | null;
+  /**
+   * R39c: bot chat entries with no human root since the latest progress point (see
+   * `unrootedSinceProgress`); the backstop for an entry whose `botTurnsUnderHuman` is null.
+   */
+  unrootedBotTurns: number;
   parent: LedgerEntry | null;
   options: Required<Options>;
   route?: (i: RouteInput) => Promise<string[]>;
@@ -88,18 +93,11 @@ function addressed(body: ChatBody, ctx: RouteContext): Wake[] {
   return wakes;
 }
 
-/**
- * R32: the nearest human chat ancestor of `entry` along its `replyTo` chain (the entry itself when it
- * is human chat), and how many bot chat entries before `entry` descend from that same human message.
- * `turns` is null when the chain has no human root.
- */
-export function humanChain(
-  entry: LedgerEntry,
-  ledger: LedgerEntry[],
-): { root: LedgerEntry; turns: number } | { root: null; turns: null } {
+/** R32: resolves the nearest human chat ancestor of entries along their `replyTo` chains (memoised). */
+function chainRoots(ledger: LedgerEntry[]): (e: LedgerEntry) => LedgerEntry | null {
   const byId = new Map(ledger.map((e) => [e.id, e]));
   const roots = new Map<string, LedgerEntry | null>();
-  const rootOf = (start: LedgerEntry): LedgerEntry | null => {
+  return (start) => {
     const path: LedgerEntry[] = [];
     let cur: LedgerEntry | undefined = start;
     let found: LedgerEntry | null = null;
@@ -123,12 +121,63 @@ export function humanChain(
     for (const e of path) roots.set(e.id, found);
     return found;
   };
+}
+
+/**
+ * R32: the nearest human chat ancestor of `entry` along its `replyTo` chain (the entry itself when it
+ * is human chat), and how many bot chat entries before `entry` descend from that same human message.
+ * `turns` is null when the chain has no human root.
+ */
+export function humanChain(
+  entry: LedgerEntry,
+  ledger: LedgerEntry[],
+): { root: LedgerEntry; turns: number } | { root: null; turns: null } {
+  const rootOf = chainRoots(ledger);
   const root = rootOf(entry);
   if (!root) return { root: null, turns: null };
   const turns = ledger.filter(
     (e) => e.seq < entry.seq && e.author.kind === 'bot' && chatBody(e) !== null && rootOf(e)?.id === root.id,
   ).length;
   return { root, turns };
+}
+
+/** R39c: ledger events that count as structural progress and reset the un-rooted bot chat backstop. */
+const PROGRESS_EVENTS: ReadonlySet<string> = new Set([
+  'planApproved',
+  'deliverableSubmitted',
+  'reviewPassed',
+  'reviewFailed',
+  'blocked',
+  'boardMerged',
+]);
+
+function isProgress(e: LedgerEntry): boolean {
+  if (e.body.type === 'event') return PROGRESS_EVENTS.has(e.body.event.kind);
+  return e.author.kind === 'human';
+}
+
+/**
+ * R39c: the latest progress point before `entry` (a human chat message or a structural event; null
+ * when there is none) and how many bot chat entries with no human root lie between it and `entry`.
+ */
+export function unrootedSinceProgress(
+  entry: LedgerEntry,
+  ledger: LedgerEntry[],
+): { progress: LedgerEntry | null; turns: number } {
+  const before = ledger.filter((e) => e.seq < entry.seq).sort((a, b) => a.seq - b.seq);
+  let progress: LedgerEntry | null = null;
+  for (let i = before.length - 1; i >= 0; i--) {
+    if (isProgress(before[i]!)) {
+      progress = before[i]!;
+      break;
+    }
+  }
+  const from = progress?.seq ?? 0;
+  const rootOf = chainRoots(ledger);
+  const turns = before.filter(
+    (e) => e.seq > from && e.author.kind === 'bot' && chatBody(e) !== null && rootOf(e) === null,
+  ).length;
+  return { progress, turns };
 }
 
 function dedupe(wakes: Wake[]): Wake[] {
@@ -163,8 +212,10 @@ export async function routeChat(
 
   if (entry.author.kind === 'bot') {
     const wakes = botWakes(entry, body, ctx);
-    // R32: the cap only stops an entry that would otherwise have woken someone.
-    const capped = ctx.botTurnsUnderHuman !== null && ctx.botTurnsUnderHuman >= ctx.options.maxBotTurnsPerHumanMessage;
+    // R32: the cap only stops an entry that would otherwise have woken someone. R39c: un-rooted
+    // chat has the same limit, counted since the latest progress point.
+    const turns = ctx.botTurnsUnderHuman ?? ctx.unrootedBotTurns;
+    const capped = turns >= ctx.options.maxBotTurnsPerHumanMessage;
     if (capped && wakes.length > 0) return { wakes: [], limitReached: true };
     return { wakes, limitReached: false };
   }

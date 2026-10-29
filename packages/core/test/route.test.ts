@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { DEFAULT_OPTIONS } from '../src/options.js';
-import { humanChain, matchWorkstreams, routeChat, toLedgerEntry, type RouteContext, type RouteInput } from '../src/route.js';
+import { humanChain, matchWorkstreams, routeChat, toLedgerEntry, unrootedSinceProgress, type RouteContext, type RouteInput } from '../src/route.js';
 import type { ChatInput, LedgerEntry, SpeechAct, Workstream } from '../src/types.js';
 
 const ws = (id: string, title: string, over: Partial<Workstream> = {}): Workstream => ({
@@ -45,6 +45,7 @@ async function route(entry: LedgerEntry, over: Partial<RouteContext> = {}) {
     members: new Set(['pm', 'art', 'logic']),
     workstreams: [ws('ui', 'UI', { owner: 'art' }), ws('sfx', '音效', { owner: 'logic' })],
     botTurnsUnderHuman: 0,
+    unrootedBotTurns: 0,
     parent: null,
     options: DEFAULT_OPTIONS,
     routeInput: async () => input,
@@ -220,6 +221,18 @@ describe('routeChat: bot messages', () => {
     });
   });
 
+  test('R39c: un-rooted bot chat stops at the backstop, only for an entry that would have woken someone', async () => {
+    const msg = () => botMsg({ act: 'request', mentions: ['logic'] });
+    expect(await route(msg(), { botTurnsUnderHuman: null, unrootedBotTurns: 6 })).toEqual({ wakes: [], limitReached: true });
+    expect((await route(msg(), { botTurnsUnderHuman: null, unrootedBotTurns: 5 })).wakes).toHaveLength(1);
+    expect(await route(botMsg({ act: 'inform', mentions: ['logic'] }), { botTurnsUnderHuman: null, unrootedBotTurns: 6 })).toEqual({
+      wakes: [],
+      limitReached: false,
+    });
+    // a human-rooted entry is governed by its own cap, not by the backstop
+    expect((await route(msg(), { botTurnsUnderHuman: 0, unrootedBotTurns: 99 })).wakes).toHaveLength(1);
+  });
+
   test('below the wake limit wakes still happen', async () => {
     const r = await route(botMsg({ act: 'request', mentions: ['logic'] }), { botTurnsUnderHuman: 5 });
     expect(r.limitReached).toBe(false);
@@ -309,5 +322,42 @@ describe('humanChain (R32)', () => {
     expect(humanChain(looseReply, all)).toEqual({ root: null, turns: null });
     expect(humanChain(b3, all)).toEqual({ root: h2, turns: 0 }); // a human reply starts a new chain
     expect(humanChain(h, all)).toEqual({ root: h, turns: 0 });
+  });
+});
+
+describe('unrootedSinceProgress (R39c)', () => {
+  const event = (kind: 'planApproved' | 'boardMerged' | 'archived'): LedgerEntry => {
+    const base = botMsg();
+    const ev =
+      kind === 'planApproved'
+        ? { kind, proposalId: 'x' }
+        : kind === 'boardMerged'
+          ? { kind, version: 2 }
+          : { kind, what: 'w', ref: 'r' };
+    return { ...base, author: { kind: 'system', id: 'core' }, body: { type: 'event', event: ev } as LedgerEntry['body'] };
+  };
+
+  test('counts earlier un-rooted bot chat since the latest human chat or structural event', () => {
+    const plan = event('planApproved');
+    const a = botMsg();
+    const h = humanMsg('go');
+    const rooted = botMsg({ replyTo: h.id, hops: 1 });
+    const b = botMsg();
+    const bReply = botMsg({ replyTo: b.id, hops: 1 });
+    const noise = event('archived'); // not a progress point
+    const next = botMsg();
+    const all = [plan, a, h, rooted, b, bReply, noise, next];
+    expect(unrootedSinceProgress(next, all)).toEqual({ progress: h, turns: 2 }); // b, bReply
+    expect(unrootedSinceProgress(a, all)).toEqual({ progress: plan, turns: 0 });
+
+    const merged = event('boardMerged');
+    const after = botMsg();
+    expect(unrootedSinceProgress(after, [...all, merged, after])).toEqual({ progress: merged, turns: 0 });
+  });
+
+  test('no progress point counts from the start', () => {
+    const a = botMsg();
+    const b = botMsg();
+    expect(unrootedSinceProgress(b, [a, b])).toEqual({ progress: null, turns: 1 });
   });
 });

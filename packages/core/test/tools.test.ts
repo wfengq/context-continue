@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { ContextError } from '../src/errors.js';
 import { proposalOutcome, toolDefinitions } from '../src/tools.js';
+import { createEmployeeRegistry } from '../src/employees.js';
+import { createProject } from '../src/project.js';
 import { FIXTURE_PLAN, makeProject, type FacadeProject } from './helpers.js';
 
 const MEMBER_TOOLS = [
@@ -475,5 +477,59 @@ describe('lead coordination tools (R33, R35)', () => {
     };
     expect(review.wakes).toEqual(expect.arrayContaining([expect.objectContaining({ botId: 'logic', reason: 'upstreamDelivered' })]));
     expect((await fx.p.board()).workstreams.find(w => w.id === 'logic')!.status).toBe('active');
+  });
+});
+
+describe('sendMessage default threading (R39a)', () => {
+  type Sent = { entryId: string; wakes: { botId: string; reason: string }[] };
+  const send = async (fx: FacadeProject, botId: string, args: Record<string, unknown>) =>
+    (await fx.p.callTool(botId, 'sendMessage', args)) as Sent;
+  const entryOf = async (fx: FacadeProject, id: string) => (await fx.store.read(fx.projectId, 1)).find(e => e.id === id)!;
+
+  test('two bots ping-ponging requests without replyTo are threaded and stop at maxHops with needsLead', async () => {
+    const fx = await approved();
+    let prev = await send(fx, 'art', { text: 'can you check the tiles?', act: 'request', mentions: ['logic'] });
+    expect(prev.wakes.map(w => [w.botId, w.reason])).toEqual([['logic', 'mentioned']]);
+    for (let hop = 1; hop <= 3; hop++) {
+      const [from, to] = hop % 2 === 1 ? ['logic', 'art'] : ['art', 'logic'];
+      const next = await send(fx, from!, { text: `round ${hop}`, act: 'request', mentions: [to!] });
+      expect((await entryOf(fx, next.entryId)).body).toMatchObject({ replyTo: prev.entryId, hops: hop });
+      expect(next.wakes.map(w => [w.botId, w.reason])).toEqual([[to, 'mentioned']]);
+      prev = next;
+    }
+    const last = await send(fx, 'art', { text: 'round 4', act: 'request', mentions: ['logic'] });
+    expect((await entryOf(fx, last.entryId)).body).toMatchObject({ replyTo: prev.entryId, hops: 4 });
+    expect(last.wakes.map(w => [w.botId, w.reason])).toEqual([['pm', 'needsLead']]);
+  });
+
+  test('an explicit replyTo wins over the default', async () => {
+    const fx = await approved();
+    await send(fx, 'art', { text: 'question?', act: 'query', mentions: ['logic'] });
+    const h = await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'context for everyone' });
+    const r = await send(fx, 'logic', { text: 'answer', act: 'inform', replyTo: h.id });
+    expect((await entryOf(fx, r.entryId)).body).toMatchObject({ replyTo: h.id, hops: 1 });
+  });
+
+  test('no default once the bot has spoken since the wake, or when it was never woken by chat', async () => {
+    const fx = await approved();
+    const q = await send(fx, 'art', { text: 'question?', act: 'query', mentions: ['logic'] });
+    const a1 = await send(fx, 'logic', { text: 'answer', act: 'inform' });
+    expect((await entryOf(fx, a1.entryId)).body).toMatchObject({ replyTo: q.entryId, hops: 1 });
+    const a2 = await send(fx, 'logic', { text: 'one more thing', act: 'inform' });
+    expect((await entryOf(fx, a2.entryId)).body).toMatchObject({ replyTo: undefined, hops: 0 });
+    const loose = await send(fx, 'audio', { text: 'hello all', act: 'inform' });
+    expect((await entryOf(fx, loose.entryId)).body).toMatchObject({ replyTo: undefined, hops: 0 });
+  });
+
+  test('the last wake entry survives a restart', async () => {
+    const fx = await approved();
+    const q = await send(fx, 'art', { text: 'question?', act: 'query', mentions: ['logic'] });
+    fx.p.dispose();
+    const p2 = createProject({ projectId: fx.projectId, store: fx.store, employees: createEmployeeRegistry({ store: fx.store }), clock: fx.clock });
+    const r = (await p2.callTool('logic', 'sendMessage', { text: 'what size?', act: 'query' })) as Sent;
+    const entry = (await fx.store.read(fx.projectId, 1)).find(e => e.id === r.entryId)!;
+    expect(entry.body).toMatchObject({ replyTo: q.entryId, hops: 1 });
+    expect(r.wakes.map(w => [w.botId, w.reason])).toEqual([['art', 'mentioned']]);
+    p2.dispose();
   });
 });

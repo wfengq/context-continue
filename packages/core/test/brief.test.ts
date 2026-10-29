@@ -149,7 +149,7 @@ describe('buildBrief', () => {
     await brief('art');
     await brief('audio');
     const own = await p.chat({ author: { kind: 'bot', id: 'art' }, text: 'drafting the Sprites for the hero now', act: 'inform' });
-    await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'hero should be blue', mentions: ['art'] });
+    const blue = await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'hero should be blue', mentions: ['art'] });
     await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'looks great so far', replyTo: own.id });
     await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'the Sound needs more bass' });
     await p.event({ kind: 'deliverableSubmitted', workstreamId: 'art', deliverableId: 'dv1' });
@@ -157,7 +157,7 @@ describe('buildBrief', () => {
     await p.decide({ affects: ['audio'], text: 'mono only' });
 
     const art = seg(await brief('art'), 'delta');
-    expect(art).toContain('hero should be blue');
+    expect(art).toContain(`- #${blue.seq} alice (id: ${blue.id}): hero should be blue`); // R39b
     expect(art).toContain('looks great so far');
     expect(art).toContain('[deliverableSubmitted]');
     expect(art).not.toContain('drafting the Sprites'); // own message, even though it matches the workstream title
