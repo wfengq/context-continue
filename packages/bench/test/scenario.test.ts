@@ -83,4 +83,29 @@ describe('validateScenario', () => {
   test('lead must be an employee', () => {
     expect(() => validateScenario({ ...minimal(), lead: 'nobody' })).toThrow(/lead/);
   });
+  test('initial plan owners must be employees', () => {
+    const raw = { ...minimal(), plan: { workstreams: [ws('audio', 'ghost'), ws('art', 'art')], contracts: [] } };
+    expect(() => validateScenario(raw)).toThrow(/plan\.workstreams\[0\]\.owner: .*ghost/);
+  });
+  test('replan owners must be employees', () => {
+    const raw = withStep(
+      { kind: 'human', text: 'hi' },
+      { kind: 'replan', plan: { workstreams: [ws('art', 'art'), ws('music', 'phantom')], contracts: [] } },
+    );
+    expect(() => validateScenario(raw)).toThrow(/step 1: .*phantom/);
+  });
+  test('duplicate employee botIds fail', () => {
+    const raw = { ...minimal(), employees: [...minimal().employees, { botId: 'art', persona: 'q', skills: [] }] };
+    expect(() => validateScenario(raw)).toThrow(/employees: duplicate botId "art"/);
+  });
+  test('duplicate workstream ids in the initial plan fail', () => {
+    const raw = { ...minimal(), plan: { workstreams: [ws('art', 'art'), ws('art', 'dev')], contracts: [] } };
+    expect(() => validateScenario(raw)).toThrow(/plan\.workstreams: duplicate .*"art"/);
+  });
+  test('duplicate workstream ids in a replan fail with the step index', () => {
+    const raw = withStep(
+      { kind: 'replan', plan: { workstreams: [ws('art', 'art'), ws('art', 'art')], contracts: [] } },
+    );
+    expect(() => validateScenario(raw)).toThrow(/step 0: .*duplicate .*"art"/);
+  });
 });

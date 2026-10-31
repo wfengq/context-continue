@@ -57,6 +57,17 @@ export const DEFAULT_IDLE_REPLY = 'Noted.';
 const pathOf = (path: PropertyKey[]): string =>
   path.map(p => (typeof p === 'number' ? `[${p}]` : String(p))).reduce((a, p) => (p.startsWith('[') || !a ? a + p : `${a}.${p}`), '');
 
+/** Values that occur more than once, in order of their second occurrence. */
+function duplicates(values: string[]): string[] {
+  const seen = new Set<string>();
+  const dup: string[] = [];
+  for (const v of values) {
+    if (seen.has(v) && !dup.includes(v)) dup.push(v);
+    seen.add(v);
+  }
+  return dup;
+}
+
 /** Checks a raw scenario; throws one Error listing every problem found. */
 export function validateScenario(raw: unknown): Scenario {
   const parsed = scenarioSchema.safeParse(raw);
@@ -70,6 +81,16 @@ export function validateScenario(raw: unknown): Scenario {
   const toolNames = new Set(toolDefinitions('lead').map(d => d.name));
 
   if (!botIds.has(s.lead)) problems.push(`lead: "${s.lead}" is not an employee`);
+  for (const id of duplicates(s.employees.map(e => e.botId))) problems.push(`employees: duplicate botId "${id}"`);
+
+  /** Reports plan owners that are not employees and duplicate workstream ids. */
+  const planProblems = (plan: PlanInput, report: (msg: string) => void) => {
+    plan.workstreams.forEach((w, i) => {
+      if (!botIds.has(w.owner)) report(`plan.workstreams[${i}].owner: "${w.owner}" is not an employee`);
+    });
+    for (const id of duplicates(plan.workstreams.map(w => w.id))) report(`plan.workstreams: duplicate workstream id "${id}"`);
+  };
+  planProblems(s.plan, msg => problems.push(msg));
 
   const ownerOf = (plan: PlanInput) => new Map(plan.workstreams.map(w => [w.id, w.owner]));
   let owners = ownerOf(s.plan);
@@ -92,6 +113,7 @@ export function validateScenario(raw: unknown): Scenario {
         if (!owners.has(step.deliverableOf)) bad(`deliverableOf "${step.deliverableOf}" is not a workstream in the current plan`);
         break;
       case 'replan':
+        planProblems(step.plan, bad);
         owners = ownerOf(step.plan);
         break;
     }
