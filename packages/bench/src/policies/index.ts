@@ -4,6 +4,7 @@ import { broadcastPolicy } from './broadcast.js';
 import { delmPolicy } from './delm.js';
 import { dsBotPolicy } from './dsbot.js';
 import { singleAgentPolicy } from './single.js';
+import { spacePolicy } from './space.js';
 
 export interface PolicyOptions {
   /** Group E: assumed context window in tokens. */
@@ -24,6 +25,8 @@ export function createPolicy(group: Group, opts: PolicyOptions): Policy {
       return delmPolicy();
     case 'E':
       return dsBotPolicy(opts);
+    case 'F':
+      return spacePolicy();
     default:
       throw new Error(`group ${group} is not implemented yet`);
   }
