@@ -82,10 +82,10 @@ describe('group E (DS Bot-style group chat)', () => {
     const artReply = 6; // "[bot art] Drew sprites." = 23
     const taskLogic = 10; // "[task logic] work on workstream logic" = 37
     // Idle replies are passes (R-B10): not in the room, not in the member's own history.
-    // Memory is cacheable from the first request (frozen system-prompt-like segment).
-    expect(records[0]).toMatchObject({ inputTokens: T + M + H, cacheableTokens: T + M });
-    expect(records[1]).toMatchObject({ inputTokens: T + M + H, cacheableTokens: T + M });
-    expect(records[2]).toMatchObject({ inputTokens: T + M + H + taskArt, cacheableTokens: T + M });
+    // First request: only the template is cacheable; the frozen memory counts from the second (R-B19).
+    expect(records[0]).toMatchObject({ inputTokens: T + M + H, cacheableTokens: T });
+    expect(records[1]).toMatchObject({ inputTokens: T + M + H, cacheableTokens: T });
+    expect(records[2]).toMatchObject({ inputTokens: T + M + H + taskArt, cacheableTokens: T });
     // logic: previous request T+M+H; then art's reply (unseen), task.
     expect(records[3]).toMatchObject({
       inputTokens: T + M + H + artReply + taskLogic,
@@ -206,7 +206,7 @@ describe('group E (DS Bot-style group chat)', () => {
     expect(stats.pauses).toBe(2);
   });
 
-  test('E: group memory segment is frozen per member session and cacheable', async () => {
+  test('E: group memory segment is frozen per member session; cacheable from the member\'s second request (R-B19)', async () => {
     const spy = new SpyModel();
     const { records } = await run('E', team(['pm', 'art', 'logic'], [
       work('art', 'A.'),                                                                    // 0: art first wake
@@ -217,7 +217,7 @@ describe('group E (DS Bot-style group chat)', () => {
     const before = '[group memory] goal: g | constraints: c1 | conventions: none';
     const after = '[group memory] goal: g | constraints: c1 | conventions: use 16px grid';
     expect(spy.requests.map(r => [r.botId, r.segments[1]!.text, r.segments[1]!.cacheable])).toEqual([
-      ['art', before, true], ['pm', before, true], ['logic', after, true], ['art', before, true],
+      ['art', before, false], ['pm', before, false], ['logic', after, false], ['art', before, true],
     ]);
     // art at step 3: previous request = T + memory(60 chars → 15) + task(9); new: own reply, tool-less,
     // others' replies "[bot pm] ok"(11 → 3), "[bot logic] L."(14 → 4), task 9
@@ -245,7 +245,7 @@ describe('group E (DS Bot-style group chat)', () => {
     // One step adds 4 + 8 + 606 = 618. Threshold 2000 × 0.8 = 1600.
     // r0 history 9; r1 627+9 = 636; r2 1254+9 = 1263; r3 1881+9 = 1890 > 1600 → compact.
     expect(records.map(r => [r.inputTokens, r.cacheableTokens])).toEqual([
-      [T + M + 9, T + M],
+      [T + M + 9, T],
       [T + M + 636, T + M + 9],
       [T + M + 1263, T + M + 636],
       [T + M + 150 + 9, 0],

@@ -45,4 +45,9 @@ export interface PolicyStats {
   coreErrors: number;
   /** Group C only: a workstream of the approved plan was still not delivered after the last step. */
   unfinished?: boolean;
+  /**
+   * Group C only: tokens the core flags cacheable, summed over every request — what a provider that
+   * caches the core's stable segments (not only an identical prefix) could cache. Report caveat only.
+   */
+  cacheableUpperBound?: number;
 }

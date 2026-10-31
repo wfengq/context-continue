@@ -9,6 +9,7 @@ import {
 } from '@context-continue/core';
 import type { Policy, RunContext } from '../runner.js';
 import { fmtTask } from '../text.js';
+import { prefixCacheable } from './history.js';
 import type { Step, ToolCall } from '../types.js';
 
 /** Briefs are never trimmed: the bench measures the full brief the core assembles. */
@@ -59,7 +60,7 @@ function byBot(wakes: Wake[]): { botId: string; reason: Wake['reason']; detail: 
  * Group C (this project): drives the real core library. The scenario's employees and plan set up a
  * project (start → proposePlan → approvePlan); scripted steps map onto the facade and `callTool`.
  * Who is woken is decided by the core alone (returned wakes and `wake` events, counted once per bot
- * per step); each request is exactly the seven `buildBrief` segments, with the core's cacheable flags.
+ * per step); each request is exactly the seven `buildBrief` segments; cacheable per R-B19 (see `send`).
  * The core's optional models are not given, so it uses its fallback behaviour and makes no model calls.
  * A core error (a throw from `callTool` or `approvePlan`) is counted and shown to that bot as
  * `tool error: <message>` in the trigger of its next request; the run continues.
@@ -69,6 +70,10 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
   let coreErrors = 0;
   /** Wakes caught since the last time they were turned into requests. */
   let woken: Wake[] = [];
+  /** Segment texts of each bot's previous brief (R-B19). */
+  const prevTexts = new Map<string, string[]>();
+  /** Tokens the core flags cacheable, summed over all briefs: the report's upper bound. */
+  let flaggedCacheable = 0;
   /** Core errors per bot, not yet shown to it. */
   const toolErrors = new Map<string, string[]>();
 
@@ -81,8 +86,23 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
   const brief = (p: Project, botId: string, reason: Wake['reason'] | 'manual', detail: string): Promise<ContextBundle> =>
     p.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, trigger: { reason, detail: withErrors(botId, detail) } });
 
+  /**
+   * Sends a brief. Cacheable (R-B19, the rule every group uses): a segment counts only if the core
+   * flags it cacheable AND it lies in the leading run of segments identical to this bot's previous
+   * brief; on a bot's first brief only the common segment (the analogue of the shared template).
+   * The core-flagged total is kept as an upper bound for the report.
+   */
   async function send(ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', b: ContextBundle) {
-    return ctx.call({ botId, step, kind, segments: b.segments.map(s => ({ text: s.text, cacheable: s.cacheable, kind: s.kind })) });
+    const texts = b.segments.map(s => s.text);
+    const inPrefix = prefixCacheable(prevTexts.get(botId) ?? null, texts, 1);
+    prevTexts.set(botId, texts);
+    for (const s of b.segments) if (s.cacheable) flaggedCacheable += ctx.count(s.text);
+    return ctx.call({
+      botId,
+      step,
+      kind,
+      segments: b.segments.map((s, i) => ({ text: s.text, cacheable: s.cacheable && inPrefix[i]!, kind: s.kind })),
+    });
   }
 
   /**
@@ -170,7 +190,7 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
     async finish() {
       const unfinished = project ? (await project.board()).workstreams.some(w => w.status !== 'delivered') : false;
       project?.dispose();
-      return { compactions: 0, pauses: 0, coreErrors, unfinished };
+      return { compactions: 0, pauses: 0, coreErrors, unfinished, cacheableUpperBound: flaggedCacheable };
     },
   };
 }

@@ -59,7 +59,7 @@ describe('group C (project board, real core library)', () => {
       ['art', 'scripted', 0],
       ['logic', 'scripted', 1],
     ]);
-    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0, unfinished: true });
+    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0, unfinished: true, cacheableUpperBound: expect.any(Number) });
     expect(triggerOf(seen[0]!)).toContain('propose a plan');
     const board = await project.board();
     expect(board.planStatus).toBe('approved');
@@ -67,17 +67,61 @@ describe('group C (project board, real core library)', () => {
     expect(board.workstreams.map(w => [w.id, w.owner])).toEqual([['art', 'art'], ['logic', 'logic']]);
   });
 
-  test('C: each request is the 7-segment brief; cacheable = segments 1–3', async () => {
+  test('C: each request is the 7-segment brief; cacheable ⊆ core flags (segments 1–3) and counted from its segments', async () => {
     const { records } = await runScenario(scenario(threeSteps()), createPolicy('C', defaults));
     expect(records.length).toBeGreaterThan(0);
     for (const r of records) {
       expect(r.group).toBe('C');
       expect(r.segments!.map(s => s.kind)).toEqual(['common', 'board', 'memory', 'projection', 'workspace', 'delta', 'trigger']);
-      expect(r.segments!.map(s => s.cacheable)).toEqual([true, true, true, false, false, false, false]);
+      // only the core's stable segments can ever be cacheable
+      expect(r.segments!.slice(3).every(s => !s.cacheable)).toBe(true);
       expect(r.cacheableTokens).toBe(sum(r.segments!.filter(s => s.cacheable)));
       expect(r.inputTokens).toBe(sum(r.segments!));
       expect(r.cacheableTokens).toBeLessThan(r.inputTokens);
     }
+  });
+
+  test('C: a bot\'s first request caches only the common segment, like the shared template elsewhere (R-B19)', async () => {
+    const { seen } = await runC(threeSteps());
+    const firsts = new Map<string, ModelRequest>();
+    for (const r of seen) if (!firsts.has(r.botId)) firsts.set(r.botId, r);
+    expect([...firsts.keys()].sort()).toEqual(['art', 'logic', 'pm']);
+    for (const r of firsts.values()) expect(r.segments.map(g => g.cacheable)).toEqual([true, false, false, false, false, false, false]);
+  });
+
+  test('C: cacheable = identical leading run vs that bot\'s previous brief; a changed board un-caches board and memory (R-B19)', async () => {
+    const { seen } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: [deliver('art', 'sprites')] },
+      { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.', conventions: ['Sprites are 16px'] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Polished.' },
+    ]);
+    // art: scripted at step 0 (its setup wake merged), then scripted at step 2; the passed review with a
+    // new convention in between changed the board only.
+    const art = seen.filter(r => r.botId === 'art');
+    expect(art).toHaveLength(2);
+    const [prev, next] = art.map(r => r.segments);
+    expect(next![0]!.text).toBe(prev![0]!.text); // common unchanged
+    expect(next![1]!.text).not.toBe(prev![1]!.text); // board changed
+    expect(next![2]!.text).toBe(prev![2]!.text); // memory unchanged, but after the change
+    expect(next!.map(g => g.cacheable)).toEqual([true, false, false, false, false, false, false]);
+    // every request: a segment is cacheable iff core-flagged and inside the identical leading run
+    const last = new Map<string, string[]>();
+    for (const r of seen) {
+      const texts = r.segments.map(g => g.text);
+      const before = last.get(r.botId);
+      let run = 0;
+      if (before) while (run < texts.length && texts[run] === before[run]) run++;
+      else run = 1;
+      expect(r.segments.map(g => g.cacheable)).toEqual(texts.map((_, i) => i < 3 && i < run));
+      last.set(r.botId, texts);
+    }
+  });
+
+  test('C: stats carry the core-flagged cacheable total (common + board + memory of every brief) as an upper bound', async () => {
+    const { records, stats } = await runC(threeSteps());
+    const flagged = records.reduce((n, r) => n + sum(r.segments!.filter(g => ['common', 'board', 'memory'].includes(g.kind))), 0);
+    expect(stats.cacheableUpperBound).toBe(flagged);
+    expect(flagged).toBeGreaterThan(records.reduce((n, r) => n + r.cacheableTokens, 0));
   });
 
   test('C: ops go through project.callTool and wakes come from the core', async () => {
@@ -175,7 +219,7 @@ describe('group C (project board, real core library)', () => {
       ] },
       { kind: 'review', deliverableOf: 'logic', passed: true, notes: 'Done.' },
     ], plan);
-    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0, unfinished: false });
+    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0, unfinished: false, cacheableUpperBound: expect.any(Number) });
     // setup: pm (needsLead) and art (assigned; logic waits for art) are extra at step 0 (human step).
     // step 0: routed to the lead → extra. step 1: deliverable → pm reviews at step 2 → merged.
     // step 2: art passes → logic assigned, performs step 3 → merged.
@@ -226,5 +270,15 @@ describe('group C unfinished flag (R-B16)', () => {
   test('C: finish() reports unfinished when a workstream never delivers', async () => {
     const { stats } = await runC([{ kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' }]);
     expect(stats.unfinished).toBe(true);
+  });
+
+  test('C: a replan that removes the only undelivered workstream leaves the project finished', async () => {
+    const { stats, project } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: [deliver('art', 'sprites')] },
+      { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.' },
+      { kind: 'replan', plan: { workstreams: [ws('art', 'art')], contracts: [] } },
+    ]);
+    expect((await project.board()).workstreams.map(w => w.id)).toEqual(['art']);
+    expect(stats.unfinished).toBe(false);
   });
 });

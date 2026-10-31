@@ -69,6 +69,25 @@ describe('renderReport', () => {
     );
   });
 
+  test('savings never print -0.0; n/a when B is absent', () => {
+    // E 1000.04 vs B 1000: −0.004 % rounds to "-0.0" with toFixed
+    const md = renderReport([gm('B', 's1', 1000), gm('E', 's1', 1000, { costUnits: 1000.04 })], { ...meta, scenarios: ['s1'] });
+    expect(md).not.toContain('-0.0');
+    expect(md.split('\n').find(l => l.startsWith('| E |'))).toContain('| 0.0 |');
+    const noB = renderReport([gm('C', 's1', 10), gm('E', 's1', 20)], { ...meta, scenarios: ['s1'] });
+    expect(noB.split('\n').find(l => l.startsWith('| C |'))).toMatch(/\| n\/a \| 50\.0 \|$/);
+  });
+
+  test('C upper bound line per scenario when C has one', () => {
+    const md = renderReport(
+      [gm('C', 's1', 1000, { cacheableTokens: 100, upperBound: { cacheableTokens: 600, costUnits: 460 } })],
+      { ...meta, scenarios: ['s1'] },
+    );
+    expect(md).toContain(
+      "Group C upper bound if a provider caches the core's stable segments: cacheable 600, cost units 460.0 (measured: cacheable 100, cost units 1,000.0).",
+    );
+  });
+
   test('byte-identical for identical input', () => {
     expect(renderReport(all(), meta)).toBe(renderReport(all(), meta));
   });

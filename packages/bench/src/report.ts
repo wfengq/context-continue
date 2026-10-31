@@ -20,7 +20,8 @@ const fmtCost = (n: number): string => {
 /** Savings of x against ref in percent, one decimal; n/a when there is no reference. */
 function savings(ref: GroupMetrics | undefined, x: GroupMetrics): string {
   if (!ref || ref.costUnits === 0) return 'n/a';
-  return (((ref.costUnits - x.costUnits) / ref.costUnits) * 100).toFixed(1);
+  const pct = (((ref.costUnits - x.costUnits) / ref.costUnits) * 100).toFixed(1);
+  return pct === '-0.0' ? '0.0' : pct;
 }
 
 const HEADER = [
@@ -84,6 +85,12 @@ export function renderReport(
     const c = rows.find(r => r.group === 'C');
     if (c) {
       out.push(`Group C core errors: ${c.coreErrors}.`);
+      if (c.upperBound) {
+        out.push(
+          `Group C upper bound if a provider caches the core's stable segments: cacheable ${fmtInt(c.upperBound.cacheableTokens)}, ` +
+            `cost units ${fmtCost(c.upperBound.costUnits)} (measured: cacheable ${fmtInt(c.cacheableTokens)}, cost units ${fmtCost(c.costUnits)}).`,
+        );
+      }
       if (c.unfinished) out.push('Group C: the project was not finished (a workstream of the approved plan was never delivered).');
       out.push('');
     }

@@ -116,7 +116,7 @@ export async function main(argv: string[]): Promise<number> {
     for (const g of groups) {
       const run = await runScenario(s, createPolicy(g, opts));
       records.push(...run.records);
-      metrics.push(computeMetrics(run.records, run.stats, args.cacheRatio));
+      metrics.push(computeMetrics(g, s.id, run.records, run.stats, args.cacheRatio));
     }
   }
 

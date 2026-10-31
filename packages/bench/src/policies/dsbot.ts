@@ -1,5 +1,6 @@
 import { BASE_TEMPLATE, type Policy, type RunContext, type Segment } from '../runner.js';
 import { fmtBot, fmtHuman, fmtOps, fmtTask } from '../text.js';
+import { prefixCacheable } from './history.js';
 import type { Scenario } from '../types.js';
 
 /** Room lines a member sees at its first wake. */
@@ -29,8 +30,8 @@ interface RoomLine {
 interface Session {
   /** Append-only session history (until compaction): room lines shown, task lines, own replies, tool lines, deliverables. */
   history: string[];
-  /** Length of `history` at the previous request; those lines are cacheable in the next one. */
-  prevLen: number;
+  /** Segment texts of the previous request, or null before the first (R-B19). */
+  prev: string[] | null;
   /** Seq of the newest room line shown so far; undefined before the first wake. */
   seen: number | undefined;
   /** Group memory text, fixed at the first wake. */
@@ -68,8 +69,9 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * deliverables stay in its own history. Extra requests are answered with `idleReply`, which is a
  * pass (R-B10): it costs the request but is posted nowhere (room or own history) and wakes nobody.
  *
- * Request = template (cacheable) + memory (cacheable) + history (the part sent in the previous
- * request is cacheable, everything appended since is not). When history exceeds window × ratio,
+ * Request = template + memory + history. Cacheable (R-B19): the leading run identical to the
+ * member's previous request — template, frozen memory and the history it sent then; on its first
+ * request only the template. When history exceeds window × ratio,
  * everything but the newest shown lines / trigger is replaced by one summary line of summaryTokens
  * tokens; that request is entirely uncacheable.
  *
@@ -113,7 +115,7 @@ export function dsBotPolicy(opts: DsBotOptions): Policy {
   const request = async (ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', task: string | null) => {
     let s = sessions.get(botId);
     if (!s) {
-      s = { history: [], prevLen: 0, seen: undefined, memory: groupMemory(ctx.scenario, conventions) };
+      s = { history: [], prev: null, seen: undefined, memory: groupMemory(ctx.scenario, conventions) };
       sessions.set(botId, s);
     }
     const fresh = unseen(botId, s.seen);
@@ -124,16 +126,15 @@ export function dsBotPolicy(opts: DsBotOptions): Policy {
     const compact = s.history.length > 0 && historyTokens > opts.window * opts.compactRatio;
     if (compact) {
       s.history = [summaryLine(opts.summaryTokens)];
-      s.prevLen = 0;
       compactions++;
     }
     s.history.push(...fresh);
-    const segments: Segment[] = [
-      { text: BASE_TEMPLATE, cacheable: !compact },
-      { text: s.memory, cacheable: !compact },
-      ...s.history.map((text, i) => ({ text, cacheable: !compact && i < s.prevLen })),
-    ];
-    s.prevLen = s.history.length;
+    // R-B19: identical leading run vs the previous request; first request: template only (so the
+    // frozen memory counts from the second request); a compacting request caches nothing (spec §5 E).
+    const texts = [BASE_TEMPLATE, s.memory, ...s.history];
+    const cacheable = compact ? texts.map(() => false) : prefixCacheable(s.prev, texts, 1);
+    const segments: Segment[] = texts.map((text, i) => ({ text, cacheable: cacheable[i]! }));
+    s.prev = texts;
     const out = await ctx.call({ botId, step, kind, segments });
     return { session: s, out };
   };
