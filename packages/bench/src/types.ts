@@ -17,6 +17,10 @@ export type Step =
 export interface Fact {
   /** Prefix gives the category: change-, conv-, contract-, fail-. */
   id: string;
+  /**
+   * Must appear in the step's text. Markers introduced in op args are matched against
+   * JSON.stringify(args), so they must not contain characters JSON escapes (quotes, backslashes, newlines).
+   */
   marker: string;
   step: number;
   /** Employees who need to know it, or ["*"] for all of them. */

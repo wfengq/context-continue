@@ -28,6 +28,7 @@ describe('checkCoverage', () => {
       'review with conventions',
       'replan',
       'bot-to-bot query',
+      'standard scenario needs 20–40 steps',
     ]);
   });
 
@@ -141,9 +142,11 @@ describe('checkCoverage: tier and facts', () => {
   const pad = (n: number) => Array.from({ length: n }, () => human('M'));
   const P = ['change-', 'conv-', 'contract-', 'fail-'];
 
-  test('standard scenario without facts is not asked for facts or step count', () => {
-    const out = checkCoverage(build(undefined, undefined, [human('Hello.')]));
-    expect(out.some(m => /fact|steps/.test(m))).toBe(false);
+  test('standard scenario without facts is checked for step count but not for facts', () => {
+    const short = checkCoverage(build(undefined, undefined, [human('Hello.')]));
+    expect(short).toContain('standard scenario needs 20–40 steps');
+    expect(short.some(m => /fact/.test(m))).toBe(false);
+    expect(checkCoverage(build(undefined, undefined, pad(25))).some(m => /fact|steps/.test(m))).toBe(false);
   });
   test('standard scenario with facts needs 20–40 steps, 4–6 facts, and all four categories', () => {
     const ok = build(undefined, factsFor(P), pad(25));

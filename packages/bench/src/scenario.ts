@@ -196,9 +196,10 @@ const FACT_CATEGORIES = ['change-', 'conv-', 'contract-', 'fail-'];
  * The coverage items a formal scenario must include (spec §3, §5), in a fixed order; returns the ones
  * missing (empty when the scenario qualifies):
  * - human requirement change; failed review; review with conventions; replan; bot-to-bot query;
- * - long tier: 150–300 steps, at least 15 facts, and minimum counts of replans (3), requirement
+ * - step count, for every scenario: standard 20–40, long 150–300;
+ * - long tier: at least 15 facts, and minimum counts of replans (3), requirement
  *   changes (4), failed reviews (6), new conventions (8) and queries (10);
- * - standard tier: 20–40 steps, 4–6 facts — checked only when the scenario has a `facts` field (R-L1);
+ * - standard tier: 4–6 facts — checked only when the scenario has a `facts` field (R-L1);
  * - facts (when required): one per category, by id prefix change-, conv-, contract-, fail-.
  */
 export function checkCoverage(s: Scenario): string[] {
@@ -210,18 +211,15 @@ export function checkCoverage(s: Scenario): string[] {
   if (!s.steps.some(st => st.kind === 'replan')) missing.push('replan');
   if (!s.steps.some(hasQuery)) missing.push('bot-to-bot query');
 
-  const factsRequired = long || s.facts !== undefined;
-  if (!factsRequired) return missing;
-  const facts = s.facts ?? [];
-
   const n = s.steps.length;
+  if (long ? n < 150 || n > 300 : n < 20 || n > 40) missing.push(`${long ? 'long' : 'standard'} scenario needs ${long ? '150–300' : '20–40'} steps`);
+
+  // R-L1: fact requirements apply to long scenarios, and to standard ones only once they have `facts`.
+  if (!long && s.facts === undefined) return missing;
+  const facts = s.facts ?? [];
   if (long) {
-    if (n < 150 || n > 300) missing.push('long scenario needs 150–300 steps');
     if (facts.length < 15) missing.push('long scenario needs at least 15 facts');
-  } else {
-    if (n < 20 || n > 40) missing.push('standard scenario needs 20–40 steps');
-    if (facts.length < 4 || facts.length > 6) missing.push('standard scenario needs 4–6 facts');
-  }
+  } else if (facts.length < 4 || facts.length > 6) missing.push('standard scenario needs 4–6 facts');
   for (const prefix of FACT_CATEGORIES) if (!facts.some(f => f.id.startsWith(prefix))) missing.push(`fact category ${prefix}`);
 
   if (long) {
