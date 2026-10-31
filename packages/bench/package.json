@@ -9,6 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "gen:scenarios": "tsc -p tsconfig.build.json && node dist/gen/write.js",
     "bench": "pnpm -C ../core build && tsc -p tsconfig.build.json && node --no-warnings=ExperimentalWarning dist/cli.js"
   },
   "dependencies": {
