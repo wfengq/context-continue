@@ -54,6 +54,13 @@ export interface CallRecord {
   /** Always <= inputTokens. */
   cacheableTokens: number;
   segments?: { kind: string; tokens: number; cacheable: boolean }[];
+  /**
+   * Scripted requests only, and only when the request has fact opportunities (the fact's audience
+   * includes this bot or "*", and the request's step is after the fact's step): ids whose marker is
+   * in the request's full text / is not. In scenario fact order; both omitted without opportunities.
+   */
+  factsSeen?: string[];
+  factsMissed?: string[];
 }
 
 export interface PolicyStats {

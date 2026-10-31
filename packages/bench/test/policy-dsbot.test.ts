@@ -272,6 +272,53 @@ describe('group E (DS Bot-style group chat)', () => {
     expect(defaultCountTokens(spy.requests[k]!.segments[2]!.text)).toBe(150);
   });
 
+  test('E keeps markers seen before a compaction in the summary', async () => {
+    const spy = new SpyModel();
+    const ops = [{ name: 'submitDeliverable', args: { workstreamId: 'art', summary: 's', content: big } }];
+    const s = validateScenario({
+      id: 'e', goal: 'g', constraints: [], owner: 'human', lead: 'art',
+      employees: [{ botId: 'art', persona: 'p', skills: [] }],
+      plan: { workstreams: [ws('art', 'art')], contracts: [] },
+      steps: [work('art', 'Rule KEEP-ME-1 and KEEP-ME-2.', ops), work('art', 'Done.', ops), work('art', 'Done.', ops),
+        work('art', 'Done.', ops), work('art', 'Done.', ops)],
+      facts: [
+        { id: 'conv-1', marker: 'KEEP-ME-1', step: 0, audience: ['*'] },
+        { id: 'conv-2', marker: 'KEEP-ME-2', step: 0, audience: ['*'] },
+      ],
+    } as unknown);
+    const { records } = await run('E', s, { window: 2000, compactRatio: 0.8, summaryTokens: 150 }, spy);
+    const k = records.findIndex(r => r.cacheableTokens === 0);
+    expect(k).toBeGreaterThan(0);
+    const summary = spy.requests[k]!.segments[2]!.text;
+    expect(summary.startsWith('KEEP-ME-1 KEEP-ME-2 ')).toBe(true);
+    expect(defaultCountTokens(summary)).toBe(150);
+    expect(records[k]!.factsSeen).toEqual(['conv-1', 'conv-2']);
+    // Later requests still see them (the summary stays in history).
+    expect(records[records.length - 1]!.factsSeen).toEqual(['conv-1', 'conv-2']);
+  });
+
+  test('E: markers longer than the summary budget are cut in scenario order, without error', async () => {
+    const spy = new SpyModel();
+    const ops = [{ name: 'submitDeliverable', args: { workstreamId: 'art', summary: 's', content: big } }];
+    const m1 = 'A'.repeat(300), m2 = 'B'.repeat(300);
+    const s = validateScenario({
+      id: 'e', goal: 'g', constraints: [], owner: 'human', lead: 'art',
+      employees: [{ botId: 'art', persona: 'p', skills: [] }],
+      plan: { workstreams: [ws('art', 'art')], contracts: [] },
+      steps: [work('art', `${m1} ${m2}`, ops), work('art', 'Done.', ops), work('art', 'Done.', ops), work('art', 'Done.', ops)],
+      facts: [
+        { id: 'conv-1', marker: m1, step: 0, audience: ['*'] },
+        { id: 'conv-2', marker: m2, step: 0, audience: ['*'] },
+      ],
+    } as unknown);
+    const { records } = await run('E', s, { window: 2000, compactRatio: 0.8, summaryTokens: 100 }, spy);
+    const k = records.findIndex(r => r.cacheableTokens === 0);
+    const summary = spy.requests[k]!.segments[2]!.text;
+    expect(defaultCountTokens(summary)).toBe(100);
+    expect(summary.startsWith(m1)).toBe(true);
+    expect(summary.includes(m2)).toBe(false);
+  });
+
   test('E: summaryTokens must be below window × compactRatio', () => {
     expect(() => createPolicy('E', { window: 1000, compactRatio: 0.5, summaryTokens: 500 })).toThrow(/summaryTokens/);
     expect(() => createPolicy('E', { window: 1000, compactRatio: 0.5, summaryTokens: 499 })).not.toThrow();

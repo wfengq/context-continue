@@ -225,3 +225,82 @@ describe('runScenario', () => {
     expect(ctx.isMerged('pm', 4)).toBe(false);    // no next step
   });
 });
+
+describe('fact visibility per request', () => {
+  const factsScenario = (audience: string[] = ['*'], extraFacts: unknown[] = []) => validateScenario({
+    ...tiny([
+      { kind: 'human', text: 'Rule: MAX-5MB-UPLOAD applies. ZZZ' },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'ok', ops: [] },
+      { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'ok2', ops: [] },
+    ]),
+    facts: [{ id: 'conv-1', marker: 'MAX-5MB-UPLOAD', step: 0, audience }, ...extraFacts],
+  });
+  const withCtx = (hasMarker: boolean): Policy => ({
+    group: 'A',
+    async onStep(step: Step, index: number, ctx: RunContext) {
+      if (step.kind === 'human') return;
+      const text = hasMarker ? 'history MAX-5MB-UPLOAD' : 'history';
+      await ctx.call({ botId: ctx.actorOf(step), step: index, kind: 'scripted', segments: [{ text: 'a', cacheable: true }, { text, cacheable: false }] });
+    },
+    async finish() { return { compactions: 0, pauses: 0, coreErrors: 0 }; },
+  });
+
+  test('a scripted request after a fact step records it seen when the marker is in its context', async () => {
+    const { records } = await runScenario(factsScenario(), withCtx(true));
+    expect(records.map(r => r.factsSeen)).toEqual([['conv-1'], ['conv-1']]);
+    expect(records.map(r => r.factsMissed)).toEqual([[], []]);
+  });
+
+  test('a request whose context lacks the marker records it missed', async () => {
+    const { records } = await runScenario(factsScenario(), withCtx(false));
+    expect(records.map(r => r.factsSeen)).toEqual([[], []]);
+    expect(records.map(r => r.factsMissed)).toEqual([['conv-1'], ['conv-1']]);
+  });
+
+  test('extra requests and requests at or before the fact step carry no fact fields', async () => {
+    const s = validateScenario({
+      ...tiny([
+        { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'MAX-5MB-UPLOAD here', ops: [] },
+        { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'ok', ops: [] },
+      ]),
+      facts: [{ id: 'conv-1', marker: 'MAX-5MB-UPLOAD', step: 0, audience: ['*'] }],
+    });
+    const policy: Policy = {
+      group: 'A',
+      async onStep(step: Step, index: number, ctx: RunContext) {
+        if (step.kind === 'human') return;
+        const segments = [{ text: 'MAX-5MB-UPLOAD', cacheable: false }];
+        await ctx.call({ botId: ctx.actorOf(step), step: index, kind: 'scripted', segments });
+        await ctx.call({ botId: 'art', step: index, kind: 'extra', segments });
+      },
+      async finish() { return { compactions: 0, pauses: 0, coreErrors: 0 }; },
+    };
+    const { records } = await runScenario(s, policy);
+    expect(records.map(r => [r.kind, r.step, r.factsSeen])).toEqual([
+      ['scripted', 0, undefined], ['extra', 0, undefined], ['scripted', 1, ['conv-1']], ['extra', 1, undefined],
+    ]);
+    expect('factsMissed' in records[0]!).toBe(false);
+    expect('factsSeen' in records[1]!).toBe(false);
+  });
+
+  test('facts for other audiences are not opportunities', async () => {
+    const { records } = await runScenario(factsScenario(['logic']), withCtx(false));
+    expect(records.map(r => r.factsMissed)).toEqual([undefined, ['conv-1']]);
+    expect('factsSeen' in records[0]!).toBe(false);
+  });
+
+  test('fields follow scenario fact order', async () => {
+    const s = factsScenario(['*'], [{ id: 'fail-1', marker: 'ZZZ', step: 0, audience: ['*'] }]);
+    const policy: Policy = {
+      group: 'A',
+      async onStep(step: Step, index: number, ctx: RunContext) {
+        if (step.kind === 'human') return;
+        await ctx.call({ botId: ctx.actorOf(step), step: index, kind: 'scripted', segments: [{ text: 'ZZZ', cacheable: false }, { text: 'MAX-5MB-UPLOAD', cacheable: false }] });
+      },
+      async finish() { return { compactions: 0, pauses: 0, coreErrors: 0 }; },
+    };
+
+    const { records } = await runScenario({ ...s, facts: s.facts }, policy);
+    expect(records[0]!.factsSeen).toEqual(['conv-1', 'fail-1']);
+  });
+});

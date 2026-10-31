@@ -48,11 +48,22 @@ export function groupMemory(s: Scenario, conventions: string[]): string {
 /**
  * A deterministic summary line of exactly `tokens` tokens under `defaultCountTokens`: ASCII only
  * (no bot id, which may contain wide characters), 4 × tokens characters → ceil(chars / 4) = tokens.
+ * `markers` (ASCII fact markers) come first, in order, while they fit; the rest are dropped.
  */
-export function summaryLine(tokens: number): string {
+export function summaryLine(tokens: number, markers: string[] = []): string {
   const head = '[summary] Earlier conversation condensed.';
   const len = tokens * 4;
-  return head.length >= len ? head.slice(0, len) : head + '.'.repeat(len - head.length);
+  // Markers first, in the given order, while they fit the budget; the rest are dropped.
+  const kept: string[] = [];
+  let used = 0;
+  for (const m of markers) {
+    const next = used + (kept.length > 0 ? 1 : 0) + m.length;
+    if (next > len) break;
+    kept.push(m);
+    used = next;
+  }
+  const text = kept.length > 0 ? `${kept.join(' ')} ${head}` : head;
+  return text.length >= len ? text.slice(0, len) : text + '.'.repeat(len - text.length);
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -73,7 +84,8 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * member's previous request — template, frozen memory and the history it sent then; on its first
  * request only the template. When history exceeds window × ratio,
  * everything but the newest shown lines / trigger is replaced by one summary line of summaryTokens
- * tokens; that request is entirely uncacheable.
+ * tokens (keeping the markers of scenario facts seen in the compacted content, first; the favourable
+ * assumption of spec §5); that request is entirely uncacheable.
  *
  * Wakes: a human message with mentions wakes the mentioned members, without mentions every member
  * (lead first, then scenario order). `@<id>` in a bot reply wakes that member. Bot-triggered wakes
@@ -125,7 +137,10 @@ export function dsBotPolicy(opts: DsBotOptions): Policy {
     const historyTokens = [...s.history, ...fresh].reduce((n, t) => n + ctx.count(t), 0);
     const compact = s.history.length > 0 && historyTokens > opts.window * opts.compactRatio;
     if (compact) {
-      s.history = [summaryLine(opts.summaryTokens)];
+      // The summary keeps the markers of scenario facts that appeared in the compacted content (spec §5).
+      const compacted = s.history.join('\n');
+      const markers = (ctx.scenario.facts ?? []).map(f => f.marker).filter(m => compacted.includes(m));
+      s.history = [summaryLine(opts.summaryTokens, markers)];
       compactions++;
     }
     s.history.push(...fresh);

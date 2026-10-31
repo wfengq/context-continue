@@ -107,6 +107,19 @@ export async function runScenario(
       }
       const record: CallRecord = { group: policy.group, scenario: s.id, step, botId, kind, inputTokens, cacheableTokens };
       if (kinds.length > 0) record.segments = kinds;
+      if (kind === 'scripted' && s.facts !== undefined) {
+        const full = segments.map(g => g.text).join('');
+        const seen: string[] = [];
+        const missed: string[] = [];
+        for (const f of s.facts) {
+          if (step <= f.step || !(f.audience.includes('*') || f.audience.includes(botId))) continue;
+          (full.includes(f.marker) ? seen : missed).push(f.id);
+        }
+        if (seen.length + missed.length > 0) {
+          record.factsSeen = seen;
+          record.factsMissed = missed;
+        }
+      }
       records.push(record);
       return model.complete({ botId, segments: segments.map(g => ({ text: g.text, cacheable: g.cacheable })), scripted });
     },
