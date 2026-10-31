@@ -1,5 +1,6 @@
-import { BASE_TEMPLATE, type Policy, type Segment } from '../runner.js';
+import type { Policy } from '../runner.js';
 import { fmtBot, fmtHuman, fmtOps, fmtTask } from '../text.js';
+import { historySegments } from './history.js';
 
 const SOLO = 'solo';
 
@@ -23,10 +24,7 @@ export function singleAgentPolicy(): Policy {
       history.push(fmtTask(SOLO, step));
       // Cacheable part = exactly this bot's previous request (template + the lines it sent then).
       // Lines added after that request (its reply, tool results, deliverables, human messages) are uncached.
-      const segments: Segment[] = [
-        { text: BASE_TEMPLATE, cacheable: true },
-        ...history.map((text, i) => ({ text, cacheable: i < seen })),
-      ];
+      const segments = historySegments(history, seen);
       seen = history.length;
       const out = await ctx.call({ botId: SOLO, step: index, kind: 'scripted', segments });
       history.push(fmtBot(SOLO, out.reply), ...fmtOps(SOLO, out.ops, versions, false));

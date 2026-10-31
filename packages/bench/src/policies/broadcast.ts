@@ -1,14 +1,6 @@
-import { BASE_TEMPLATE, type Policy, type RunContext, type Segment } from '../runner.js';
+import type { Policy, RunContext } from '../runner.js';
 import { fmtBot, fmtHuman, fmtOps, fmtTask } from '../text.js';
-
-interface BotView {
-  /** What this bot has read so far: group transcript lines plus its own private task lines, in order. */
-  lines: string[];
-  /** How many group transcript lines are already in `lines`. */
-  synced: number;
-  /** Length of `lines` at its previous request; those lines are the cacheable part of the next one. */
-  prevLen: number;
-}
+import { historyReader } from './history.js';
 
 /**
  * Group B (Grok Bot style): the group chat is the shared context. Every message, human (mentioned
@@ -22,30 +14,11 @@ interface BotView {
  */
 export function broadcastPolicy(): Policy {
   const transcript: string[] = [];
-  const views = new Map<string, BotView>();
+  const reader = historyReader();
   const versions = new Map<string, number>();
 
-  const viewOf = (botId: string): BotView => {
-    let v = views.get(botId);
-    if (!v) {
-      v = { lines: [], synced: 0, prevLen: 0 };
-      views.set(botId, v);
-    }
-    return v;
-  };
-
-  const request = (ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', task: string | null) => {
-    const v = viewOf(botId);
-    v.lines.push(...transcript.slice(v.synced));
-    v.synced = transcript.length;
-    if (task !== null) v.lines.push(task);
-    const segments: Segment[] = [
-      { text: BASE_TEMPLATE, cacheable: true },
-      ...v.lines.map((text, i) => ({ text, cacheable: i < v.prevLen })),
-    ];
-    v.prevLen = v.lines.length;
-    return ctx.call({ botId, step, kind, segments });
-  };
+  const request = (ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', task: string | null) =>
+    ctx.call({ botId, step, kind, segments: reader.segmentsFor(botId, transcript, task) });
 
   const wake = async (ctx: RunContext, index: number, targets: string[]): Promise<void> => {
     for (const botId of targets) {
