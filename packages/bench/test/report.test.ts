@@ -6,11 +6,12 @@ import type { GroupMetrics } from '../src/metrics.js';
 import { fmtInt, renderReport, writeResults } from '../src/report.js';
 import type { Group } from '../src/types.js';
 
-const meta = { scenarios: ['s1', 's2'], params: { ratio: 0.1 }, dsbotRef: 'f823773' as const };
+const meta = { scenarios: ['s1', 's2'], params: { ratio: 0.1 }, dsbotRef: 'f823773' as const, tiers: { s1: 'standard', s2: 'standard' } as Record<string, 'standard' | 'long'> };
 const gm = (group: Group, scenario: string, input: number, extra: Partial<GroupMetrics> = {}): GroupMetrics => ({
   group, scenario, inputTokens: input, cacheableTokens: 0, uncachedTokens: input, costUnits: input,
   scriptedRequests: 2, extraRequests: 1, contextMedian: input / 2, contextP90: input, contextMax: input,
-  series: [{ step: 0, botId: 'a', inputTokens: input }], compactions: 0, pauses: 0, coreErrors: 0, unfinished: false, ...extra,
+  series: [{ step: 0, botId: 'a', inputTokens: input }], compactions: 0, pauses: 0, coreErrors: 0, unfinished: false,
+  tier: 'standard', factOpportunities: 0, factHits: 0, factMisses: 0, perFact: [], growth: [], ...extra,
 });
 const groups: Group[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 const all = (): GroupMetrics[] =>
@@ -106,6 +107,70 @@ describe('renderReport', () => {
 
   test('byte-identical for identical input', () => {
     expect(renderReport(all(), meta)).toBe(renderReport(all(), meta));
+  });
+});
+
+const withFacts = (g: Group, sc: string, opp: number, hits: number, tier: 'standard' | 'long' = 'standard', extra: Partial<GroupMetrics> = {}) =>
+  gm(g, sc, 100, { tier, factOpportunities: opp, factHits: hits, factMisses: opp - hits, perFact: [{ id: 'fa', opportunities: opp, hits }, { id: 'fz', opportunities: 0, hits: 0 }], ...extra });
+
+describe('renderReport: facts, growth, tiers', () => {
+  const mixedMeta = { ...meta, tiers: { s1: 'standard', s2: 'long' } as Record<string, 'standard' | 'long'> };
+  const mixed = () => [
+    ...groups.map(g => withFacts(g, 's1', 3, 2)),
+    ...groups.map(g => withFacts(g, 's2', 4, 4, 'long', { growth: [{ fromStep: 0, avgInput: 120 }, { fromStep: 50, avgInput: 340 }] })),
+  ];
+
+  test('separate summary tables for standard and long; a single tier gives one table', () => {
+    const md = renderReport(mixed(), mixedMeta);
+    expect(md).toMatch(/## Summary \(standard scenarios\)/);
+    expect(md).toMatch(/## Summary \(long scenarios\)/);
+    expect(md).not.toMatch(/## Summary \(all scenarios\)/);
+    const one = renderReport(all(), meta);
+    expect(one.match(/^## Summary/gm)).toHaveLength(1);
+  });
+
+  test('long summary pools opportunities and hits of its own tier only', () => {
+    const md = renderReport(mixed(), mixedMeta);
+    const longPart = md.split('## Summary (long scenarios)')[1]!.split('## Caveats')[0]!;
+    expect(longPart.split('\n').find(l => l.startsWith('| A |'))).toContain('| 100.0 |');
+    const stdPart = md.split('## Summary (standard scenarios)')[1]!.split('## Summary (long')[0]!;
+    expect(stdPart.split('\n').find(l => l.startsWith('| A |'))).toContain('| 66.7 |');
+  });
+
+  test('scenario tables include "Facts visible %" (one decimal or n/a)', () => {
+    const md = renderReport([withFacts('A', 's1', 3, 2), gm('B', 's1', 10)], { ...meta, scenarios: ['s1'] });
+    expect(md).toContain('| Facts visible % |');
+    expect(md.split('\n').find(l => l.startsWith('| A |'))).toContain('| 66.7 |');
+    expect(md.split('\n').find(l => l.startsWith('| B |'))).toContain('| n/a |');
+    expect(md).not.toMatch(/NaN|Infinity/);
+  });
+
+  test('long scenarios get a growth table; standard ones do not', () => {
+    const md = renderReport(mixed(), mixedMeta);
+    expect(md.match(/^\| Group \| From step 0 \| From step 50 \|$/gm)).toHaveLength(1);
+    const row = md.split('\n').find(l => l === '| A | 120 | 340 |');
+    expect(row).toBeDefined();
+    expect(md.match(/Average request input tokens per 25-step bucket/g)).toHaveLength(1);
+  });
+
+  test('per-fact visibility table per scenario; zero opportunities print n/a', () => {
+    const md = renderReport(mixed(), mixedMeta);
+    expect(md.match(/^\| Fact \|/gm)).toHaveLength(2);
+    expect(md).toContain('| fa | 66.7 | 66.7 | 66.7 | 66.7 | 66.7 | 66.7 |');
+    expect(md).toContain('| fz | n/a | n/a | n/a | n/a | n/a | n/a |');
+    expect(md).not.toMatch(/NaN|Infinity/);
+  });
+
+  test('caveats state the visibility rule, the E summary assumption and the marker budget rule', () => {
+    const lines = renderReport(mixed(), mixedMeta).split('\n');
+    expect(lines).toContain('- Fact visibility is literal text matching of a marker: a group that paraphrases a fact counts as missing it.');
+    expect(lines).toContain("- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).");
+    expect(lines).toContain("- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.");
+  });
+
+  test('byte-identical for identical input; no NaN or Infinity', () => {
+    expect(renderReport(mixed(), mixedMeta)).toBe(renderReport(mixed(), mixedMeta));
+    expect(renderReport(mixed(), mixedMeta)).not.toMatch(/NaN|Infinity/);
   });
 });
 

@@ -116,12 +116,12 @@ export async function main(argv: string[]): Promise<number> {
     for (const g of groups) {
       const run = await runScenario(s, createPolicy(g, opts));
       records.push(...run.records);
-      metrics.push(computeMetrics(g, s.id, run.records, run.stats, args.cacheRatio));
+      metrics.push(computeMetrics(g, s.id, run.records, run.stats, args.cacheRatio, s.tier ?? 'standard', (s.facts ?? []).map(f => f.id)));
     }
   }
 
   const params = { cacheRatio: args.cacheRatio, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, window: args.window };
-  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, dsbotRef: 'f823773' });
+  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, dsbotRef: 'f823773', tiers: Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'])) });
   const dir = join(args.out, args.stamp ?? timestamp(new Date()));
   writeResults(dir, { records, metrics, params }, report);
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);

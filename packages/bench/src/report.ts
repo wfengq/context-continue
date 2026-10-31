@@ -24,9 +24,12 @@ function savings(ref: GroupMetrics | undefined, x: GroupMetrics): string {
   return pct === '-0.0' ? '0.0' : pct;
 }
 
+/** Hits / opportunities in percent, one decimal; n/a without opportunities. */
+const pct = (hits: number, opportunities: number): string => (opportunities === 0 ? 'n/a' : ((hits / opportunities) * 100).toFixed(1));
+
 const HEADER = [
   'Group', 'Input tokens', 'Cacheable', 'Uncached', 'Cost units', 'Scripted req', 'Extra req',
-  'Ctx median', 'Ctx P90', 'Ctx max', 'Compactions', 'Pauses', 'Core errors', 'Saved vs B %', 'Saved vs E %',
+  'Ctx median', 'Ctx P90', 'Ctx max', 'Compactions', 'Pauses', 'Core errors', 'Facts visible %', 'Saved vs B %', 'Saved vs E %',
 ];
 
 function table(rows: GroupMetrics[], contextOf: (g: Group) => [number, number, number]): string[] {
@@ -39,7 +42,7 @@ function table(rows: GroupMetrics[], contextOf: (g: Group) => [number, number, n
     const cells = [
       g + (r.unfinished ? ' (not finished)' : ''), fmtInt(r.inputTokens), fmtInt(r.cacheableTokens), fmtInt(r.uncachedTokens),
       fmtCost(r.costUnits), fmtInt(r.scriptedRequests), fmtInt(r.extraRequests), fmtInt(med), fmtInt(p90), fmtInt(max),
-      fmtInt(r.compactions), fmtInt(r.pauses), fmtInt(r.coreErrors), savings(by('B'), r), savings(by('E'), r),
+      fmtInt(r.compactions), fmtInt(r.pauses), fmtInt(r.coreErrors), pct(r.factHits, r.factOpportunities), savings(by('B'), r), savings(by('E'), r),
     ];
     lines.push(`| ${cells.join(' | ')} |`);
   }
@@ -52,7 +55,9 @@ function sumGroup(rows: GroupMetrics[], g: Group): GroupMetrics | undefined {
   const sum = (f: (r: GroupMetrics) => number) => mine.reduce((n, r) => n + f(r), 0);
   const sizes = mine.flatMap(r => r.series.map(s => s.inputTokens));
   return {
-    group: g, scenario: 'all',
+    group: g, scenario: 'all', tier: mine[0]!.tier,
+    factOpportunities: sum(r => r.factOpportunities), factHits: sum(r => r.factHits), factMisses: sum(r => r.factMisses),
+    perFact: [], growth: [],
     inputTokens: sum(r => r.inputTokens), cacheableTokens: sum(r => r.cacheableTokens), uncachedTokens: sum(r => r.uncachedTokens),
     costUnits: sum(r => r.costUnits), scriptedRequests: sum(r => r.scriptedRequests), extraRequests: sum(r => r.extraRequests),
     contextMedian: nearestRank(sizes, 0.5), contextP90: nearestRank(sizes, 0.9), contextMax: sizes.reduce((m, n) => Math.max(m, n), 0),
@@ -63,7 +68,7 @@ function sumGroup(rows: GroupMetrics[], g: Group): GroupMetrics | undefined {
 
 export function renderReport(
   all: GroupMetrics[],
-  meta: { scenarios: string[]; params: Record<string, number>; dsbotRef: 'f823773' },
+  meta: { scenarios: string[]; params: Record<string, number>; dsbotRef: 'f823773'; tiers: Record<string, 'standard' | 'long'> },
 ): string {
   const out: string[] = [
     '> Results come from a scripted fake model: they measure context size only, not task quality.',
@@ -77,6 +82,7 @@ export function renderReport(
     'Cost units = cacheable tokens x cache ratio + uncached tokens. Saved % = (reference cost - group cost) / reference cost x 100; n/a when the reference cost is 0.',
     '',
   ];
+  const tierOf = (sc: string): 'standard' | 'long' => meta.tiers[sc] ?? 'standard';
   for (const sc of meta.scenarios) {
     const rows = all.filter(r => r.scenario === sc);
     out.push(`## Scenario: ${sc}`, '');
@@ -94,13 +100,42 @@ export function renderReport(
       if (c.unfinished) out.push('Group C: the project was not finished (a workstream of the approved plan was never delivered).');
       out.push('');
     }
+    if (tierOf(sc) === 'long') {
+      const from = [...new Set(rows.flatMap(r => r.growth.map(b => b.fromStep)))].sort((a, b) => a - b);
+      if (from.length > 0) {
+        out.push('Average request input tokens per 25-step bucket:', '');
+        out.push(`| Group | ${from.map(f => `From step ${f}`).join(' | ')} |`, `|---|${from.map(() => '---').join('|')}|`);
+        for (const g of ORDER) {
+          const r = rows.find(x => x.group === g);
+          if (r) out.push(`| ${g} | ${from.map(f => { const b = r.growth.find(x => x.fromStep === f); return b ? fmtInt(b.avgInput) : 'n/a'; }).join(' | ')} |`);
+        }
+        out.push('');
+      }
+    }
+    const present = ORDER.filter(g => rows.some(r => r.group === g));
+    const ids = rows[0]?.perFact.map(f => f.id) ?? [];
+    if (ids.length > 0) {
+      out.push('Fact visibility % per fact:', '');
+      out.push(`| Fact | ${present.join(' | ')} |`, `|---|${present.map(() => '---').join('|')}|`);
+      for (const id of ids) {
+        const cells = present.map(g => {
+          const f = rows.find(r => r.group === g)!.perFact.find(x => x.id === id);
+          return f ? pct(f.hits, f.opportunities) : 'n/a';
+        });
+        out.push(`| ${id} | ${cells.join(' | ')} |`);
+      }
+      out.push('');
+    }
   }
-  const sums = ORDER.map(g => sumGroup(all, g)).filter((r): r is GroupMetrics => r !== undefined);
-  out.push('## Summary (all scenarios)', '');
-  out.push(...table(sums, g => {
-    const s = sums.find(r => r.group === g)!;
-    return [s.contextMedian, s.contextP90, s.contextMax];
-  }), '');
+  const tiersPresent = (['standard', 'long'] as const).filter(t => meta.scenarios.some(sc => tierOf(sc) === t));
+  for (const t of tiersPresent) {
+    const sums = ORDER.map(g => sumGroup(all.filter(r => tierOf(r.scenario) === t), g)).filter((r): r is GroupMetrics => r !== undefined);
+    out.push(tiersPresent.length > 1 ? `## Summary (${t} scenarios)` : '## Summary (all scenarios)', '');
+    out.push(...table(sums, g => {
+      const s = sums.find(r => r.group === g)!;
+      return [s.contextMedian, s.contextP90, s.contextMax];
+    }), '');
+  }
   out.push(
     '## Caveats', '',
     '- Results come from a scripted fake model; only context size is measured.',
@@ -119,6 +154,9 @@ export function renderReport(
     "- In C, D and E reviewers get a reference to the deliverable, not its text (in E only the author's chat message); a real reviewer would fetch the content with an extra tool call, which is not counted.",
     '- C, E and F always carry the goal and constraints; A, B and D see them only through human messages.',
     "- C's host adds the routed message and any wake merged into a bot's own next step to that bot's trigger; the core's wake detail only says why the bot was woken.",
+    '- Fact visibility is literal text matching of a marker: a group that paraphrases a fact counts as missing it.',
+    "- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).",
+    "- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.",
     '',
   );
   return out.join('\n');

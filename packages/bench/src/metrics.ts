@@ -22,6 +22,15 @@ export interface GroupMetrics {
    * Group C only: what a provider that caches the core's flagged stable segments could cache, and
    * the cost units that would give. Shown as a caveat line, never in the tables (R-B19).
    */
+  /** Fact visibility: opportunities are scripted requests after a fact's step whose audience includes the bot. */
+  tier: 'standard' | 'long';
+  factOpportunities: number;
+  factHits: number;
+  factMisses: number;
+  /** One entry per scenario fact, in scenario order; a fact with no opportunity has 0/0. */
+  perFact: { id: string; opportunities: number; hits: number }[];
+  /** Average input tokens of all requests per 25-step bucket (fromStep 0, 25, ...); empty buckets omitted. */
+  growth: { fromStep: number; avgInput: number }[];
   upperBound?: { cacheableTokens: number; costUnits: number };
 }
 
@@ -39,6 +48,9 @@ export function computeMetrics(
   records: CallRecord[],
   stats: PolicyStats,
   cacheRatio: number,
+  tier: 'standard' | 'long',
+  /** The scenario's fact ids in order; defaults to the ids seen in the records (first-seen order). */
+  factIds?: string[],
 ): GroupMetrics {
   for (const r of records) {
     if (r.group !== group) throw new Error(`computeMetrics: record of group ${r.group} in metrics for group ${group}`);
@@ -49,7 +61,29 @@ export function computeMetrics(
   const uncachedTokens = inputTokens - cacheableTokens;
   const sizes = records.map(r => r.inputTokens);
   const cost = (cacheable: number) => cacheable * cacheRatio + (inputTokens - cacheable);
+  const ids = factIds ?? [...new Set(records.flatMap(r => [...(r.factsSeen ?? []), ...(r.factsMissed ?? [])]))];
+  const perFact = ids.map(id => {
+    const hits = records.filter(r => r.factsSeen?.includes(id)).length;
+    const misses = records.filter(r => r.factsMissed?.includes(id)).length;
+    return { id, opportunities: hits + misses, hits };
+  });
+  const factHits = records.reduce((n, r) => n + (r.factsSeen?.length ?? 0), 0);
+  const factMisses = records.reduce((n, r) => n + (r.factsMissed?.length ?? 0), 0);
+  const buckets = new Map<number, number[]>();
+  for (const r of records) {
+    const from = Math.floor(r.step / 25) * 25;
+    buckets.set(from, [...(buckets.get(from) ?? []), r.inputTokens]);
+  }
+  const growth = [...buckets.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([fromStep, v]) => ({ fromStep, avgInput: Math.round(v.reduce((n, x) => n + x, 0) / v.length) }));
   const m: GroupMetrics = {
+    tier,
+    factOpportunities: factHits + factMisses,
+    factHits,
+    factMisses,
+    perFact,
+    growth,
     group,
     scenario,
     inputTokens,
