@@ -4,7 +4,7 @@
 import { condenseSegments, type CondenseFn } from './condense.js';
 import type { EmployeeRegistry } from './employees.js';
 import type { CoreEvents } from './events.js';
-import { newId } from './ids.js';
+import { newId as defaultNewId, type IdGenerator } from './ids.js';
 import { defaultMemory, defaultWorkspace } from './members.js';
 import type { Options } from './options.js';
 import { splitParagraphs } from './render.js';
@@ -20,6 +20,8 @@ export interface PrivateDeps {
   now: () => number;
   condense?: CondenseFn;
   aborted: (e: CoreEvents['condenseAborted']) => void;
+  /** Id generator for new memories; defaults to `newId`. */
+  newId?: IdGenerator;
 }
 
 /** Appends a paragraph to the bot's notes (or a pinned note) and condenses; one save. */
@@ -46,6 +48,7 @@ export async function appendNote(deps: PrivateDeps, botId: string, text: string,
 export async function addMemories(deps: PrivateDeps, botId: string, memories: { text: string; pinned?: boolean }[]): Promise<void> {
   const prev: EmployeeMemory = (await deps.employees.get(botId)) ?? defaultMemory(botId);
   const now = deps.now();
+  const newId = deps.newId ?? defaultNewId;
   const added = memories.map(m => ({ id: newId('m'), text: m.text, fromProject: deps.projectId, createdAt: now, pinned: m.pinned ?? false }));
   const next: EmployeeMemory = { ...prev, memories: [...prev.memories, ...added] };
   const recent = next.memories.filter(m => !m.pinned);

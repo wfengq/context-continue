@@ -12,7 +12,7 @@ import { ContextError } from './errors.js';
 import { createEventBus, type EventBus } from './events.js';
 import { createExtractor } from './extract.js';
 import { exportMarkdown as boardToMarkdown } from './markdown.js';
-import { newId } from './ids.js';
+import { newId as defaultNewId, type IdGenerator } from './ids.js';
 import { assertMember, botMembers, defaultWorkspace } from './members.js';
 import { resolveOptions, type Options } from './options.js';
 import { diffPlan, type ApprovedPlan, type PlanWorkstream } from './plan/replan.js';
@@ -59,6 +59,12 @@ export interface ProjectConfig {
   countTokens?: (s: string) => number;
   clock?: Clock;
   options?: Options;
+  /**
+   * Id generator for every id the project makes (ledger entries, proposals, plans, pending items,
+   * board items, deliverables, memories). Defaults to `newId` (random). Deliverable refs are made by
+   * the store; give `memoryStore` the same generator for fully deterministic ids.
+   */
+  newId?: IdGenerator;
 }
 
 export type Submission =
@@ -147,6 +153,7 @@ export function createProject(cfg: ProjectConfig): Project {
   const { projectId, employees } = cfg;
   const store = retryingStore(cfg.store);
   const clock = cfg.clock ?? systemClock;
+  const newId = cfg.newId ?? defaultNewId;
   const options = resolveOptions(cfg.options);
   const count = cfg.countTokens ?? defaultCountTokens;
   const external = cfg.workstreams !== undefined;
@@ -172,6 +179,7 @@ export function createProject(cfg: ProjectConfig): Project {
     count,
     renderPublic: b => renderBoardPublic(b, b.workstreams),
     ownWorkstreams: async botId => (await workstreamsOf(await getBoard())).filter(w => w.owner === botId).map(w => w.id),
+    newId,
   });
   const briefDeps: BriefDeps = {
     store,
@@ -192,6 +200,7 @@ export function createProject(cfg: ProjectConfig): Project {
     now: () => clock.now(),
     condense: cfg.models?.condense,
     aborted: e => bus.emit('condenseAborted', e),
+    newId,
   };
 
   // ---------------------------------------------------------------------------

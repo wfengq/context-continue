@@ -1,6 +1,6 @@
 import type { Clock } from '../clock.js';
 import { ContextError } from '../errors.js';
-import { newId } from '../ids.js';
+import { newId as defaultNewId, type IdGenerator } from '../ids.js';
 import type { Options } from '../options.js';
 import type { Store } from '../store/store.js';
 import type {
@@ -37,6 +37,8 @@ export interface MergerDeps {
   count: (s: string) => number;
   renderPublic: (b: ProjectBoard) => string;
   ownWorkstreams: (botId: string) => Promise<string[]>;
+  /** Id generator for pending items, ledger entries and created board items; defaults to `newId`. */
+  newId?: IdGenerator;
 }
 
 /** How many times a save that hit STALE_VERSION is retried before the error is rethrown. */
@@ -87,7 +89,11 @@ const isStale = (e: unknown) => e instanceof ContextError && e.code === 'STALE_V
 export class Merger {
   private chain: Promise<void> = Promise.resolve();
 
-  constructor(private readonly deps: MergerDeps) {}
+  private readonly newId: IdGenerator;
+
+  constructor(private readonly deps: MergerDeps) {
+    this.newId = deps.newId ?? defaultNewId;
+  }
 
   /** Drain the proposal queue and merge it: auto ops land in one BoardChange, the rest wait. */
   merge(): Promise<MergeResult> {
@@ -193,7 +199,7 @@ export class Merger {
       for (const needs of ['lead', 'human'] as const) {
         if (waiting[needs].length === 0) continue;
         attempt.pending.push({
-          id: newId('pend'),
+          id: this.newId('pend'),
           projectId,
           proposalId: proposal.id,
           by,
@@ -215,7 +221,7 @@ export class Merger {
     index: number,
   ): void {
     try {
-      const r = applyOp(attempt.next, op, meta);
+      const r = applyOp(attempt.next, op, { ...meta, newId: this.newId });
       attempt.next = r.board;
       attempt.applied.push({ op, by: meta.by, authority: meta.authority, touched: r.touched });
       attempt.archived.push(...r.archived);
@@ -303,7 +309,7 @@ export class Merger {
       }
       if (needsHuman.length > 0) {
         attempt.pending.push({
-          id: newId('pend'),
+          id: this.newId('pend'),
           projectId,
           proposalId: pending.proposalId,
           by: meta.by,
@@ -337,7 +343,7 @@ export class Merger {
     if (change) events.push({ kind: 'boardMerged', version: change.version });
     for (const event of events) {
       await this.deps.store.append({
-        id: newId('e'),
+        id: this.newId('e'),
         projectId: this.deps.projectId,
         createdAt: this.deps.clock.now(),
         author: MERGER_AUTHOR,

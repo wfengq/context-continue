@@ -1,5 +1,5 @@
 import { ContextError } from '../errors.js';
-import { newId } from '../ids.js';
+import { newId as defaultNewId, type IdGenerator } from '../ids.js';
 import type {
   BoardChange,
   EmployeeMemory,
@@ -21,7 +21,9 @@ function searchableText(e: LedgerEntry): string | null {
 }
 
 /** In-memory Store, used for tests and as the reference implementation of the contract. */
-export function memoryStore(): Store {
+/** In-memory store; `newId` makes deliverable refs (default: random `newId`). */
+export function memoryStore(opts: { newId?: IdGenerator } = {}): Store {
+  const newId = opts.newId ?? defaultNewId;
   const ledgers = new Map<string, LedgerEntry[]>();
   const boards = new Map<string, ProjectBoard>();
   const changes = new Map<string, BoardChange[]>();

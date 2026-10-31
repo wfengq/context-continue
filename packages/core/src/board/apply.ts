@@ -1,10 +1,12 @@
 import { ContextError } from '../errors.js';
-import { newId } from '../ids.js';
+import { newId as defaultNewId, type IdGenerator } from '../ids.js';
 import type { BoardOp, Item, ProjectBoard } from '../types.js';
 
 export interface ApplyMeta {
   by: string;
   authority: 'human' | 'bot';
+  /** Id generator for created items; defaults to `newId`. */
+  newId?: IdGenerator;
 }
 
 export interface ArchivedItem {
@@ -37,6 +39,7 @@ function invalid(message: string, op: BoardOp): never {
  * `version` or `updatedAt`; the merger owns those.
  */
 export function applyOp(board: ProjectBoard, op: BoardOp, meta: ApplyMeta): ApplyResult {
+  const newId = meta.newId ?? defaultNewId;
   const next = structuredClone(board);
   const touched: string[] = [];
   const archived: ArchivedItem[] = [];
