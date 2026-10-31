@@ -81,6 +81,14 @@ An invalid scenario, group or flag value prints a message on stderr and exits wi
   @-mention each other in the scenario. A scenario with more or fewer mentions shifts these groups.
 - Cost units weight cacheable tokens by `--cache-ratio`; raw input tokens and the context-size
   columns show the size of what each request carries, independent of caching.
+- One cacheable rule applies to every group: the longest leading run of a request's segments that
+  is identical to the same bot's previous request (on a bot's first request, only the fixed
+  template). In group C a segment must also be flagged cacheable by the core; the report adds a
+  per-scenario upper-bound line for a provider that caches the core's stable segments wherever
+  they are.
+- Reviewers in C, D and E get a reference to a deliverable, not its text; F has shared pages but no
+  chat thread; C, E and F always carry the goal and constraints, A, B and D only through human
+  messages. The report's caveats list these and the other modelling choices.
 
 ## Development
 

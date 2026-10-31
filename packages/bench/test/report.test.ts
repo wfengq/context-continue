@@ -88,6 +88,22 @@ describe('renderReport', () => {
     );
   });
 
+  test('caveats: one cacheable rule, F pages only, references for C/D/E reviewers, goal and constraints (final fixes)', () => {
+    const lines = renderReport(all(), meta).split('\n');
+    for (const l of [
+      "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.",
+      "- F's context is the shared pages plus the bot's own history: there is no chat thread.",
+      '- In C, D and E reviewers get a reference to the deliverable, not its text (in E only the author\'s chat message); a real reviewer would fetch the content with an extra tool call, which is not counted.',
+      '- C, E and F always carry the goal and constraints; A, B and D see them only through human messages.',
+      "- C's host adds the routed message and any wake merged into a bot's own next step to that bot's trigger; the core's wake detail only says why the bot was woken.",
+    ]) expect(lines).toContain(l);
+    // every earlier caveat is still there
+    const md = lines.join('\n');
+    for (const k of ['needs a real model, not measured', 'E approximates DS Bot', 'A also stands for Muse/Duet', 'extra lead brief at step 0', 'A is a single-agent baseline']) {
+      expect(md).toContain(k);
+    }
+  });
+
   test('byte-identical for identical input', () => {
     expect(renderReport(all(), meta)).toBe(renderReport(all(), meta));
   });
