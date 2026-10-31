@@ -730,11 +730,11 @@ export function generateLongApp(): Scenario {
     reply: 'First version of the offline list.',
     summary: 'SQLite store, queued edits, ordered replay',
     add: [
-      'Local store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure).',
+      'Local store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure FAIL-FULL-LIST-RESYNC).',
       'Scope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design.',
     ],
   });
-  b.review('offline', false, 'In my test an item that another member deleted came back after I ticked it offline. A delete has to win over an edit, as the contract says.', [
+  b.review('offline', false, 'In my test an item that another member deleted came back after I ticked it offline. A delete has to win over an edit, as the contract says (CONTRACT-SYNC-CURSOR).', [
     'Sync conflicts follow the contract: the last writer wins per field and a delete wins over an edit; the losing side is told in the UI (CONV-DELETE-WINS).',
   ]);
   b.fact('conv-delete-wins', 'CONV-DELETE-WINS', ['mobile', 'backend', 'qa']);

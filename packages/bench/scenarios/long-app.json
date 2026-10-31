@@ -2599,7 +2599,7 @@
           "args": {
             "workstreamId": "offline",
             "summary": "SQLite store, queued edits, ordered replay",
-            "content": "Offline grocery list, version 1.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design."
+            "content": "Offline grocery list, version 1.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure FAIL-FULL-LIST-RESYNC).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design."
           }
         }
       ]
@@ -2608,7 +2608,7 @@
       "kind": "review",
       "deliverableOf": "offline",
       "passed": false,
-      "notes": "In my test an item that another member deleted came back after I ticked it offline. A delete has to win over an edit, as the contract says.",
+      "notes": "In my test an item that another member deleted came back after I ticked it offline. A delete has to win over an edit, as the contract says (CONTRACT-SYNC-CURSOR).",
       "conventions": [
         "Sync conflicts follow the contract: the last writer wins per field and a delete wins over an edit; the losing side is told in the UI (CONV-DELETE-WINS)."
       ]
@@ -2674,7 +2674,7 @@
           "args": {
             "workstreamId": "offline",
             "summary": "Delete wins; conflict toast; 3-device test",
-            "content": "Offline grocery list, version 2.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design.\n\nConflicts: an edit to an item another member deleted is dropped and the conflict toast tells the user. Tested with 3 devices and 200 random offline edits per device; no edit was lost and every device ended with the same list."
+            "content": "Offline grocery list, version 2.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure FAIL-FULL-LIST-RESYNC).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design.\n\nConflicts: an edit to an item another member deleted is dropped and the conflict toast tells the user. Tested with 3 devices and 200 random offline edits per device; no edit was lost and every device ended with the same list."
           }
         }
       ]
