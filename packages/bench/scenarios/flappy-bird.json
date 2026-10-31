@@ -201,7 +201,7 @@
         {
           "name": "sendMessage",
           "args": {
-            "text": "Logical screen 288x512, hitbox 12x12; a bird of about 17x12 pixels fits.",
+            "text": "Logical screen 288x512, hitbox 12x12; a bird of about 17x12 pixels fits. (CONTRACT-HITBOX-12X12)",
             "act": "inform",
             "mentions": [
               "artist"
