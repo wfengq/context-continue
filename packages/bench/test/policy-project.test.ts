@@ -204,6 +204,24 @@ describe('group C (project board, real core library)', () => {
   });
 });
 
+describe('group C deterministic ids (R-B23)', () => {
+  test('C: two runs send byte-identical request texts (seeded core ids)', async () => {
+    const steps = [
+      ...threeSteps(),
+      { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.' },
+      { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'Uses art.', ops: [deliver('logic', 'rules')] },
+    ];
+    const a = await runC(steps);
+    const b = await runC(steps);
+    const texts = (r: Awaited<ReturnType<typeof runC>>) => JSON.stringify(r.seen.map(q => q.segments.map(g => g.text)));
+    expect(texts(b)).toBe(texts(a));
+    // ids come from the bench's counter, e.g. "dlv-0000000a", not random hex
+    const art = (await a.project.board()).workstreams.find(w => w.id === 'art')!;
+    expect(art.deliverables[0]!.id).toMatch(/^dlv-[0-9a-f]{8}$/);
+    expect(art.deliverables[0]!.id).toBe((await b.project.board()).workstreams.find(w => w.id === 'art')!.deliverables[0]!.id);
+  });
+});
+
 describe('group C unfinished flag (R-B16)', () => {
   test('C: finish() reports unfinished when a workstream never delivers', async () => {
     const { stats } = await runC([{ kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' }]);

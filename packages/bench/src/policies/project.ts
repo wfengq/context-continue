@@ -23,6 +23,12 @@ function benchClock(): Clock {
   return { now: () => ++t, setTimeout: () => null, clearTimeout: () => undefined };
 }
 
+/** A seeded id generator: `<prefix>-<n as 8 hex digits>`, counting from 1 per project (R-B23). */
+function benchIds(): (prefix: string) => string {
+  let n = 0;
+  return prefix => `${prefix}-${(++n).toString(16).padStart(8, '0')}`;
+}
+
 const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 const wakesIn = (result: unknown): Wake[] => {
@@ -107,10 +113,11 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
 
   async function setup(ctx: RunContext): Promise<Project> {
     const s = ctx.scenario;
-    const store = memoryStore();
+    const newId = benchIds();
+    const store = memoryStore({ newId });
     const employees = createEmployeeRegistry({ store });
     for (const e of s.employees) await employees.upsert({ botId: e.botId, persona: e.persona, skills: [...e.skills] });
-    const p = createProject({ projectId: s.id, store, employees, clock: benchClock() });
+    const p = createProject({ projectId: s.id, store, employees, clock: benchClock(), newId });
     p.on('wake', e => void woken.push(...e.wakes));
     woken.push(...(await p.start({ goal: s.goal, constraints: [...s.constraints], lead: s.lead, by: s.owner })));
     await wakeRequests(p, ctx, 0, -1);
