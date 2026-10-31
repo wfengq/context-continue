@@ -12,7 +12,7 @@ interface BotView {
 
 /**
  * Group D (DeLM style): no lead and no routing. All activity goes into one shared log: human
- * messages, bot replies (scripted and idle), tool lines and deliverables in reference form
+ * messages, scripted bot replies, tool lines and deliverables in reference form
  * (`[deliverable <ws> v<n> ref]`). Each bot has a read cursor; whenever it makes a request, every
  * log entry after its cursor (no relevance filter) is appended to its own history and the cursor
  * moves to the end.
@@ -24,7 +24,7 @@ interface BotView {
  * Wakes: a human message with mentions wakes the mentioned bots; without mentions it wakes every
  * bot. Bot messages wake nobody (DeLM agents read the board when they act). A wake is an extra
  * request unless merged into the bot's own next scripted step; it is answered with `idleReply`,
- * which goes into the log without waking anyone. Task trigger lines are private to the requester.
+ * which is a pass (R-B10): never posted to the log. Task trigger lines are private to the requester.
  */
 export function delmPolicy(): Policy {
   const log: string[] = [];
@@ -63,8 +63,7 @@ export function delmPolicy(): Policy {
         const targets = mentioned && mentioned.length > 0 ? everyone.filter(b => mentioned.includes(b)) : everyone;
         for (const botId of targets) {
           if (ctx.isMerged(botId, index)) continue;
-          const out = await request(ctx, botId, index, 'extra', null);
-          log.push(fmtBot(botId, out.reply));
+          await request(ctx, botId, index, 'extra', null); // idle reply = pass, not posted (R-B10)
         }
         return;
       }

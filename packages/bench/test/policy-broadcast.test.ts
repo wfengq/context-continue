@@ -63,33 +63,33 @@ describe('group B (Grok Bot-style broadcast)', () => {
     const T = defaultCountTokens(BASE_TEMPLATE);
     // Hand counts (ASCII → ceil(chars / 4)):
     const H = 7;      // "[human human] Build a game." = 27
-    const pmN = 4;    // "[bot pm] Noted." = 15
-    const logN = 5;   // "[bot logic] Noted." = 18
     const taskArt = 9;   // "[task art] work on workstream art" = 33 (private to art, not in the group transcript)
     const artReply = 6;  // "[bot art] Drew sprites." = 23
     const tool = 8;      // "[tool art] submitDeliverable: ok" = 32
     const deliv = 9;     // "[deliverable art v1] sprite sheet" = 33
     const taskLogic = 10; // "[task logic] work on workstream logic" = 37
     const logReply = 6;  // "[bot logic] Wrote rules." = 24
+    // Idle replies ("Noted.") are passes and never enter the transcript (R-B10).
 
-    // step 0 extras: pm reads [H]; logic reads [H, pm's Noted.]
+    // step 0 extras: pm and logic each read [H]
     expect(records[0]).toMatchObject({ inputTokens: T + H, cacheableTokens: T });
-    expect(records[1]).toMatchObject({ inputTokens: T + H + pmN, cacheableTokens: T });
-    // art scripted (first request): [H, pmN, logN, task]
-    expect(records[2]).toMatchObject({ inputTokens: T + H + pmN + logN + taskArt, cacheableTokens: T });
-    // pm extra after step 1: its previous request (T + H) is cached; art's reply, tool, deliverable and the Noted. lines are new
-    expect(records[3]).toMatchObject({ inputTokens: T + H + pmN + logN + artReply + tool + deliv, cacheableTokens: T + H });
-    // logic scripted: previous request was T + H + pmN
+    expect(records[1]).toMatchObject({ inputTokens: T + H, cacheableTokens: T });
+    // art scripted (first request): [H, task]
+    expect(records[2]).toMatchObject({ inputTokens: T + H + taskArt, cacheableTokens: T });
+    // pm extra after step 1: its previous request (T + H) is cached; art's reply, tool, deliverable are new
+    expect(records[3]).toMatchObject({ inputTokens: T + H + artReply + tool + deliv, cacheableTokens: T + H });
+    // logic scripted: previous request was T + H
     expect(records[4]).toMatchObject({
-      inputTokens: T + H + pmN + logN + artReply + tool + deliv + pmN + taskLogic,
-      cacheableTokens: T + H + pmN,
+      inputTokens: T + H + artReply + tool + deliv + taskLogic,
+      cacheableTokens: T + H,
     });
-    // pm extra after step 2: previous request (records[3]) cached; new = pm's Noted. + logic's reply
-    expect(records[5]).toMatchObject({ inputTokens: records[3]!.inputTokens + pmN + logReply, cacheableTokens: records[3]!.inputTokens });
-    // art extra after step 2: previous request (records[2]) cached; new = art reply/tool/deliv, pm Noted., logic reply, pm Noted.
+    // pm extra after step 2: previous request (records[3]) cached; new = logic's reply
+    expect(records[5]).toMatchObject({ inputTokens: records[3]!.inputTokens + logReply, cacheableTokens: records[3]!.inputTokens });
+    // art extra after step 2: previous request (records[2]) cached; new = art reply/tool/deliv, logic reply
     expect(records[6]).toMatchObject({
-      inputTokens: records[2]!.inputTokens + artReply + tool + deliv + pmN + logReply + pmN,
+      inputTokens: records[2]!.inputTokens + artReply + tool + deliv + logReply,
       cacheableTokens: records[2]!.inputTokens,
     });
+    expect(records[6]!.inputTokens).toBe(T + H + taskArt + artReply + tool + deliv + logReply);
   });
 });

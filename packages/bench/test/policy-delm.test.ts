@@ -72,9 +72,7 @@ describe('group D (DeLM-style shared log)', () => {
     const pmLast = spy.requests[4]!.segments.map(s => s.text);
     expect(pmLast).toEqual([
       BASE_TEMPLATE,
-      '[human human] Build a game.', // read at its first request
-      '[bot pm] Noted.',
-      '[bot logic] Noted.',
+      '[human human] Build a game.', // read at its first request; idle replies are never logged (R-B10)
       '[bot art] Drew sprites.',
       '[tool art] submitDeliverable: ok',
       '[deliverable art v1 ref]',
@@ -90,8 +88,6 @@ describe('group D (DeLM-style shared log)', () => {
     const T = defaultCountTokens(BASE_TEMPLATE);
     // Hand counts (ASCII → ceil(chars / 4)):
     const H = 7;        // "[human human] Build a game." = 27
-    const pmN = 4;      // "[bot pm] Noted." = 15
-    const logN = 5;     // "[bot logic] Noted." = 18
     const taskArt = 9;  // "[task art] work on workstream art" = 33 (private)
     const artReply = 6; // "[bot art] Drew sprites." = 23
     const tool = 8;     // "[tool art] submitDeliverable: ok" = 32
@@ -99,18 +95,19 @@ describe('group D (DeLM-style shared log)', () => {
     const taskLogic = 10; // "[task logic] work on workstream logic" = 37
     const logReply = 6; // "[bot logic] Wrote rules." = 24
     const ping = 6;     // "[human human] Ping pm." = 22
+    // Idle replies ("Noted.") are passes and never enter the log (R-B10).
 
     expect(records[0]).toMatchObject({ inputTokens: T + H, cacheableTokens: T });
-    expect(records[1]).toMatchObject({ inputTokens: T + H + pmN, cacheableTokens: T });
-    expect(records[2]).toMatchObject({ inputTokens: T + H + pmN + logN + taskArt, cacheableTokens: T });
-    // logic scripted: previous request was T + H + pmN; new = its own Noted., art reply/tool/ref, task
+    expect(records[1]).toMatchObject({ inputTokens: T + H, cacheableTokens: T });
+    expect(records[2]).toMatchObject({ inputTokens: T + H + taskArt, cacheableTokens: T });
+    // logic scripted: previous request was T + H; new = art reply/tool/ref, task
     expect(records[3]).toMatchObject({
-      inputTokens: T + H + pmN + logN + artReply + tool + ref + taskLogic,
-      cacheableTokens: T + H + pmN,
+      inputTokens: T + H + artReply + tool + ref + taskLogic,
+      cacheableTokens: T + H,
     });
     // pm extra at step 3: previous request was T + H; everything else is new
     expect(records[4]).toMatchObject({
-      inputTokens: T + H + pmN + logN + artReply + tool + ref + logReply + ping,
+      inputTokens: T + H + artReply + tool + ref + logReply + ping,
       cacheableTokens: T + H,
     });
   });

@@ -17,8 +17,8 @@ interface BotView {
  * own next scripted step. Each request carries the whole transcript; the cacheable part is exactly
  * the bot's previous request, everything appended since is new.
  *
- * Extra requests answer with `idleReply`. That reply is a bot message in the transcript (later
- * requests read it) but it does NOT wake anyone: otherwise idle replies would trigger reads forever.
+ * Extra requests answer with `idleReply`. An idle reply is a pass (R-B10): it costs the request's
+ * input tokens but is never posted to the transcript, so it wakes nobody and nobody reads it.
  * Task trigger lines are private to the requested bot and are not group messages.
  */
 export function broadcastPolicy(): Policy {
@@ -51,8 +51,7 @@ export function broadcastPolicy(): Policy {
   const wake = async (ctx: RunContext, index: number, targets: string[]): Promise<void> => {
     for (const botId of targets) {
       if (ctx.isMerged(botId, index)) continue;
-      const out = await request(ctx, botId, index, 'extra', null);
-      transcript.push(fmtBot(botId, out.reply)); // visible to later reads, wakes nobody
+      await request(ctx, botId, index, 'extra', null); // idle reply = pass, not posted (R-B10)
     }
   };
 
