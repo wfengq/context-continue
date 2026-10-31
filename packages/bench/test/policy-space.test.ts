@@ -141,8 +141,12 @@ describe('group F (Dots + Space-style shared pages)', () => {
     // Hand counts (ASCII, ceil(chars / 4)). Project page chars: 42 (header) + 18 ("decision: Use grid") + 13 ("  why: simple")
     // + 14 ("  affects: art") + 14 ("tried: Tried A") + 21 ("  why it failed: slow") + 16 ("  affects: logic") + 6 newlines = 144 -> 36.
     const page = 36;
-    // Step 1 history: task (33 chars -> 9) + reply "[bot art] p" (11 -> 3) + two "[tool art] promote: ok" (22 -> 6 each); step 2 adds its task (9).
-    expect(records[1]!.inputTokens).toBe(T + page + 9 + 3 + 6 + 6 + 9);
+    // Step 1 history: task (33 chars -> 9) + reply "[bot art] p" (11 -> 3) + two promote tool lines that now carry their
+    // string fields (R-L4: kind/text/rationale or reason); step 2 adds its task (9).
+    const tool = (rest: string) => defaultCountTokens(`[tool art] promote: ok\n${rest}`);
+    const t1 = tool('  kind: decision\n  text: Use grid\n  rationale: simple');
+    const t2 = tool('  kind: failure\n  text: Tried A\n  reason: slow');
+    expect(records[1]!.inputTokens).toBe(T + page + 9 + 3 + t1 + t2 + 9);
     expect(records[1]!.cacheableTokens).toBe(T); // the pages changed
   });
 

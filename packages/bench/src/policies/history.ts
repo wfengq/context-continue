@@ -22,6 +22,9 @@ export function historySegments(lines: readonly string[], prevLen: number): Segm
   return [{ text: BASE_TEMPLATE, cacheable: true }, ...lines.map((text, i) => ({ text, cacheable: i < prevLen }))];
 }
 
+/** A shared-log entry: a plain string is read by everyone; `only` limits it to its author's own view. */
+export type LogLine = string | { text: string; only: string };
+
 interface BotView {
   /** The bot's own append-only history: shared-log entries it has read plus its private task lines. */
   lines: string[];
@@ -36,13 +39,16 @@ interface BotView {
  * log entries after its cursor (never twice), then its task line if any; the request is
  * `historySegments` over its lines.
  */
-export function historyReader(): { segmentsFor(botId: string, log: readonly string[], task: string | null): Segment[] } {
+export function historyReader(): { segmentsFor(botId: string, log: readonly LogLine[], task: string | null): Segment[] } {
   const views = new Map<string, BotView>();
   return {
     segmentsFor(botId, log, task) {
       let v = views.get(botId);
       if (!v) views.set(botId, (v = { lines: [], cursor: 0, prevLen: 0 }));
-      v.lines.push(...log.slice(v.cursor));
+      for (const l of log.slice(v.cursor)) {
+        if (typeof l === 'string') v.lines.push(l);
+        else if (l.only === botId) v.lines.push(l.text);
+      }
       v.cursor = log.length;
       if (task !== null) v.lines.push(task);
       const segments = historySegments(v.lines, v.prevLen);

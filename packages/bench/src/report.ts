@@ -145,6 +145,7 @@ export function renderReport(
     '- A also stands for Muse/Duet.',
     "- C uses the core's own common segment instead of the shared template.",
     '- Tool definitions are not counted in any group.',
+    "- A fact's category is set by its id prefix; some failure facts come from failed review notes (event-plan records no failure op).",
     '- C pays one extra lead brief at step 0 when a scenario opens with a human message.',
     '- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.',
     "- The bundled scenarios are short, so E's compaction does not trigger at the default window; pass a smaller --window to see it.",

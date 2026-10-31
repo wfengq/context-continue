@@ -1,5 +1,5 @@
 import { BASE_TEMPLATE, type Policy, type RunContext, type Segment } from '../runner.js';
-import { fmtBot, fmtHuman, fmtOps, fmtTask } from '../text.js';
+import { fmtBot, fmtHuman, fmtOps, fmtTask, messagesIn } from '../text.js';
 import { prefixCacheable } from './history.js';
 import type { Scenario } from '../types.js';
 
@@ -196,6 +196,7 @@ export function dsBotPolicy(opts: DsBotOptions): Policy {
       const { session, out } = await request(ctx, actor, index, 'scripted', fmtTask(actor, step));
       session.history.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, false));
       post(actor, fmtBot(actor, out.reply));
+      for (const m of messagesIn(out.ops)) post(actor, fmtBot(actor, m)); // a posted message; wakes nobody (R-L4)
       if (step.kind === 'review') conventions.push(...(step.conventions ?? []));
       for (const target of mentionsIn(ctx, actor, out.reply)) await relayWake(ctx, target, index);
     },

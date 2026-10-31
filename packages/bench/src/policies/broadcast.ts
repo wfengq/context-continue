@@ -1,6 +1,6 @@
 import type { Policy, RunContext } from '../runner.js';
-import { fmtBot, fmtHuman, fmtOps, fmtTask } from '../text.js';
-import { historyReader } from './history.js';
+import { fmtBot, fmtHuman, fmtOps, fmtTask, fmtToolArgs, messagesIn } from '../text.js';
+import { historyReader, type LogLine } from './history.js';
 
 /**
  * Group B (Grok Bot style): the group chat is the shared context. Every message, human (mentioned
@@ -13,7 +13,7 @@ import { historyReader } from './history.js';
  * Task trigger lines are private to the requested bot and are not group messages.
  */
 export function broadcastPolicy(): Policy {
-  const transcript: string[] = [];
+  const transcript: LogLine[] = [];
   const reader = historyReader();
   const versions = new Map<string, number>();
 
@@ -39,7 +39,13 @@ export function broadcastPolicy(): Policy {
       }
       const actor = ctx.actorOf(step);
       const out = await request(ctx, actor, index, 'scripted', fmtTask(actor, step));
-      transcript.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, false));
+      transcript.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, false, false));
+      // A sendMessage text is a posted message everyone reads; every other call's arguments stay private to the author (R-L4).
+      for (const m of messagesIn(out.ops)) transcript.push(fmtBot(actor, m));
+      for (const op of out.ops) {
+        const shown = op.name === 'sendMessage' ? null : fmtToolArgs(op);
+        if (shown !== null) transcript.push({ text: shown, only: actor });
+      }
       await wake(ctx, index, everyone.filter(b => b !== actor));
     },
     async finish() {

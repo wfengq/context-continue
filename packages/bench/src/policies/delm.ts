@@ -1,6 +1,6 @@
 import type { Policy, RunContext } from '../runner.js';
-import { fmtBot, fmtHuman, fmtOps, fmtTask } from '../text.js';
-import { historyReader } from './history.js';
+import { fmtBot, fmtHuman, fmtOps, fmtTask, fmtToolArgs, messagesIn } from '../text.js';
+import { historyReader, type LogLine } from './history.js';
 
 /**
  * Group D (DeLM style): no lead and no routing. All activity goes into one shared log: human
@@ -19,7 +19,7 @@ import { historyReader } from './history.js';
  * which is a pass (R-B10): never posted to the log. Task trigger lines are private to the requester.
  */
 export function delmPolicy(): Policy {
-  const log: string[] = [];
+  const log: LogLine[] = [];
   const reader = historyReader();
   const versions = new Map<string, number>();
 
@@ -42,7 +42,13 @@ export function delmPolicy(): Policy {
       }
       const actor = ctx.actorOf(step);
       const out = await request(ctx, actor, index, 'scripted', fmtTask(actor, step));
-      log.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, true));
+      log.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, true, false));
+      // A sendMessage text is a posted message everyone reads; every other call's arguments stay private to the author (R-L4).
+      for (const m of messagesIn(out.ops)) log.push(fmtBot(actor, m));
+      for (const op of out.ops) {
+        const shown = op.name === 'sendMessage' ? null : fmtToolArgs(op);
+        if (shown !== null) log.push({ text: shown, only: actor });
+      }
     },
     async finish() {
       return { compactions: 0, pauses: 0, coreErrors: 0 };

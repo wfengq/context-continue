@@ -1,5 +1,5 @@
 import { BASE_TEMPLATE, type Policy, type RunContext, type Segment } from '../runner.js';
-import { fmtBot, fmtHuman, fmtTask, fmtTool, deliverableIn } from '../text.js';
+import { fmtBot, fmtHuman, fmtTask, fmtTool, fmtToolArgs, deliverableIn } from '../text.js';
 import { prefixCacheable } from './history.js';
 import type { Scenario, ToolCall } from '../types.js';
 
@@ -149,7 +149,10 @@ export function spacePolicy(): Policy {
       const actor = ctx.actorOf(step);
       const out = await request(ctx, actor, index, 'scripted', fmtTask(actor, step));
       const b = stateOf(actor);
-      b.history.push(fmtBot(actor, out.reply), ...out.ops.map(op => fmtTool(actor, op.name)));
+      b.history.push(fmtBot(actor, out.reply), ...out.ops.map(op => {
+        const shown = fmtToolArgs(op);
+        return shown === null ? fmtTool(actor, op.name) : `${fmtTool(actor, op.name)}\n${shown}`;
+      }));
       applyOps(out.ops);
       if (step.kind === 'review') {
         for (const c of step.conventions ?? []) projectEntries.push(`convention: ${c}`);

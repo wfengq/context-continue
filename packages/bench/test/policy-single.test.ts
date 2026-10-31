@@ -68,7 +68,7 @@ describe('group A (single agent)', () => {
     const human = 7;    // "[human human] Darker please." = 28
     const task2 = 11;   // "[task solo] review the deliverable of art" = 41
     const reply2 = 6;   // "[bot solo] Too light." = 21
-    const tool2 = 7;    // "[tool solo] submitReview: ok" = 28
+    const tool2 = defaultCountTokens('[tool solo] submitReview: ok\n  verdict: failed\n  notes: Too light.'); // review args are rendered (R-L4)
     const task3 = 5;    // "[task solo] replan" = 18
 
     expect(records[0]).toMatchObject({ inputTokens: T + task0, cacheableTokens: T });

@@ -60,12 +60,21 @@ describe('fmtOps', () => {
   test('tool line per op, deliverable line with per-workstream version', () => {
     const versions = new Map<string, number>();
     const d = (content: string) => ({ name: 'submitDeliverable', args: { workstreamId: 'art', summary: 's', content } });
-    expect(fmtOps('art', [d('one'), { name: 'updateNotes', args: {} }, d('two')], versions, false)).toEqual([
+    expect(fmtOps('art', [d('one'), { name: 'updateNotes', args: { text: 'note' } }, d('two')], versions, false)).toEqual([
       '[tool art] submitDeliverable: ok', '[deliverable art v1] one',
-      '[tool art] updateNotes: ok',
+      '[tool art] updateNotes: ok\n  text: note',
       '[tool art] submitDeliverable: ok', '[deliverable art v2] two',
     ]);
     expect(fmtOps('art', [d('three')], versions, true)).toEqual(['[tool art] submitDeliverable: ok', '[deliverable art v3 ref]']);
+  });
+  test('renders every call\'s arguments in a compact field layout; args can be left out', () => {
+    const rf = { name: 'recordFailure', args: { text: 'Tried X', reason: 'slow', affects: ['a', 'b'] } };
+    expect(fmtOps('bot', [rf], new Map(), false)).toEqual(['[tool bot] recordFailure: ok\n  tried: Tried X\n  why it failed: slow\n  affects: a, b']);
+    expect(fmtOps('bot', [rf], new Map(), false, false)).toEqual(['[tool bot] recordFailure: ok']);
+    const review = { name: 'submitReview', args: { deliverableOf: 'w', passed: false, notes: 'Bad.', conventions: ['C1', 'C2'] } };
+    expect(fmtOps('lead', [review], new Map(), false)).toEqual(['[tool lead] submitReview: ok\n  verdict: failed\n  notes: Bad.\n  conventions: C1; C2']);
+    const msg = { name: 'sendMessage', args: { text: 'Hi', act: 'query', mentions: ['x'] } };
+    expect(fmtOps('bot', [msg], new Map(), false)).toEqual(['[tool bot] sendMessage: ok\n  to: x\n  act: query\n  text: Hi']);
   });
   test('throws on malformed submitDeliverable args', () => {
     expect(() => fmtOps('art', [{ name: 'submitDeliverable', args: { workstreamId: 'art', content: 'c' } }], new Map(), false))
