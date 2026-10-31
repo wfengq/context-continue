@@ -8,7 +8,7 @@ import {
   type Wake,
 } from '@context-continue/core';
 import type { Policy, RunContext } from '../runner.js';
-import { fmtTask } from '../text.js';
+import { fmtBot, fmtHuman, fmtTask } from '../text.js';
 import { prefixCacheable } from './history.js';
 import type { Step, ToolCall } from '../types.js';
 
@@ -60,6 +60,17 @@ export function resultLine(name: string, result: unknown): string {
   return `tool ${name}: ok ${typeof shown === 'string' ? shown : JSON.stringify(shown)}`;
 }
 
+/**
+ * Routed wakes carry the message that was routed. The core's wake detail only says why the bot was
+ * woken, and the brief's delta shows a chat message only to bots it mentions, replies to or whose
+ * workstream it matches — so a message routed to the lead (no match, no routing model) would
+ * otherwise never reach it. As the host that called `route(entry)`, the bench delivers the message
+ * in the trigger, in the history groups' line format.
+ */
+function withMessage(wakes: Wake[], line: string): Wake[] {
+  return wakes.map(w => (w.reason === 'routed' ? { ...w, detail: `${w.detail} ${line}` } : w));
+}
+
 /** One request per woken bot, in first-seen order; its reasons and details are combined. */
 function byBot(wakes: Wake[]): { botId: string; reason: Wake['reason']; detail: string }[] {
   const acc = new Map<string, { botId: string; reason: Wake['reason']; details: string[] }>();
@@ -91,6 +102,8 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
   const prevTexts = new Map<string, string[]>();
   /** Tokens the core flags cacheable, summed over all briefs: the report's upper bound. */
   let flaggedCacheable = 0;
+  /** Details of wakes merged into each bot's next scripted step (merge rule), not yet shown to it. */
+  const mergedWakes = new Map<string, string[]>();
   /** Tool results per bot (successes and core errors), not yet shown to it (R-B21). */
   const toolResults = new Map<string, string[]>();
 
@@ -132,7 +145,11 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
     const batch = byBot(woken);
     woken = [];
     for (const w of batch) {
-      if (ctx.isMerged(w.botId, mergeStep)) continue;
+      if (ctx.isMerged(w.botId, mergeStep)) {
+        // Merge rule: the wake is the trigger of the bot's own next step; keep what it says for that brief.
+        mergedWakes.set(w.botId, [...(mergedWakes.get(w.botId) ?? []), w.detail]);
+        continue;
+      }
       await send(ctx, w.botId, step, 'extra', await brief(p, w.botId, w.reason, w.detail));
     }
   }
@@ -145,7 +162,8 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
     try {
       const result = await p.callTool(botId, op.name, op.args);
       keepResult(botId, resultLine(op.name, result));
-      woken.push(...wakesIn(result));
+      const text = op.name === 'sendMessage' ? (op.args as { text?: unknown }).text : undefined;
+      woken.push(...(typeof text === 'string' ? withMessage(wakesIn(result), fmtBot(botId, text)) : wakesIn(result)));
       const proposalId = op.name === 'proposePlan' ? proposalIdIn(result) : null;
       if (proposalId !== null) woken.push(...(await p.approvePlan(proposalId, { by: ctx.scenario.owner })));
     } catch (e) {
@@ -202,10 +220,13 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
           text: step.text,
           ...(step.mentions && { mentions: [...step.mentions] }),
         });
-        woken.push(...(await p.route(entry)));
+        woken.push(...withMessage(await p.route(entry), fmtHuman(ctx.scenario.owner, step.text)));
       } else {
         const botId = ctx.actorOf(step);
-        const out = await send(ctx, botId, index, 'scripted', await brief(p, botId, 'manual', fmtTask(botId, step)));
+        const merged = mergedWakes.get(botId) ?? [];
+        mergedWakes.delete(botId);
+        const detail = [fmtTask(botId, step), ...merged].join('; ');
+        const out = await send(ctx, botId, index, 'scripted', await brief(p, botId, 'manual', detail));
         for (const op of out.ops) await runTool(p, ctx, botId, await coreOp(p, op));
       }
       await wakeRequests(p, ctx, index, index);

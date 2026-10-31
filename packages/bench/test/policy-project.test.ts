@@ -194,6 +194,32 @@ describe('group C (project board, real core library)', () => {
     for (const t of after) expect(t).not.toContain('getBoardItem');
   });
 
+  test('C: a wake merged into the bot\'s own next step is that step\'s trigger: its detail reaches the scripted brief', async () => {
+    const { records, seen } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+      { kind: 'human', text: 'Requirement change: the bird must be blue.' },
+      { kind: 'replan', plan: { workstreams: [ws('art', 'art'), ws('logic', 'logic')], contracts: [] } },
+    ]);
+    // The unmentioned message wakes the lead, who replans next → merged (no extra at step 1).
+    expect(records.filter(r => r.step === 1)).toHaveLength(0);
+    const replan = seen.find(r => r.botId === 'pm' && triggerOf(r).includes('[task pm] replan'))!;
+    expect(triggerOf(replan)).toContain('the bird must be blue');
+    // art's setup wake (assigned) merged into step 0 is in its first scripted trigger too
+    expect(triggerOf(seen.find(r => r.botId === 'art')!)).toMatch(/assigned/);
+  });
+
+  test('C: a message routed to a bot reaches it in the trigger (the host delivers the message it routed)', async () => {
+    const { records, seen } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+      { kind: 'human', text: 'Please keep it cheerful.' },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Again.' },
+    ]);
+    // routed to the lead (no workstream match, no routing model) → extra request at step 1
+    const i = records.findIndex(r => r.step === 1 && r.botId === 'pm');
+    expect(records[i]!.kind).toBe('extra');
+    expect(triggerOf(seen[i]!)).toContain('[human human] Please keep it cheerful.');
+  });
+
   test('C: review uses the latest deliverable id of deliverableOf; replan proposes and approves', async () => {
     const replanned = { workstreams: [ws('art', 'art'), ws('logic', 'logic'), ws('sound', 'logic')], contracts: [] };
     const { records, seen, project, stats } = await runC([
