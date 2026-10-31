@@ -124,7 +124,7 @@ export function itemKey(x: Item | Contract): string {
 }
 
 // ---------------------------------------------------------------------------
-// segments 1-3 (cacheable)
+// segments 1-4 (cacheable)
 // ---------------------------------------------------------------------------
 
 export function renderCommon(members: { id: string; kind: 'human' | 'bot'; role: string }[]): string {
@@ -174,7 +174,7 @@ export function renderMemory(m: EmployeeMemory, recentKeep: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// segment 4: projection with seen-item compression
+// segment 5: projection with seen-item compression
 // ---------------------------------------------------------------------------
 
 export function renderProjection(p: Projection, seen: Set<string>): { text: string; shownKeys: string[] } {
@@ -234,7 +234,7 @@ export function renderProjection(p: Projection, seen: Set<string>): { text: stri
 }
 
 // ---------------------------------------------------------------------------
-// segments 5-7
+// segment 3 (workspace, cacheable) and segments 6-7 (delta, trigger)
 // ---------------------------------------------------------------------------
 
 export function renderWorkspace(w: Workspace, recentKeep: number): string {

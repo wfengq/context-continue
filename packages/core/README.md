@@ -56,14 +56,14 @@ A `sendMessage` without `replyTo` replies to the chat message that woke the bot 
 | # | kind | cacheable | content |
 |---|------|-----------|---------|
 | 1 | `common` | yes | shared team description and member list |
-| 2 | `board` | yes | goal, constraints, conventions, workstream list |
-| 3 | `memory` | yes | the bot's persona, skills, pinned and recent memories, summary |
-| 4 | `projection` | no | the bot's own workstreams, contracts, decisions, facts, failures, upstream deliverables |
-| 5 | `workspace` | no | the bot's private notes |
+| 2 | `memory` | yes | the bot's persona, skills, pinned and recent memories, summary |
+| 3 | `workspace` | yes | the bot's private notes |
+| 4 | `board` | yes | goal, constraints, conventions, workstream list |
+| 5 | `projection` | no | the bot's own workstreams, contracts, decisions, facts, failures, upstream deliverables |
 | 6 | `delta` | no | events and board changes relevant to the bot since it last looked |
 | 7 | `trigger` | no | why the bot was woken |
 
-Segments 1 to 3 are the cacheable prefix. Keep them first and in this order when you build the prompt, and put the provider's cache breakpoint after segment 3 (or after segment 2 if you want the prefix shared across bots). They contain no timestamps or other volatile content: while the roster, personas, board version and workstream statuses are unchanged, and the budget does not force trimming segment 3, segments 1 and 2 are byte-identical for every member and segment 3 is stable for one bot until its memory changes. Everything that changes from turn to turn is in segments 4 to 7. Items a bot has already seen in full are shown in a short form afterwards; `peek: true` renders a brief without marking anything as seen.
+Segments 1 to 4 are the cacheable prefix, ordered from most to least stable. Keep them first and in this order when you build the prompt, and put the provider's cache breakpoint after segment 4. They contain no timestamps or other volatile content. Segment 1 is byte-identical for every member, so it is the only part of the prefix shared across bots; segments 2 and 3 are per-bot (memory changes when the bot's memory does, workspace when it writes notes), and segment 4 is the same for every member at one board version but sits after the per-bot segments, so it is only reused by the same bot. The board changes most often, which is why it comes last: a board merge invalidates the cache from segment 4 on and leaves segments 1 to 3 reusable. Everything that changes from turn to turn is in segments 5 to 7. Items a bot has already seen in full are shown in a short form afterwards; `peek: true` renders a brief without marking anything as seen.
 
 ## What the host does
 

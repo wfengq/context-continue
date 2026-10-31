@@ -490,7 +490,7 @@ interface WorkstreamSource {
 
 ### 6.5 适配层：DeepSeek Harness 插件 `@context-continue/dsh`（第一优先）
 依据源码阅读（`research/source-reading-2026-10.md` 第 3 节）：
-- **注入简报**：通过 `ctx.systemPrompt` 为每个 Agent 注册专属的提示词片段和动态上下文，每一步重新读取。简报第 1–3 段使用较小的 `order`，排在前面以便缓存；第 4–7 段作为动态上下文。
+- **注入简报**：通过 `ctx.systemPrompt` 为每个 Agent 注册专属的提示词片段和动态上下文，每一步重新读取。简报第 1–4 段使用较小的 `order`，排在前面以便缓存；第 5–7 段作为动态上下文。
 - **注册工具**：通过 `ctx.tools` 注册 6.2 的工具。
 - **复用任务板**：实现 `WorkstreamSource`，映射到 `ctx.agentTeams` 的任务板（依赖、负责人、版本校验、修改范围）。负责人 Bot 对应 DSH 团队的 Lead，工作块负责人对应队友。
 - **消息**：Bot 之间的消息仍通过 DSH 的私信投递，但适配层先调用 `project.route` 判断是否需要唤醒；不需要唤醒的终结性消息只写入日志，不投递到对方历史。

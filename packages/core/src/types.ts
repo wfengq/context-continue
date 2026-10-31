@@ -224,7 +224,7 @@ export interface Wake {
   detail?: string;
 }
 
-export type SegmentKind = 'common' | 'board' | 'memory' | 'projection' | 'workspace' | 'delta' | 'trigger';
+export type SegmentKind = 'common' | 'memory' | 'workspace' | 'board' | 'projection' | 'delta' | 'trigger';
 
 export interface Segment {
   kind: SegmentKind;
