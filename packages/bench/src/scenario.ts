@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { toolDefinitions, type PlanInput } from '@context-continue/core';
 import { z } from 'zod';
 import { isDeliverableArgs } from './text.js';
-import type { Scenario } from './types.js';
+import type { Scenario, Step } from './types.js';
 
 const planSchema = z.object({
   workstreams: z.array(z.object({
@@ -49,9 +49,30 @@ const scenarioSchema = z.object({
     skills: z.array(z.string()),
   })),
   plan: planSchema,
+  tier: z.enum(['standard', 'long']).optional(),
   idleReply: z.string().optional(),
+  facts: z.array(z.object({
+    id: z.string().min(1),
+    marker: z.string().min(1),
+    step: z.number().int(),
+    audience: z.array(z.string().min(1)).min(1),
+  })).optional(),
   steps: z.array(stepSchema),
 });
+
+/** All text a step puts into the conversation, joined by newlines (used to locate fact markers). */
+export function stepText(step: Step): string {
+  switch (step.kind) {
+    case 'human':
+      return step.text;
+    case 'work':
+      return [step.reply, ...(step.ops ?? []).map(op => JSON.stringify(op.args))].join('\n');
+    case 'review':
+      return [step.notes, ...(step.conventions ?? [])].join('\n');
+    case 'replan':
+      return JSON.stringify(step.plan);
+  }
+}
 
 export const DEFAULT_IDLE_REPLY = 'Noted.';
 
@@ -124,6 +145,15 @@ export function validateScenario(raw: unknown): Scenario {
     }
   });
 
+  for (const id of duplicates((s.facts ?? []).map(f => f.id))) problems.push(`facts: duplicate fact id "${id}"`);
+  for (const f of s.facts ?? []) {
+    const bad = (msg: string) => problems.push(`fact ${f.id}: ${msg}`);
+    const step = Number.isInteger(f.step) ? s.steps[f.step] : undefined;
+    if (step === undefined) bad(`step ${f.step} does not exist (scenario has ${s.steps.length} steps)`);
+    else if (!stepText(step).includes(f.marker)) bad(`step ${f.step} text does not contain marker "${f.marker}"`);
+    for (const a of f.audience) if (a !== '*' && !botIds.has(a)) bad(`audience "${a}" is not an employee or "*"`);
+  }
+
   if (problems.length > 0) throw new Error(`Invalid scenario "${s.id}":\n${problems.join('\n')}`);
   return { ...s, idleReply: s.idleReply ?? DEFAULT_IDLE_REPLY };
 }
@@ -141,35 +171,67 @@ export function loadScenario(path: string): Scenario {
 /** Words that mark a human message as a change of goal or constraints. */
 const CHANGE_MARKERS = /\b(chang(e|ed|es|ing)|instead|no longer|drop|switch(ed)?)\b/i;
 
+const hasQuery = (st: Step): boolean =>
+  st.kind === 'work' &&
+  (st.ops ?? []).some(
+    op => op.name === 'sendMessage' && typeof op.args === 'object' && op.args !== null && (op.args as { act?: unknown }).act === 'query',
+  );
+
+/** Counts human messages that change the requirements: after the first work step, with change words, and a later replan. */
+function countRequirementChanges(s: Scenario): number {
+  const firstWork = s.steps.findIndex(st => st.kind === 'work');
+  return s.steps.filter(
+    (st, i) =>
+      st.kind === 'human' &&
+      firstWork >= 0 &&
+      i > firstWork &&
+      CHANGE_MARKERS.test(st.text) &&
+      s.steps.slice(i + 1).some(next => next.kind === 'replan'),
+  ).length;
+}
+
+const FACT_CATEGORIES = ['change-', 'conv-', 'contract-', 'fail-'];
+
 /**
- * The coverage items a formal scenario must include (spec §3), in a fixed order; returns the ones
+ * The coverage items a formal scenario must include (spec §3, §5), in a fixed order; returns the ones
  * missing (empty when the scenario qualifies):
- * - human requirement change: a human message after the first work step that says what changed and
- *   is followed by a replan;
- * - failed review; review with conventions; replan;
- * - bot-to-bot query: a work step calling `sendMessage` with `act: 'query'`.
+ * - human requirement change; failed review; review with conventions; replan; bot-to-bot query;
+ * - long tier: 150–300 steps, at least 15 facts, and minimum counts of replans (3), requirement
+ *   changes (4), failed reviews (6), new conventions (8) and queries (10);
+ * - standard tier: 20–40 steps, 4–6 facts — checked only when the scenario has a `facts` field (R-L1);
+ * - facts (when required): one per category, by id prefix change-, conv-, contract-, fail-.
  */
 export function checkCoverage(s: Scenario): string[] {
-  const firstWork = s.steps.findIndex(st => st.kind === 'work');
-  const has = {
-    'human requirement change': s.steps.some(
-      (st, i) =>
-        st.kind === 'human' &&
-        firstWork >= 0 &&
-        i > firstWork &&
-        CHANGE_MARKERS.test(st.text) &&
-        s.steps.slice(i + 1).some(next => next.kind === 'replan'),
-    ),
-    'failed review': s.steps.some(st => st.kind === 'review' && !st.passed),
-    'review with conventions': s.steps.some(st => st.kind === 'review' && (st.conventions ?? []).length > 0),
-    replan: s.steps.some(st => st.kind === 'replan'),
-    'bot-to-bot query': s.steps.some(
-      st =>
-        st.kind === 'work' &&
-        (st.ops ?? []).some(
-          op => op.name === 'sendMessage' && typeof op.args === 'object' && op.args !== null && (op.args as { act?: unknown }).act === 'query',
-        ),
-    ),
-  };
-  return Object.entries(has).filter(([, ok]) => !ok).map(([item]) => item);
+  const long = s.tier === 'long';
+  const missing: string[] = [];
+  if (countRequirementChanges(s) === 0) missing.push('human requirement change');
+  if (!s.steps.some(st => st.kind === 'review' && !st.passed)) missing.push('failed review');
+  if (!s.steps.some(st => st.kind === 'review' && (st.conventions ?? []).length > 0)) missing.push('review with conventions');
+  if (!s.steps.some(st => st.kind === 'replan')) missing.push('replan');
+  if (!s.steps.some(hasQuery)) missing.push('bot-to-bot query');
+
+  const factsRequired = long || s.facts !== undefined;
+  if (!factsRequired) return missing;
+  const facts = s.facts ?? [];
+
+  const n = s.steps.length;
+  if (long) {
+    if (n < 150 || n > 300) missing.push('long scenario needs 150–300 steps');
+    if (facts.length < 15) missing.push('long scenario needs at least 15 facts');
+  } else {
+    if (n < 20 || n > 40) missing.push('standard scenario needs 20–40 steps');
+    if (facts.length < 4 || facts.length > 6) missing.push('standard scenario needs 4–6 facts');
+  }
+  for (const prefix of FACT_CATEGORIES) if (!facts.some(f => f.id.startsWith(prefix))) missing.push(`fact category ${prefix}`);
+
+  if (long) {
+    const count = (pred: (st: Step) => boolean) => s.steps.filter(pred).length;
+    if (count(st => st.kind === 'replan') < 3) missing.push('long scenario needs at least 3 replans');
+    if (countRequirementChanges(s) < 4) missing.push('long scenario needs at least 4 requirement changes');
+    if (count(st => st.kind === 'review' && !st.passed) < 6) missing.push('long scenario needs at least 6 failed reviews');
+    const conventions = s.steps.reduce((sum, st) => sum + (st.kind === 'review' ? (st.conventions ?? []).length : 0), 0);
+    if (conventions < 8) missing.push('long scenario needs at least 8 new conventions');
+    if (count(hasQuery) < 10) missing.push('long scenario needs at least 10 bot-to-bot queries');
+  }
+  return missing;
 }

@@ -124,3 +124,63 @@ describe('the three scenarios', () => {
     }
   });
 });
+
+describe('checkCoverage: tier and facts', () => {
+  const human = (text: string) => ({ kind: 'human', text });
+  const factsFor = (prefixes: string[], extra = 0) => {
+    const ids = [...prefixes.map(p => `${p}a`), ...Array.from({ length: extra }, (_, i) => `conv-extra${i}`)];
+    return ids.map(id => ({ id, marker: 'M', step: 0, audience: ['*'] }));
+  };
+  const build = (tier: 'standard' | 'long' | undefined, facts: unknown[] | undefined, steps: unknown[]): Scenario =>
+    validateScenario({
+      id: 't', goal: 'g', constraints: [], owner: 'human', lead: 'pm', ...(tier ? { tier } : {}), ...(facts ? { facts } : {}),
+      employees: [{ botId: 'pm', persona: 'p', skills: [] }, { botId: 'dev', persona: 'p', skills: [] }],
+      plan: { workstreams: [ws('code', 'dev')], contracts: [] },
+      steps,
+    });
+  const pad = (n: number) => Array.from({ length: n }, () => human('M'));
+  const P = ['change-', 'conv-', 'contract-', 'fail-'];
+
+  test('standard scenario without facts is not asked for facts or step count', () => {
+    const out = checkCoverage(build(undefined, undefined, [human('Hello.')]));
+    expect(out.some(m => /fact|steps/.test(m))).toBe(false);
+  });
+  test('standard scenario with facts needs 20–40 steps, 4–6 facts, and all four categories', () => {
+    const ok = build(undefined, factsFor(P), pad(25));
+    expect(checkCoverage(ok).filter(m => /fact|steps/.test(m))).toEqual([]);
+    expect(checkCoverage(build('standard', factsFor(P), pad(10)))).toContain('standard scenario needs 20–40 steps');
+    expect(checkCoverage(build('standard', factsFor(P, 3), pad(25)))).toContain('standard scenario needs 4–6 facts');
+    expect(checkCoverage(build('standard', factsFor(P.slice(0, 3), 1), pad(25)))).toEqual(
+      expect.arrayContaining(['fact category fail-']),
+    );
+  });
+  test('long scenario always requires steps, facts, categories and minimum counts', () => {
+    const out = checkCoverage(build('long', undefined, pad(120)));
+    expect(out).toEqual(expect.arrayContaining([
+      'long scenario needs 150–300 steps',
+      'long scenario needs at least 15 facts',
+      'fact category change-', 'fact category conv-', 'fact category contract-', 'fact category fail-',
+      'long scenario needs at least 3 replans',
+      'long scenario needs at least 4 requirement changes',
+      'long scenario needs at least 6 failed reviews',
+      'long scenario needs at least 8 new conventions',
+      'long scenario needs at least 10 bot-to-bot queries',
+    ]));
+  });
+  test('long scenario that meets every minimum has no missing items', () => {
+    const work = { kind: 'work', botId: 'dev', workstreamId: 'code', reply: 'M' };
+    const q = { ...work, ops: [{ name: 'sendMessage', args: { text: 't', act: 'query', mentions: ['pm'] } }] };
+    const plan = { kind: 'replan', plan: { workstreams: [ws('code', 'dev')], contracts: [] } };
+    const chg = human('Change of plan: M');
+    const fail = { kind: 'review', deliverableOf: 'code', passed: false, notes: 'n', conventions: ['a', 'b'] };
+    const steps = [
+      work,
+      ...Array.from({ length: 4 }, () => chg), plan, plan, plan,
+      ...Array.from({ length: 6 }, () => fail),
+      ...Array.from({ length: 10 }, () => q),
+      ...pad(150),
+    ];
+    const facts = [...factsFor(P), ...Array.from({ length: 11 }, (_, i) => ({ id: `conv-n${i}`, marker: 'M', step: 1, audience: ['*'] }))];
+    expect(checkCoverage(build('long', facts, steps))).toEqual([]);
+  });
+});

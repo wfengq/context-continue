@@ -13,8 +13,20 @@ export type Step =
   | { kind: 'review'; deliverableOf: string; passed: boolean; notes: string; conventions?: string[] }
   | { kind: 'replan'; plan: PlanInput };
 
+/** A key piece of information a scenario introduces at `step`; `marker` must appear in that step's text. */
+export interface Fact {
+  /** Prefix gives the category: change-, conv-, contract-, fail-. */
+  id: string;
+  marker: string;
+  step: number;
+  /** Employees who need to know it, or ["*"] for all of them. */
+  audience: string[];
+}
+
 export interface Scenario {
   id: string;
+  /** Defaults to 'standard' (20–40 steps); 'long' is 150–300 steps. */
+  tier?: 'standard' | 'long';
   goal: string;
   constraints: string[];
   owner: string;
@@ -25,6 +37,7 @@ export interface Scenario {
   /** Fixed reply for extra requests; defaults to "Noted.". */
   idleReply?: string;
   steps: Step[];
+  facts?: Fact[];
 }
 
 export interface CallRecord {

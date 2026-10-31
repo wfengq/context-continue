@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { validateScenario } from '../src/scenario.js';
+import { checkCoverage, stepText, validateScenario } from '../src/scenario.js';
 
 const ws = (id: string, owner: string) => ({ id, title: id, brief: `do ${id}`, owner, dependsOn: [] as string[] });
 
@@ -119,5 +119,60 @@ describe('validateScenario', () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(/^step 1: submitDeliverable args/);
     expect(lines[1]).toMatch(/^step 2: submitDeliverable args/);
+  });
+});
+
+describe('facts and tier', () => {
+  const base = () => withStep(
+    { kind: 'human', text: 'x' }, { kind: 'human', text: 'y' }, { kind: 'human', text: 'z' },
+    { kind: 'human', text: 'Uploads are capped: MAX-5MB.' },
+  );
+  const withFact = (...facts: unknown[]) => ({ ...base(), facts });
+  const fact = (o: Record<string, unknown> = {}) => ({ id: 'conv-x', marker: 'MAX-5MB', step: 3, audience: ['*'], ...o });
+
+  test('valid fact loads; tier is optional', () => {
+    const s = validateScenario(withFact(fact()));
+    expect(s.facts).toHaveLength(1);
+    expect(s.tier).toBeUndefined();
+    expect(() => validateScenario({ ...withFact(fact()), tier: 'long' })).not.toThrow();
+    expect(() => validateScenario({ ...base(), tier: 'huge' })).toThrow(/tier/);
+  });
+  test('fact marker must appear in its step text', () => {
+    expect(() => validateScenario(withFact(fact({ step: 2 })))).toThrow(/fact conv-x.*step 2.*MAX-5MB/);
+    expect(() => validateScenario(withFact(fact({ marker: 'max-5mb' })))).toThrow(/fact conv-x.*step 3.*max-5mb/);
+  });
+  test('fact audience must be employees or "*"', () => {
+    expect(() => validateScenario(withFact(fact({ audience: ['dev', 'ghost'] })))).toThrow(/fact conv-x.*ghost/);
+    expect(() => validateScenario(withFact(fact({ audience: ['dev', 'art'] })))).not.toThrow();
+  });
+  test('fact step out of range is rejected', () => {
+    expect(() => validateScenario(withFact(fact({ step: 999 })))).toThrow(/fact conv-x.*step 999/);
+    expect(() => validateScenario(withFact(fact({ step: -1 })))).toThrow(/fact conv-x.*step -1/);
+  });
+  test('duplicate fact ids are rejected', () => {
+    expect(() => validateScenario(withFact(fact(), fact()))).toThrow(/duplicate fact id "conv-x"/);
+  });
+  test('all fact problems are listed together', () => {
+    const e = errorOf(() => validateScenario(withFact(fact({ id: 'a', step: 0 }), fact({ id: 'b', audience: ['ghost'] }))));
+    expect(e.message).toMatch(/fact a/);
+    expect(e.message).toMatch(/fact b/);
+  });
+  test('stepText covers every step kind', () => {
+    expect(stepText({ kind: 'human', text: 'HUMAN-T' })).toBe('HUMAN-T');
+    const work = stepText({
+      kind: 'work', botId: 'dev', workstreamId: 'audio', reply: 'REPLY-T',
+      ops: [{ name: 'sendMessage', args: { text: 'ARG-T' } }, { name: 'proposeDecision', args: { q: 1 } }],
+    });
+    expect(work).toBe(`REPLY-T\n${JSON.stringify({ text: 'ARG-T' })}\n${JSON.stringify({ q: 1 })}`);
+    expect(stepText({ kind: 'review', deliverableOf: 'audio', passed: true, notes: 'NOTES-T', conventions: ['C1', 'C2'] }))
+      .toBe('NOTES-T\nC1\nC2');
+    const plan = { workstreams: [ws('audio', 'dev')], contracts: [] };
+    expect(stepText({ kind: 'replan', plan })).toBe(JSON.stringify(plan));
+  });
+  test('checkCoverage enforces step counts by tier', () => {
+    const long = { ...minimal(), tier: 'long', steps: Array.from({ length: 120 }, () => ({ kind: 'human', text: 'hi' })) };
+    expect(checkCoverage(validateScenario(long))).toContain('long scenario needs 150–300 steps');
+    const std = validateScenario({ ...withFact(fact()) });
+    expect(checkCoverage(std)).toContain('standard scenario needs 20–40 steps');
   });
 });
