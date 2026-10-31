@@ -68,7 +68,7 @@ describe('group F (Dots + Space-style shared pages)', () => {
     expect(project.startsWith('[page project] goal: g | constraints: none')).toBe(true);
   });
 
-  test('F: unchanged pages → template + pages + old history cacheable; changed pages → only template cacheable', async () => {
+  test('F: cacheable = identical leading run (R-B19): unchanged pages → template + pages + old history; a changed page un-caches itself and all after it', async () => {
     const { records } = await runCapturing([
       { kind: 'human', text: 'Build a game.', mentions: ['art'] },
       { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew sprites.', ops: deliver('art', 'sprite sheet') },
@@ -87,8 +87,9 @@ describe('group F (Dots + Space-style shared pages)', () => {
     expect(records.map(r => [r.step, r.kind])).toEqual([[1, 'scripted'], [2, 'scripted'], [3, 'scripted']]); // step 0 merged
     // step 1: first request → only template cacheable
     expect(records[0]).toMatchObject({ inputTokens: T + P0 + H + task, cacheableTokens: T });
-    // step 2: the deliverable changed the pages → only template cacheable
-    expect(records[1]).toMatchObject({ inputTokens: T + P0 + pageArt + (H + task + reply1 + tool) + task, cacheableTokens: T });
+    // step 2: the deliverable added the art page after the unchanged project page → the identical
+    // leading run is template + project page (R-B19); the new page and all history after it are not cacheable
+    expect(records[1]).toMatchObject({ inputTokens: T + P0 + pageArt + (H + task + reply1 + tool) + task, cacheableTokens: T + P0 });
     // step 3: pages identical to step 2's → template + pages + step 2's whole history cacheable
     const prev = T + P0 + pageArt + (H + task + reply1 + tool + task);
     expect(records[1]!.inputTokens).toBe(prev);
@@ -143,5 +144,45 @@ describe('group F (Dots + Space-style shared pages)', () => {
     // Step 1 history: task (33 chars -> 9) + reply "[bot art] p" (11 -> 3) + two "[tool art] promote: ok" (22 -> 6 each); step 2 adds its task (9).
     expect(records[1]!.inputTokens).toBe(T + page + 9 + 3 + 6 + 6 + 9);
     expect(records[1]!.cacheableTokens).toBe(T); // the pages changed
+  });
+
+  test('F: pages follow the current plan — a replan adds a workstream whose page reaches the reviewer and invalidates the cache (R-B20)', async () => {
+    const replanned = { workstreams: [ws('art', 'art'), ws('logic', 'logic'), ws('sound', 'logic')], contracts: [] };
+    const { seen } = await runCapturing([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: deliver('art', 'sprites') },
+      { kind: 'replan', plan: replanned },
+      { kind: 'work', botId: 'logic', workstreamId: 'sound', reply: 'Beeps.', ops: deliver('sound', 'BEEP-BOOP sound pack') },
+      { kind: 'review', deliverableOf: 'sound', passed: true, notes: 'ok' },
+    ]);
+    const review = seen[3]!;
+    expect(review.botId).toBe('pm');
+    const idx = review.segments.findIndex(g => g.text === '[page workstream sound] BEEP-BOOP sound pack');
+    expect(idx).toBeGreaterThan(0);
+    // pm's previous request (the replan) had template, project page, art page: those stay cacheable;
+    // the new sound page and everything after it are not.
+    expect(review.segments.map(g => g.cacheable)).toEqual(review.segments.map((_, i) => i < idx));
+  });
+
+  test('F: a replan that removes a workstream drops its page (R-B20)', async () => {
+    const { seen } = await runCapturing([
+      { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'Coded.', ops: deliver('logic', 'OLD-LOGIC rules') },
+      { kind: 'replan', plan: { workstreams: [ws('art', 'art')], contracts: [] } },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+    ]);
+    expect(textOf(seen[1]!)).toContain('OLD-LOGIC rules');
+    expect(textOf(seen[2]!)).not.toContain('OLD-LOGIC rules');
+  });
+
+  test('F: an unmentioned human message wakes nobody but is appended to the project page (R-B20)', async () => {
+    const { records, seen } = await runCapturing([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+      { kind: 'human', text: 'Change of plan: use 8px tiles.' },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Redrew.' },
+    ]);
+    expect(records.map(r => [r.botId, r.step])).toEqual([['art', 0], ['art', 2]]);
+    const project = seen[1]!.segments[1]!;
+    expect(project.text).toBe('[page project] goal: g | constraints: none\n[human human] Change of plan: use 8px tiles.');
+    // the project page changed, so only the template is cacheable
+    expect(seen[1]!.segments.map(g => g.cacheable)).toEqual(seen[1]!.segments.map((_, i) => i === 0));
   });
 });

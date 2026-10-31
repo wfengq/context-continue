@@ -1,5 +1,6 @@
 import { BASE_TEMPLATE, type Policy, type RunContext, type Segment } from '../runner.js';
 import { fmtBot, fmtHuman, fmtTask, fmtTool, deliverableIn } from '../text.js';
+import { prefixCacheable } from './history.js';
 import type { Scenario, ToolCall } from '../types.js';
 
 interface BotState {
@@ -8,10 +9,8 @@ interface BotState {
    * replies and tool lines. Deliverables are NOT repeated here; they live on the workstream pages.
    */
   history: string[];
-  /** Length of `history` at the previous request; with unchanged pages those lines are cacheable. */
-  prevLen: number;
-  /** Pages text of the previous request, or null before the first request. */
-  prevPages: string | null;
+  /** Segment texts of the previous request, or null before the first request (R-B19). */
+  prev: string[] | null;
 }
 
 /** The project page: goal, constraints, then conventions/decisions/failures in order of occurrence. */
@@ -56,18 +55,20 @@ const promotedKind = (args: unknown): Kind => {
 
 /**
  * Group F (Dots + Space style): people and bots share a set of document pages. A request is the
- * template, all current pages (the project page, then one page per workstream that has a
- * deliverable, in plan order, holding that workstream's latest deliverable in full), the bot's own
- * history lines and, for scripted requests, the task line.
+ * template, all current pages (the project page, then one page per workstream of the CURRENT plan
+ * that has a deliverable, in plan order, holding that workstream's latest deliverable in full), the
+ * bot's own history lines and, for scripted requests, the task line.
  *
- * Cacheable (R-B5 with the F exception): if the pages text is identical to the bot's previous
- * request, template + pages + the history lines of that previous request are cacheable; if any
- * page changed, only the template is (pages come before history, so a change invalidates the rest).
+ * Cacheable (R-B19, the rule every group uses): the leading run of segments identical to the bot's
+ * previous request; on its first request only the template. Pages come before history, so a
+ * changed page un-caches itself, every later page and the whole history.
  *
  * Pages are driven by tool calls, applied after the request that produced them:
  * submitDeliverable replaces the workstream page; proposeDecision / recordFailure / promote and
- * the conventions of a review are appended to the project page. Human messages that only @mention
- * bots change no page.
+ * the conventions of a review are appended to the project page; proposePlan (a replan, R-B2 shape
+ * `{ plan }`) replaces the plan, so pages of new workstreams can appear and pages of removed ones
+ * are dropped (R-B20). A human message without mentions is appended to the project page (people
+ * write in the shared pages, R-B20); one with mentions goes to the mentioned bots' histories.
  *
  * Wakes: a human message with mentions wakes the mentioned bots (extra requests, merge rule); one
  * without mentions wakes nobody; bots never wake each other. Idle replies are passes (R-B10): they
@@ -77,11 +78,13 @@ export function spacePolicy(): Policy {
   const bots = new Map<string, BotState>();
   const projectEntries: string[] = [];
   const wsPages = new Map<string, string>();
+  /** The current plan's workstream ids, in plan order; null until the first step reads the scenario's plan. */
+  let planIds: string[] | null = null;
 
   const stateOf = (botId: string): BotState => {
     let b = bots.get(botId);
     if (!b) {
-      b = { history: [], prevLen: 0, prevPages: null };
+      b = { history: [], prev: null };
       bots.set(botId, b);
     }
     return b;
@@ -89,9 +92,9 @@ export function spacePolicy(): Policy {
 
   const pageTexts = (s: Scenario): string[] => {
     const pages = [projectPage(s, projectEntries)];
-    for (const w of s.plan.workstreams) {
-      const content = wsPages.get(w.id);
-      if (content !== undefined) pages.push(`[page workstream ${w.id}] ${content}`);
+    for (const id of planIds ?? s.plan.workstreams.map(w => w.id)) {
+      const content = wsPages.get(id);
+      if (content !== undefined) pages.push(`[page workstream ${id}] ${content}`);
     }
     return pages;
   };
@@ -99,16 +102,10 @@ export function spacePolicy(): Policy {
   const request = (ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', task: string | null) => {
     const b = stateOf(botId);
     if (task !== null) b.history.push(task);
-    const pages = pageTexts(ctx.scenario);
-    const joined = pages.join('\n');
-    const unchanged = b.prevPages === joined;
-    const segments: Segment[] = [
-      { text: BASE_TEMPLATE, cacheable: true },
-      ...pages.map(text => ({ text, cacheable: unchanged })),
-      ...b.history.map((text, i) => ({ text, cacheable: unchanged && i < b.prevLen })),
-    ];
-    b.prevLen = b.history.length;
-    b.prevPages = joined;
+    const texts = [BASE_TEMPLATE, ...pageTexts(ctx.scenario), ...b.history];
+    const cacheable = prefixCacheable(b.prev, texts, 1);
+    b.prev = texts;
+    const segments: Segment[] = texts.map((text, i) => ({ text, cacheable: cacheable[i]! }));
     return ctx.call({ botId, step, kind, segments });
   };
 
@@ -119,7 +116,17 @@ export function spacePolicy(): Policy {
       else if (op.name === 'proposeDecision') projectEntries.push(entryText('decision', op.args));
       else if (op.name === 'recordFailure') projectEntries.push(entryText('failure', op.args));
       else if (op.name === 'promote') projectEntries.push(entryText(promotedKind(op.args), op.args));
+      else if (op.name === 'proposePlan') replan(op.args);
     }
+  };
+
+  /** A replan replaces the plan; pages of workstreams it no longer has are dropped (R-B20). */
+  const replan = (args: unknown): void => {
+    const plan = typeof args === 'object' && args !== null ? (args as { plan?: unknown }).plan : undefined;
+    const list = typeof plan === 'object' && plan !== null ? (plan as { workstreams?: unknown }).workstreams : undefined;
+    if (!Array.isArray(list)) throw new Error(`group F: malformed proposePlan args: ${JSON.stringify(args)}`);
+    planIds = list.map(w => (w as { id: string }).id);
+    for (const id of [...wsPages.keys()]) if (!planIds.includes(id)) wsPages.delete(id);
   };
 
   // F has no compaction, call limit or core library calls, so its stats are always zero.
@@ -129,6 +136,8 @@ export function spacePolicy(): Policy {
       if (step.kind === 'human') {
         const line = fmtHuman(ctx.scenario.owner, step.text);
         const mentioned = step.mentions ?? [];
+        // Unaddressed: written into the shared project page; it wakes nobody (R-B20).
+        if (mentioned.length === 0) projectEntries.push(line);
         for (const e of ctx.scenario.employees) {
           if (!mentioned.includes(e.botId)) continue;
           stateOf(e.botId).history.push(line);
