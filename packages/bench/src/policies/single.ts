@@ -5,12 +5,12 @@ const SOLO = 'solo';
 
 /**
  * Group A: one agent performs every work, review and replan step. Its history only grows; each
- * request is [template, everything up to its last reply (cacheable), what is new since (not cacheable)].
+ * request is [template, the lines of its previous request (cacheable), every line added since (not cacheable)].
  * Human messages are appended to the history without a request.
  */
 export function singleAgentPolicy(): Policy {
   const history: string[] = [];
-  let seen = 0; // history lines already sent (and answered) in a previous request
+  let seen = 0; // history lines that were part of the previous request
   const versions = new Map<string, number>();
 
   return {
@@ -21,13 +21,15 @@ export function singleAgentPolicy(): Policy {
         return;
       }
       history.push(fmtTask(SOLO, step));
+      // Cacheable part = exactly this bot's previous request (template + the lines it sent then).
+      // Lines added after that request (its reply, tool results, deliverables, human messages) are uncached.
       const segments: Segment[] = [
         { text: BASE_TEMPLATE, cacheable: true },
         ...history.map((text, i) => ({ text, cacheable: i < seen })),
       ];
+      seen = history.length;
       const out = await ctx.call({ botId: SOLO, step: index, kind: 'scripted', segments });
       history.push(fmtBot(SOLO, out.reply), ...fmtOps(SOLO, out.ops, versions, false));
-      seen = history.length;
     },
     async finish() {
       return { compactions: 0, pauses: 0, coreErrors: 0 };

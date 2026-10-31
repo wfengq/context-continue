@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { toolDefinitions, type PlanInput } from '@context-continue/core';
 import { z } from 'zod';
+import { isDeliverableArgs } from './text.js';
 import type { Scenario } from './types.js';
 
 const planSchema = z.object({
@@ -106,7 +107,11 @@ export function validateScenario(raw: unknown): Scenario {
         const owner = owners.get(step.workstreamId);
         if (owner === undefined) bad(`workstream "${step.workstreamId}" is not in the current plan`);
         else if (owner !== step.botId) bad(`bot "${step.botId}" does not own workstream "${step.workstreamId}" (owner: "${owner}")`);
-        for (const op of step.ops ?? []) if (!toolNames.has(op.name)) bad(`unknown tool "${op.name}"`);
+        for (const op of step.ops ?? []) {
+          if (!toolNames.has(op.name)) bad(`unknown tool "${op.name}"`);
+          else if (op.name === 'submitDeliverable' && !isDeliverableArgs(op.args))
+            bad('submitDeliverable args must be { workstreamId: string, summary: string, content: string }');
+        }
         break;
       }
       case 'review':

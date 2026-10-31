@@ -3,6 +3,7 @@ import { defaultCountTokens } from '@context-continue/core';
 import { createPolicy } from '../src/policies/index.js';
 import { BASE_TEMPLATE, runScenario } from '../src/runner.js';
 import { validateScenario } from '../src/scenario.js';
+import type { Group } from '../src/types.js';
 
 const ws = (id: string, owner: string) => ({ id, title: id, brief: `do ${id}`, owner, dependsOn: [] as string[] });
 const defaults = { window: 128000, compactRatio: 0.8, summaryTokens: 1500 };
@@ -45,7 +46,9 @@ describe('group A (single agent)', () => {
 
     expect(records[0]).toMatchObject({ inputTokens: T + human + task0, cacheableTokens: T });
     expect(records[1]!.inputTokens).toBe(T + human + task0 + reply0 + tool0 + deliv0 + task1);
-    expect(records[1]!.cacheableTokens).toBe(records[0]!.inputTokens + reply0 + tool0 + deliv0);
+    // Cacheable = exactly the previous request; its reply, tool result and deliverable are new (uncached).
+    expect(records[1]!.cacheableTokens).toBe(records[0]!.inputTokens);
+    expect(records[1]!.cacheableTokens).toBe(T + human + task0);
     expect(records.every(r => r.group === 'A' && r.scenario === 'three' && r.segments === undefined)).toBe(true);
   });
 
@@ -69,11 +72,13 @@ describe('group A (single agent)', () => {
     const task3 = 5;    // "[task solo] replan" = 18
 
     expect(records[0]).toMatchObject({ inputTokens: T + task0, cacheableTokens: T });
-    expect(records[1]).toMatchObject({ inputTokens: T + task0 + reply0 + human + task2, cacheableTokens: T + task0 + reply0 });
+    expect(records[1]).toMatchObject({ inputTokens: T + task0 + reply0 + human + task2, cacheableTokens: T + task0 });
     expect(records[2]).toMatchObject({
       inputTokens: T + task0 + reply0 + human + task2 + reply2 + tool2 + task3,
-      cacheableTokens: T + task0 + reply0 + human + task2 + reply2 + tool2,
+      cacheableTokens: T + task0 + reply0 + human + task2,
     });
+    expect(records[1]!.cacheableTokens).toBe(records[0]!.inputTokens);
+    expect(records[2]!.cacheableTokens).toBe(records[1]!.inputTokens);
   });
 
   test('A: repeated deliverables carry increasing versions', async () => {
@@ -84,11 +89,13 @@ describe('group A (single agent)', () => {
       { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'x' },
     ]), createPolicy('A', defaults));
     // "[deliverable art v1] aaaa" and "[deliverable art v2] bbbb" are both 25 chars = 7 tokens each.
-    // Request 2 cacheable = request 1 input + "[bot solo] v2" (13 → 4) + "[tool solo] submitDeliverable: ok" (33 → 9) + deliverable v2 (7).
-    expect(records[2]!.cacheableTokens).toBe(records[1]!.inputTokens + 4 + 9 + 7);
+    // Request 2 input = request 1 input + "[bot solo] v2" (13 → 4) + "[tool solo] submitDeliverable: ok" (33 → 9)
+    //   + deliverable v2 (7) + "[task solo] work on workstream logic" (36 → 9); cacheable = request 1 input.
+    expect(records[2]!.inputTokens).toBe(records[1]!.inputTokens + 4 + 9 + 7 + 9);
+    expect(records[2]!.cacheableTokens).toBe(records[1]!.inputTokens);
   });
 
-  test('createPolicy rejects groups not implemented yet', () => {
-    expect(() => createPolicy('B', defaults)).toThrow(/B/);
+  test('createPolicy rejects an unknown group', () => {
+    expect(() => createPolicy('Z' as Group, defaults)).toThrow(/Z/);
   });
 });

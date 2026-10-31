@@ -65,7 +65,7 @@ describe('validateScenario', () => {
   });
   test('known tool name passes', () => {
     expect(() => validateScenario(withStep(
-      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'x', ops: [{ name: 'submitDeliverable', args: {} }] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'x', ops: [{ name: 'proposeDecision', args: {} }] },
     ))).not.toThrow();
   });
   test('work botId must own the workstream it works on in the current plan', () => {
@@ -107,5 +107,17 @@ describe('validateScenario', () => {
       { kind: 'replan', plan: { workstreams: [ws('art', 'art'), ws('art', 'art')], contracts: [] } },
     );
     expect(() => validateScenario(raw)).toThrow(/step 0: .*duplicate .*"art"/);
+  });
+  test('submitDeliverable args must have string workstreamId, summary and content', () => {
+    const op = (args: unknown) => ({ kind: 'work', botId: 'art', workstreamId: 'art', reply: 'x', ops: [{ name: 'submitDeliverable', args }] });
+    const e = errorOf(() => validateScenario(withStep(
+      op({ workstreamId: 'art', summary: 's', content: 'c' }),
+      op({ workstreamId: 'art', content: 'c' }),
+      op('nope'),
+    )));
+    const lines = e.message.split('\n').filter(l => l.startsWith('step'));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^step 1: submitDeliverable args/);
+    expect(lines[1]).toMatch(/^step 2: submitDeliverable args/);
   });
 });

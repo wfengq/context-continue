@@ -27,11 +27,18 @@ export function fmtTask(botId: string, step: Step): string {
   }
 }
 
-/** A `submitDeliverable` call's workstream and content, or null for any other call. */
+/** True when `args` has the `submitDeliverable` shape `{ workstreamId, summary, content }` (all strings). */
+export function isDeliverableArgs(args: unknown): args is { workstreamId: string; summary: string; content: string } {
+  if (typeof args !== 'object' || args === null) return false;
+  const a = args as Record<string, unknown>;
+  return typeof a.workstreamId === 'string' && typeof a.summary === 'string' && typeof a.content === 'string';
+}
+
+/** A `submitDeliverable` call's workstream and content, or null for any other call; throws on malformed args. */
 export function deliverableIn(op: ToolCall): { workstreamId: string; content: string } | null {
-  if (op.name !== 'submitDeliverable' || typeof op.args !== 'object' || op.args === null) return null;
-  const { workstreamId, content } = op.args as Record<string, unknown>;
-  return typeof workstreamId === 'string' && typeof content === 'string' ? { workstreamId, content } : null;
+  if (op.name !== 'submitDeliverable') return null;
+  if (!isDeliverableArgs(op.args)) throw new Error(`malformed submitDeliverable args: ${JSON.stringify(op.args)}`);
+  return { workstreamId: op.args.workstreamId, content: op.args.content };
 }
 
 /**

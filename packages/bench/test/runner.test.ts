@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ScriptedModel, type Model, type ModelRequest } from '../src/model.js';
 import { BASE_TEMPLATE, runScenario, type Policy, type RunContext } from '../src/runner.js';
 import { validateScenario } from '../src/scenario.js';
-import { fmtBot, fmtDeliverable, fmtHuman, fmtTask, fmtTool } from '../src/text.js';
+import { fmtBot, fmtDeliverable, fmtHuman, fmtOps, fmtTask, fmtTool } from '../src/text.js';
 import type { Scenario, Step } from '../src/types.js';
 
 const ws = (id: string, owner: string) => ({ id, title: id, brief: `do ${id}`, owner, dependsOn: [] as string[] });
@@ -53,6 +53,23 @@ describe('text formats', () => {
     expect(fmtTask('solo', { kind: 'work', botId: 'art', workstreamId: 'art', reply: '' })).toBe('[task solo] work on workstream art');
     expect(fmtTask('pm', { kind: 'review', deliverableOf: 'art', passed: true, notes: '' })).toBe('[task pm] review the deliverable of art');
     expect(fmtTask('pm', { kind: 'replan', plan: { workstreams: [], contracts: [] } })).toBe('[task pm] replan');
+  });
+});
+
+describe('fmtOps', () => {
+  test('tool line per op, deliverable line with per-workstream version', () => {
+    const versions = new Map<string, number>();
+    const d = (content: string) => ({ name: 'submitDeliverable', args: { workstreamId: 'art', summary: 's', content } });
+    expect(fmtOps('art', [d('one'), { name: 'updateNotes', args: {} }, d('two')], versions, false)).toEqual([
+      '[tool art] submitDeliverable: ok', '[deliverable art v1] one',
+      '[tool art] updateNotes: ok',
+      '[tool art] submitDeliverable: ok', '[deliverable art v2] two',
+    ]);
+    expect(fmtOps('art', [d('three')], versions, true)).toEqual(['[tool art] submitDeliverable: ok', '[deliverable art v3 ref]']);
+  });
+  test('throws on malformed submitDeliverable args', () => {
+    expect(() => fmtOps('art', [{ name: 'submitDeliverable', args: { workstreamId: 'art', content: 'c' } }], new Map(), false))
+      .toThrow(/malformed submitDeliverable/);
   });
 });
 
