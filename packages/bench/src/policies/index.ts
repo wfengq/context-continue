@@ -2,6 +2,7 @@ import type { Policy } from '../runner.js';
 import type { Group } from '../types.js';
 import { broadcastPolicy } from './broadcast.js';
 import { delmPolicy } from './delm.js';
+import { dsBotPolicy } from './dsbot.js';
 import { singleAgentPolicy } from './single.js';
 
 export interface PolicyOptions {
@@ -13,7 +14,7 @@ export interface PolicyOptions {
   summaryTokens: number;
 }
 
-export function createPolicy(group: Group, _opts: PolicyOptions): Policy {
+export function createPolicy(group: Group, opts: PolicyOptions): Policy {
   switch (group) {
     case 'A':
       return singleAgentPolicy();
@@ -21,6 +22,8 @@ export function createPolicy(group: Group, _opts: PolicyOptions): Policy {
       return broadcastPolicy();
     case 'D':
       return delmPolicy();
+    case 'E':
+      return dsBotPolicy(opts);
     default:
       throw new Error(`group ${group} is not implemented yet`);
   }
