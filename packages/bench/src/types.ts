@@ -43,4 +43,6 @@ export interface PolicyStats {
   compactions: number;
   pauses: number;
   coreErrors: number;
+  /** Group C only: a workstream of the approved plan was still not delivered after the last step. */
+  unfinished?: boolean;
 }

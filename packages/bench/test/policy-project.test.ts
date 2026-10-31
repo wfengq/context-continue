@@ -59,7 +59,7 @@ describe('group C (project board, real core library)', () => {
       ['art', 'scripted', 0],
       ['logic', 'scripted', 1],
     ]);
-    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0 });
+    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0, unfinished: true });
     expect(triggerOf(seen[0]!)).toContain('propose a plan');
     const board = await project.board();
     expect(board.planStatus).toBe('approved');
@@ -175,7 +175,7 @@ describe('group C (project board, real core library)', () => {
       ] },
       { kind: 'review', deliverableOf: 'logic', passed: true, notes: 'Done.' },
     ], plan);
-    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0 });
+    expect(stats).toEqual({ compactions: 0, pauses: 0, coreErrors: 0, unfinished: false });
     // setup: pm (needsLead) and art (assigned; logic waits for art) are extra at step 0 (human step).
     // step 0: routed to the lead → extra. step 1: deliverable → pm reviews at step 2 → merged.
     // step 2: art passes → logic assigned, performs step 3 → merged.
@@ -201,5 +201,12 @@ describe('group C (project board, real core library)', () => {
     const a = await runScenario(scenario(threeSteps()), createPolicy('C', defaults));
     const b = await runScenario(scenario(threeSteps()), createPolicy('C', defaults));
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+});
+
+describe('group C unfinished flag (R-B16)', () => {
+  test('C: finish() reports unfinished when a workstream never delivers', async () => {
+    const { stats } = await runC([{ kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' }]);
+    expect(stats.unfinished).toBe(true);
   });
 });

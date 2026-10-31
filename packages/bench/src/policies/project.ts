@@ -161,8 +161,9 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
       await wakeRequests(p, ctx, index, index);
     },
     async finish() {
+      const unfinished = project ? (await project.board()).workstreams.some(w => w.status !== 'delivered') : false;
       project?.dispose();
-      return { compactions: 0, pauses: 0, coreErrors };
+      return { compactions: 0, pauses: 0, coreErrors, unfinished };
     },
   };
 }
