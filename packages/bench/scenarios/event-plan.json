@@ -136,7 +136,7 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "agenda",
-      "reply": "Working on the agenda. The workshop tracks depend on the breakout rooms, so I am checking with venue.",
+      "reply": "Working on the agenda. The workshop tracks depend on the breakout rooms, so I am checking with @venue.",
       "ops": [
         {
           "name": "sendMessage",
@@ -219,7 +219,7 @@
       "kind": "work",
       "botId": "catering",
       "workstreamId": "catering",
-      "reply": "Starting on catering with the venue's kitchen rules. I need the break times before I can book the caterer.",
+      "reply": "Starting on catering with the venue's kitchen rules. I need the break times before I can book the caterer. @program can you share them?",
       "ops": [
         {
           "name": "sendMessage",
@@ -376,7 +376,7 @@
       "kind": "work",
       "botId": "av",
       "workstreamId": "livestream",
-      "reply": "Planning the livestream. Before I choose the encoder I need to know the network at the stage.",
+      "reply": "Planning the livestream. Before I choose the encoder I need to know the network at the stage. @venue what is available?",
       "ops": [
         {
           "name": "sendMessage",

@@ -144,7 +144,8 @@ const CHANGE_MARKERS = /\b(chang(e|ed|es|ing)|instead|no longer|drop|switch(ed)?
 /**
  * The coverage items a formal scenario must include (spec §3), in a fixed order; returns the ones
  * missing (empty when the scenario qualifies):
- * - human requirement change: a human message after the first work step that says what changed;
+ * - human requirement change: a human message after the first work step that says what changed and
+ *   is followed by a replan;
  * - failed review; review with conventions; replan;
  * - bot-to-bot query: a work step calling `sendMessage` with `act: 'query'`.
  */
@@ -152,7 +153,12 @@ export function checkCoverage(s: Scenario): string[] {
   const firstWork = s.steps.findIndex(st => st.kind === 'work');
   const has = {
     'human requirement change': s.steps.some(
-      (st, i) => st.kind === 'human' && firstWork >= 0 && i > firstWork && CHANGE_MARKERS.test(st.text),
+      (st, i) =>
+        st.kind === 'human' &&
+        firstWork >= 0 &&
+        i > firstWork &&
+        CHANGE_MARKERS.test(st.text) &&
+        s.steps.slice(i + 1).some(next => next.kind === 'replan'),
     ),
     'failed review': s.steps.some(st => st.kind === 'review' && !st.passed),
     'review with conventions': s.steps.some(st => st.kind === 'review' && (st.conventions ?? []).length > 0),

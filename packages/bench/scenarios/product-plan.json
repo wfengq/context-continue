@@ -136,7 +136,7 @@
       "kind": "work",
       "botId": "ux",
       "workstreamId": "features",
-      "reply": "Starting on the feature set. Before I design the recovery flow I want to know whether any competitor already has a shared or team streak.",
+      "reply": "Starting on the feature set. Before I design the recovery flow I want to know whether any competitor already has a shared or team streak. @research can you check?",
       "ops": [
         {
           "name": "getBoardItem",
@@ -386,7 +386,7 @@
       "kind": "work",
       "botId": "eng",
       "workstreamId": "tech",
-      "reply": "Reading the feature set and the compliance list. The dashboard refresh rate decides whether we need a realtime service, so I am checking with ux.",
+      "reply": "Reading the feature set and the compliance list. The dashboard refresh rate decides whether we need a realtime service, so I am checking with @ux.",
       "ops": [
         {
           "name": "sendMessage",

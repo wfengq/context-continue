@@ -105,4 +105,23 @@ describe('bench cli', () => {
     }
     expect(readdirSync(out)).toEqual([]);
   });
+
+  test('a stamp made only of dots is rejected, so the output cannot escape --out', async () => {
+    const parent = tmp();
+    const out = join(parent, 'out');
+    for (const stamp of ['.', '..', '...']) {
+      const r = await run(['run', '--scenario', 'event-plan', '--group', 'A', '--out', out, '--stamp', stamp]);
+      expect(r.code, stamp).toBe(2);
+      expect(r.err).toContain('--stamp');
+    }
+    expect(readdirSync(parent)).toEqual([]);
+  });
+
+  test('a repeated flag is a usage error', async () => {
+    const out = tmp();
+    const r = await run(['run', '--scenario', 'event-plan', '--group', 'A', '--group', 'B', '--out', out]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain('--group');
+    expect(readdirSync(out)).toEqual([]);
+  });
 });

@@ -57,6 +57,7 @@ function parseArgs(argv: string[]): Args {
     const value = rest[i + 1];
     if (!flag.startsWith('--')) throw new UsageError(`unexpected argument "${flag}"`);
     if (value === undefined || value.startsWith('--')) throw new UsageError(`${flag} needs a value`);
+    if (seen.has(flag)) throw new UsageError(`${flag} is given more than once`);
     seen.set(flag, value);
   }
   const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--out', '--stamp'];
@@ -67,7 +68,10 @@ function parseArgs(argv: string[]): Args {
   if (group === undefined) throw new UsageError('--group is required');
   if (group !== 'all' && !GROUPS.includes(group as Group)) throw new UsageError(`unknown group "${group}" (use A..F or all)`);
   const stamp = seen.get('--stamp');
-  if (stamp !== undefined && !/^[\w.-]+$/.test(stamp)) throw new UsageError(`--stamp must be a plain directory name, got "${stamp}"`);
+  // A plain name: no separators, and not "." or ".." (or only dots), which would leave --out.
+  if (stamp !== undefined && (!/^[\w.-]+$/.test(stamp) || /^\.+$/.test(stamp))) {
+    throw new UsageError(`--stamp must be a plain directory name, got "${stamp}"`);
+  }
   const int = (n: number) => Number.isInteger(n) && n > 0;
   return {
     scenario,

@@ -130,7 +130,7 @@
       "kind": "work",
       "botId": "artist",
       "workstreamId": "art",
-      "reply": "Starting on the bird. Before I fix the sprite size I need the hitbox from the code side.",
+      "reply": "Starting on the bird. Before I fix the sprite size I need the hitbox from the code side. @coder what are you using?",
       "ops": [
         {
           "name": "sendMessage",
@@ -358,7 +358,7 @@
       "kind": "work",
       "botId": "web",
       "workstreamId": "mobile-shell",
-      "reply": "Getting ready for the mobile shell. I need to know how the loop handles the tab being hidden before I design the pause overlay.",
+      "reply": "Getting ready for the mobile shell. I need to know how the loop handles the tab being hidden before I design the pause overlay. @coder can you confirm?",
       "ops": [
         {
           "name": "searchLedger",
@@ -457,7 +457,7 @@
       "kind": "work",
       "botId": "qa",
       "workstreamId": "qa-pass",
-      "reply": "Testing on an iPhone and a Pixel. Two bugs in the shell so far, reported to web.",
+      "reply": "Testing on an iPhone and a Pixel. Two bugs in the shell so far and a layout issue, reported to @web.",
       "ops": [
         {
           "name": "sendMessage",

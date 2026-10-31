@@ -35,7 +35,16 @@ describe('checkCoverage', () => {
     const work = { kind: 'work', botId: 'dev', workstreamId: 'code', reply: 'ok' };
     expect(checkCoverage(tiny([{ kind: 'human', text: 'Change of plan: use Go instead.' }, work]))).toContain('human requirement change');
     expect(checkCoverage(tiny([work, { kind: 'human', text: 'Thanks.' }]))).toContain('human requirement change');
-    expect(checkCoverage(tiny([work, { kind: 'human', text: 'Change of plan: use Go instead.' }]))).not.toContain('human requirement change');
+    const replanStep = { kind: 'replan', plan: { workstreams: [ws('code', 'dev')], contracts: [] } };
+    // A change needs a replan after it.
+    expect(checkCoverage(tiny([work, { kind: 'human', text: 'Change of plan: use Go instead.' }]))).toContain('human requirement change');
+    expect(checkCoverage(tiny([work, replanStep, { kind: 'human', text: 'Change of plan: use Go instead.' }]))).toContain('human requirement change');
+    expect(checkCoverage(tiny([work, { kind: 'human', text: 'Change of plan: use Go instead.' }, replanStep]))).not.toContain('human requirement change');
+  });
+
+  test('a message with a change word but no later replan is not a requirement change', () => {
+    const work = { kind: 'work', botId: 'dev', workstreamId: 'code', reply: 'ok' };
+    expect(checkCoverage(tiny([work, { kind: 'human', text: 'No changes, great work.' }]))).toContain('human requirement change');
   });
 
   test('a bot-to-bot query is a sendMessage with act "query" in a work step', () => {
@@ -72,6 +81,21 @@ describe('the three scenarios', () => {
     const humans = load(id).steps.filter(st => st.kind === 'human');
     expect(humans.some(h => (h.mentions ?? []).length > 0)).toBe(true);
     expect(humans.some(h => (h.mentions ?? []).length === 0)).toBe(true);
+  });
+
+  test.each(IDS)('%s: a bot asking a question @-mentions the asked bot in its reply', id => {
+    const asks = load(id).steps.flatMap(st =>
+      st.kind === 'work'
+        ? (st.ops ?? [])
+            .filter(o => o.name === 'sendMessage' && (o.args as { act: string }).act === 'query')
+            .map(o => ({ reply: st.reply, mentions: (o.args as { mentions?: string[] }).mentions ?? [] }))
+        : [],
+    );
+    expect(asks.length).toBeGreaterThanOrEqual(2);
+    for (const a of asks) {
+      expect(a.mentions.length).toBeGreaterThan(0);
+      for (const m of a.mentions) expect(a.reply).toContain(`@${m}`);
+    }
   });
 
   test('flappy-bird contains a failed review that adds a convention (style conflict)', () => {

@@ -56,6 +56,19 @@ describe('renderReport', () => {
     expect(md).toContain('extra lead brief at step 0');
   });
 
+  test('caveats explain how to read the results (R-B18)', () => {
+    const lines = renderReport(all(), meta).split('\n');
+    expect(lines).toContain(
+      "- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.",
+    );
+    expect(lines).toContain(
+      "- The bundled scenarios are short, so E's compaction does not trigger at the default window; pass a smaller --window to see it.",
+    );
+    expect(lines).toContain(
+      '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
+    );
+  });
+
   test('byte-identical for identical input', () => {
     expect(renderReport(all(), meta)).toBe(renderReport(all(), meta));
   });

@@ -47,8 +47,9 @@ pnpm install
 pnpm -C packages/bench bench run --scenario all --group all
 ```
 
-The `bench` script builds the core library and the bench, then runs `node dist/cli.js`. Results
-are written to `<out>/<stamp>/results.json` (every request record and the metrics) and
+The `bench` script builds the core library and the bench, then runs `node dist/cli.js`. With
+`pnpm -C packages/bench`, the working directory is `packages/bench`, so the default output lands in
+`packages/bench/results/`. Results are written to `<out>/<stamp>/results.json` (every request record and the metrics) and
 `<out>/<stamp>/report.md` (one table per scenario and a summary table). The `results/` directory is
 ignored by git.
 
@@ -62,11 +63,24 @@ ignored by git.
 | `--compact-ratio <r>` | `0.8` | Group E: compact when history exceeds window x ratio |
 | `--summary-tokens <n>` | `1500` | Group E: size of the summary that replaces compacted history |
 | `--cache-ratio <r>` | `0.1` | Cost weight of cacheable tokens (uncached tokens weigh 1) |
-| `--out <dir>` | `results` | Output directory |
+| `--out <dir>` | `results` | Output directory, relative to the current working directory |
 | `--stamp <s>` | UTC time `YYYYMMDDTHHmmssZ` | Name of the run's subdirectory |
 
-Output is deterministic: two runs with the same inputs and `--stamp` produce byte-identical files.
+Each flag may be given once. `--stamp` must be a plain name (letters, digits, `_`, `.`, `-`, not only
+dots). Output is deterministic: two runs with the same inputs and `--stamp` produce byte-identical files.
 An invalid scenario, group or flag value prints a message on stderr and exits with a non-zero code.
+
+## Reading the results
+
+- Group A is a single-agent baseline, not a multi-bot alternative. Its one append-only history is
+  mostly cacheable, so A can be the cheapest group on cost units even though it has no team at all.
+  Compare the multi-bot groups (B to F) with each other, and A only as a reference point.
+- The bundled scenarios are short, so group E's compaction does not trigger at the default
+  128,000-token window. Pass a smaller `--window` (for example `--window 2000`) to see it.
+- Wake counts (extra requests) for groups D, E and F depend on how often humans and bots
+  @-mention each other in the scenario. A scenario with more or fewer mentions shifts these groups.
+- Cost units weight cacheable tokens by `--cache-ratio`; raw input tokens and the context-size
+  columns show the size of what each request carries, independent of caching.
 
 ## Development
 
