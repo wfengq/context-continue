@@ -139,7 +139,7 @@ export function dsBotPolicy(opts: DsBotOptions): Policy {
     if (compact) {
       // The summary keeps the markers of scenario facts that appeared in the compacted content (spec §5).
       const compacted = s.history.join('\n');
-      const markers = (ctx.scenario.facts ?? []).map(f => f.marker).filter(m => compacted.includes(m));
+      const markers = [...new Set((ctx.scenario.facts ?? []).map(f => f.marker))].filter(m => compacted.includes(m));
       s.history = [summaryLine(opts.summaryTokens, markers)];
       compactions++;
     }

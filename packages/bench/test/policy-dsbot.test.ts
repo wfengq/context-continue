@@ -297,6 +297,22 @@ describe('group E (DS Bot-style group chat)', () => {
     expect(records[records.length - 1]!.factsSeen).toEqual(['conv-1', 'conv-2']);
   });
 
+  test('E: a marker only in the uncompacted fresh content is not put into the summary', async () => {
+    const spy = new SpyModel();
+    const ops = [{ name: 'submitDeliverable', args: { workstreamId: 'art', summary: 's', content: big } }];
+    const s = validateScenario({
+      id: 'e', goal: 'g', constraints: [], owner: 'human', lead: 'art',
+      employees: [{ botId: 'art', persona: 'p', skills: [] }],
+      plan: { workstreams: [ws('art', 'art')], contracts: [] },
+      steps: [work('art', 'Done.', ops), work('art', 'Done.', ops), work('art', 'Done.', ops), work('art', 'Done LATE-MARK.', ops)],
+      facts: [{ id: 'conv-1', marker: 'LATE-MARK', step: 3, audience: ['*'] }],
+    } as unknown);
+    const { records } = await run('E', s, { window: 2000, compactRatio: 0.8, summaryTokens: 150 }, spy);
+    const k = records.findIndex(r => r.cacheableTokens === 0);
+    expect(k).toBe(3);
+    expect(spy.requests[k]!.segments[2]!.text.includes('LATE-MARK')).toBe(false);
+  });
+
   test('E: markers longer than the summary budget are cut in scenario order, without error', async () => {
     const spy = new SpyModel();
     const ops = [{ name: 'submitDeliverable', args: { workstreamId: 'art', summary: 's', content: big } }];

@@ -303,4 +303,30 @@ describe('fact visibility per request', () => {
     const { records } = await runScenario({ ...s, facts: s.facts }, policy);
     expect(records[0]!.factsSeen).toEqual(['conv-1', 'fail-1']);
   });
+
+  test('audience is matched on the step actor, not the request botId', async () => {
+    const policy: Policy = {
+      group: 'A',
+      async onStep(step: Step, index: number, ctx: RunContext) {
+        if (step.kind === 'human') return;
+        await ctx.call({ botId: 'solo', step: index, kind: 'scripted', segments: [{ text: 'MAX-5MB-UPLOAD', cacheable: false }] });
+      },
+      async finish() { return { compactions: 0, pauses: 0, coreErrors: 0 }; },
+    };
+    const { records } = await runScenario(factsScenario(['logic']), policy);
+    expect(records.map(r => r.factsSeen)).toEqual([undefined, ['conv-1']]);
+  });
+
+  test('a marker does not match across a segment boundary', async () => {
+    const policy: Policy = {
+      group: 'A',
+      async onStep(step: Step, index: number, ctx: RunContext) {
+        if (step.kind === 'human') return;
+        await ctx.call({ botId: ctx.actorOf(step), step: index, kind: 'scripted', segments: [{ text: 'MAX-5MB-', cacheable: false }, { text: 'UPLOAD', cacheable: false }] });
+      },
+      async finish() { return { compactions: 0, pauses: 0, coreErrors: 0 }; },
+    };
+    const { records } = await runScenario(factsScenario(), policy);
+    expect(records[0]!.factsMissed).toEqual(['conv-1']);
+  });
 });
