@@ -11,10 +11,9 @@ interface BotView {
 }
 
 /**
- * Group B (Grok Bot style): the group chat is the shared context. Every message, human or bot, is
- * read by the bots it reaches (a human message with mentions wakes only the mentioned bots; all
- * other messages reach every other bot). Each read is an extra request unless merged into the bot's
- * own next scripted step. Each request carries the whole transcript; the cacheable part is exactly
+ * Group B (Grok Bot style): the group chat is the shared context. Every message, human (mentioned
+ * or not) or bot, is read by every other bot (R-B22), which decides itself whether to reply. Each
+ * read is an extra request unless merged into the bot's own next scripted step. Each request carries the whole transcript; the cacheable part is exactly
  * the bot's previous request, everything appended since is new.
  *
  * Extra requests answer with `idleReply`. An idle reply is a pass (R-B10): it costs the request's
@@ -60,10 +59,9 @@ export function broadcastPolicy(): Policy {
     async onStep(step, index, ctx) {
       const everyone = ctx.scenario.employees.map(e => e.botId);
       if (step.kind === 'human') {
+        // Every message, mentioned or not, is read by every bot (R-B22, spec §5 B).
         transcript.push(fmtHuman(ctx.scenario.owner, step.text));
-        const mentioned = step.mentions;
-        const targets = mentioned && mentioned.length > 0 ? everyone.filter(b => mentioned.includes(b)) : everyone;
-        await wake(ctx, index, targets);
+        await wake(ctx, index, everyone);
         return;
       }
       const actor = ctx.actorOf(step);

@@ -38,12 +38,12 @@ describe('group B (Grok Bot-style broadcast)', () => {
     expect(extraBotsAfterStep(records, 0).sort()).toEqual(['logic', 'pm']); // art merged into step 1
   });
 
-  test('B: a mention wakes only the mentioned bot', async () => {
+  test('B: a human message with mentions is still read by every bot (R-B22); the next actor is merged', async () => {
     const { records } = await runScenario(scenario([
       { kind: 'human', text: 'Hi.', mentions: ['logic'] },
       { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'x' },
     ]), createPolicy('B', defaults));
-    expect(extraBotsAfterStep(records, 0)).toEqual(['logic']);
+    expect(extraBotsAfterStep(records, 0)).toEqual(['pm', 'logic']); // art merged into step 1
   });
 
   test('B: every bot message makes all other bots read it; the next actor is merged', async () => {
