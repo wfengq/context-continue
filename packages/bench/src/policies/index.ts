@@ -1,6 +1,7 @@
 import type { Policy } from '../runner.js';
 import type { Group } from '../types.js';
 import { broadcastPolicy } from './broadcast.js';
+import { delmPolicy } from './delm.js';
 import { singleAgentPolicy } from './single.js';
 
 export interface PolicyOptions {
@@ -18,6 +19,8 @@ export function createPolicy(group: Group, _opts: PolicyOptions): Policy {
       return singleAgentPolicy();
     case 'B':
       return broadcastPolicy();
+    case 'D':
+      return delmPolicy();
     default:
       throw new Error(`group ${group} is not implemented yet`);
   }
