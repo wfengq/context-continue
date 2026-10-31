@@ -329,19 +329,20 @@ describe('cache-friendliness', () => {
     const { p } = fx;
     const briefs = await Promise.all(BOTS.map(b => p.buildBrief(b, { ...BUDGET, peek: true })));
     for (const b of briefs) {
-      expect(b.segments.slice(0, 3).map(s => [s.kind, s.cacheable])).toEqual([['common', true], ['board', true], ['memory', true]]);
-      expect(b.segments.slice(3).every(s => !s.cacheable)).toBe(true);
+      expect(b.segments.slice(0, 4).map(s => [s.kind, s.cacheable])).toEqual([['common', true], ['memory', true], ['workspace', true], ['board', true]]);
+      expect(b.segments.slice(4).every(s => !s.cacheable)).toBe(true);
     }
-    // segments 1 and 2 are the same bytes for every member; segment 3 is the bot's own memory
+    // common and board are the same bytes for every member; memory is the bot's own
     for (const kind of ['common', 'board'] as const) expect(new Set(briefs.map(b => seg(b, kind))).size).toBe(1);
     expect(new Set(briefs.map(b => seg(b, 'memory'))).size).toBe(BOTS.length);
 
-    // segments 1-3 do not move while the board version stays: notes, reads and triggers only touch later segments
+    // common, board and memory do not move while the board version stays; only the workspace follows the note just written
     const art = briefs[1]!;
     await p.callTool('art', 'updateNotes', { text: 'a private note' });
     await p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'Hello team' });
     const again = await p.buildBrief('art', { ...BUDGET, trigger: { reason: 'mentioned', detail: 'hi' } });
     for (const kind of ['common', 'board', 'memory'] as const) expect(seg(again, kind)).toBe(seg(art, kind));
+    expect(seg(again, 'workspace')).toContain('a private note');
   });
 });
 

@@ -67,14 +67,14 @@ describe('group C (project board, real core library)', () => {
     expect(board.workstreams.map(w => [w.id, w.owner])).toEqual([['art', 'art'], ['logic', 'logic']]);
   });
 
-  test('C: each request is the 7-segment brief; cacheable ⊆ core flags (segments 1–3) and counted from its segments', async () => {
+  test('C: each request is the 7-segment brief; cacheable ⊆ core flags (segments 1–4) and counted from its segments', async () => {
     const { records } = await runScenario(scenario(threeSteps()), createPolicy('C', defaults));
     expect(records.length).toBeGreaterThan(0);
     for (const r of records) {
       expect(r.group).toBe('C');
-      expect(r.segments!.map(s => s.kind)).toEqual(['common', 'board', 'memory', 'projection', 'workspace', 'delta', 'trigger']);
+      expect(r.segments!.map(s => s.kind)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'delta', 'trigger']);
       // only the core's stable segments can ever be cacheable
-      expect(r.segments!.slice(3).every(s => !s.cacheable)).toBe(true);
+      expect(r.segments!.slice(4).every(s => !s.cacheable)).toBe(true);
       expect(r.cacheableTokens).toBe(sum(r.segments!.filter(s => s.cacheable)));
       expect(r.inputTokens).toBe(sum(r.segments!));
       expect(r.cacheableTokens).toBeLessThan(r.inputTokens);
@@ -89,7 +89,7 @@ describe('group C (project board, real core library)', () => {
     for (const r of firsts.values()) expect(r.segments.map(g => g.cacheable)).toEqual([true, false, false, false, false, false, false]);
   });
 
-  test('C: cacheable = identical leading run vs that bot\'s previous brief; a changed board un-caches board and memory (R-B19)', async () => {
+  test('C: cacheable = identical leading run vs that bot\'s previous brief; a changed board un-caches only the board and what follows (R-B19)', async () => {
     const { seen } = await runC([
       { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: [deliver('art', 'sprites')] },
       { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.', conventions: ['Sprites are 16px'] },
@@ -101,9 +101,10 @@ describe('group C (project board, real core library)', () => {
     expect(art).toHaveLength(2);
     const [prev, next] = art.map(r => r.segments);
     expect(next![0]!.text).toBe(prev![0]!.text); // common unchanged
-    expect(next![1]!.text).not.toBe(prev![1]!.text); // board changed
-    expect(next![2]!.text).toBe(prev![2]!.text); // memory unchanged, but after the change
-    expect(next!.map(g => g.cacheable)).toEqual([true, false, false, false, false, false, false]);
+    expect(next![1]!.text).toBe(prev![1]!.text); // memory unchanged
+    expect(next![2]!.text).toBe(prev![2]!.text); // workspace unchanged
+    expect(next![3]!.text).not.toBe(prev![3]!.text); // board changed
+    expect(next!.map(g => g.cacheable)).toEqual([true, true, true, false, false, false, false]);
     // every request: a segment is cacheable iff core-flagged and inside the identical leading run
     const last = new Map<string, string[]>();
     for (const r of seen) {
@@ -112,14 +113,14 @@ describe('group C (project board, real core library)', () => {
       let run = 0;
       if (before) while (run < texts.length && texts[run] === before[run]) run++;
       else run = 1;
-      expect(r.segments.map(g => g.cacheable)).toEqual(texts.map((_, i) => i < 3 && i < run));
+      expect(r.segments.map(g => g.cacheable)).toEqual(texts.map((_, i) => i < 4 && i < run));
       last.set(r.botId, texts);
     }
   });
 
-  test('C: stats carry the core-flagged cacheable total (common + board + memory of every brief) as an upper bound', async () => {
+  test('C: stats carry the core-flagged cacheable total (common + memory + workspace + board of every brief) as an upper bound', async () => {
     const { records, stats } = await runC(threeSteps());
-    const flagged = records.reduce((n, r) => n + sum(r.segments!.filter(g => ['common', 'board', 'memory'].includes(g.kind))), 0);
+    const flagged = records.reduce((n, r) => n + sum(r.segments!.filter(g => ['common', 'memory', 'workspace', 'board'].includes(g.kind))), 0);
     expect(stats.cacheableUpperBound).toBe(flagged);
     expect(flagged).toBeGreaterThan(records.reduce((n, r) => n + r.cacheableTokens, 0));
   });

@@ -53,12 +53,13 @@ export interface BriefOptions {
 
 type Overlaps = ReturnType<typeof writeScopeOverlaps>;
 
+// Key order is the segment order: stable-first, so the leading run a cache can reuse is as long as possible.
 const CACHEABLE: Record<SegmentKind, boolean> = {
   common: true,
-  board: true,
   memory: true,
+  workspace: true,
+  board: true,
   projection: false,
-  workspace: false,
   delta: false,
   trigger: false,
 };

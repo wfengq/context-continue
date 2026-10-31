@@ -18,23 +18,16 @@ beforeEach(async () => {
 });
 
 describe('buildBrief', () => {
-  test('segments come in spec order with spec cacheability', async () => {
+  test('brief segments are ordered stable-first and the first four are cacheable', async () => {
     const b = await brief('art');
-    expect(b.segments.map(s => [s.kind, s.cacheable])).toEqual([
-      ['common', true],
-      ['board', true],
-      ['memory', true],
-      ['projection', false],
-      ['workspace', false],
-      ['delta', false],
-      ['trigger', false],
-    ]);
+    expect(b.segments.map(s => s.kind)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'delta', 'trigger']);
+    expect(b.segments.map(s => s.cacheable)).toEqual([true, true, true, true, false, false, false]);
   });
 
   test('common and board segments are byte-identical across bots at the same version', async () => {
     const [a, l] = [await brief('art', { peek: true }), await brief('logic', { peek: true })];
-    expect(a.segments[0]!.text).toBe(l.segments[0]!.text);
-    expect(a.segments[1]!.text).toBe(l.segments[1]!.text);
+    expect(seg(a, 'common')).toBe(seg(l, 'common'));
+    expect(seg(a, 'board')).toBe(seg(l, 'board'));
   });
 
   test('common lists the human owner and bot members with the first persona line as role', async () => {
