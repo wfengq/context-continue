@@ -1,6 +1,5 @@
 {
   "id": "long-app",
-  "tier": "long",
   "goal": "Build and launch Larder, a meal-planning app with a shared grocery list, on iOS, Android and the web.",
   "constraints": [
     "The first public release ships within one quarter with the eight-person team.",
@@ -211,6 +210,7 @@
       }
     ]
   },
+  "tier": "long",
   "facts": [
     {
       "id": "conv-given-when-then",
@@ -270,6 +270,15 @@
       "audience": [
         "web",
         "mobile"
+      ]
+    },
+    {
+      "id": "conv-rate-limits-documented",
+      "marker": "CONV-RATE-LIMITS-DOCUMENTED",
+      "step": 40,
+      "audience": [
+        "ops",
+        "backend"
       ]
     },
     {
@@ -340,6 +349,16 @@
       ]
     },
     {
+      "id": "conv-restore-path",
+      "marker": "CONV-RESTORE-PATH",
+      "step": 99,
+      "audience": [
+        "mobile",
+        "backend",
+        "qa"
+      ]
+    },
+    {
       "id": "change-offline-list",
       "marker": "CHANGE-OFFLINE-LIST",
       "step": 112,
@@ -367,6 +386,25 @@
         "mobile",
         "qa",
         "backend"
+      ]
+    },
+    {
+      "id": "conv-delete-wins",
+      "marker": "CONV-DELETE-WINS",
+      "step": 125,
+      "audience": [
+        "mobile",
+        "backend",
+        "qa"
+      ]
+    },
+    {
+      "id": "conv-story-and-build-in-reports",
+      "marker": "CONV-STORY-AND-BUILD-IN-REPORTS",
+      "step": 132,
+      "audience": [
+        "qa",
+        "analyst"
       ]
     },
     {
@@ -1488,7 +1526,7 @@
           "args": {
             "workstreamId": "sharing",
             "summary": "Invites, roles and the list change feed",
-            "content": "Household sharing, version 1.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it.\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure)."
+            "content": "Household sharing, version 1.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it.\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure FAIL-WEBSOCKET-FANOUT)."
           }
         }
       ]
@@ -1713,7 +1751,7 @@
         {
           "name": "sendMessage",
           "args": {
-            "text": "Heads-up: App Review rejected the build because Larder Plus is bought through a Stripe webview. We cannot ship that.",
+            "text": "Heads-up (FAIL-STRIPE-IN-WEBVIEW): App Review rejected the build because Larder Plus is bought through a Stripe webview. We cannot ship that.",
             "act": "inform"
           }
         }
@@ -2539,7 +2577,7 @@
           "args": {
             "workstreamId": "sharing",
             "summary": "clientEditId replay, 30-day feed retention",
-            "content": "Household sharing, version 2.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it.\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure).\n\nOffline clients: PATCH and POST on list items accept clientEditId, so a replayed queue is applied once. The change feed keeps 30 days of edits; a client with an older cursor gets 410 and reloads the list after sending its queue."
+            "content": "Household sharing, version 2.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it.\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure FAIL-WEBSOCKET-FANOUT).\n\nOffline clients: PATCH and POST on list items accept clientEditId, so a replayed queue is applied once. The change feed keeps 30 days of edits; a client with an older cursor gets 410 and reloads the list after sending its queue."
           }
         }
       ]
@@ -3267,5 +3305,6 @@
       "kind": "human",
       "text": "This is great work. We go live in the four countries on Monday. Thank you all."
     }
-  ]
+  ],
+  "idleReply": "Noted."
 }

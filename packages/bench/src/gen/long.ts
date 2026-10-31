@@ -31,8 +31,9 @@ export const op = {
   failure: (text: string, reason: string, affects: string[]): ToolCall => ({ name: 'recordFailure', args: { text, reason, affects } }),
 };
 
-/** Lengths the spec allows for a long scenario's deliverables (spec §3). */
+/** Lengths the spec allows for a long scenario's deliverables (spec §3): a first version 300–1500, later versions up to 3000. */
 export const DELIVERABLE_MIN = 300;
+export const FIRST_VERSION_MAX = 1500;
 export const DELIVERABLE_MAX = 3000;
 
 interface Doc {
@@ -122,8 +123,9 @@ export class LongScenarioBuilder {
     doc.version += 1;
     this.docs.set(ws, doc);
     const content = [`${doc.title}, version ${doc.version}.`, ...doc.paragraphs].join('\n\n');
-    if (content.length < DELIVERABLE_MIN || content.length > DELIVERABLE_MAX) {
-      throw new Error(`step ${this.length}: deliverable ${ws} v${doc.version} has ${content.length} characters (allowed ${DELIVERABLE_MIN}–${DELIVERABLE_MAX})`);
+    const max = doc.version === 1 ? FIRST_VERSION_MAX : DELIVERABLE_MAX;
+    if (content.length < DELIVERABLE_MIN || content.length > max) {
+      throw new Error(`step ${this.length}: deliverable ${ws} v${doc.version} has ${content.length} characters (allowed ${DELIVERABLE_MIN}–${max})`);
     }
     return this.work(botId, ws, a.reply, [
       ...(a.before ?? []),
@@ -182,7 +184,7 @@ export class LongScenarioBuilder {
     return this;
   }
 
-  /** The finished scenario; throws when it does not validate or misses a coverage item. */
+  /** The finished scenario as validated; throws when it does not validate or misses a coverage item. */
   build(): Scenario {
     const { idleReply, ...head } = this.head;
     const raw = {
@@ -201,7 +203,7 @@ export class LongScenarioBuilder {
     const checked = validateScenario(structuredClone(raw));
     const missing = checkCoverage(checked);
     if (missing.length > 0) throw new Error(`Scenario "${head.id}" misses: ${missing.join('; ')} (${this.steps.length} steps, ${this.facts.length} facts)`);
-    return raw;
+    return checked;
   }
 }
 

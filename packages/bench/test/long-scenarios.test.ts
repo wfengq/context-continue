@@ -52,14 +52,15 @@ describe('long-app', () => {
     expect(s.plan.workstreams.length).toBeLessThanOrEqual(11);
   });
 
-  test('long-app deliverables are 300–3000 chars and later versions are longer', () => {
+  test('long-app deliverables: first versions 300–1500 chars, later ones up to 3000 and longer than the one before', () => {
     const byWs = deliverables(loadScenario(file('long-app')));
     expect(byWs.size).toBeGreaterThanOrEqual(10);
     expect([...byWs.values()].some(v => v.length >= 3)).toBe(true);
     for (const [ws, contents] of byWs) {
-      for (const c of contents) {
-        expect({ ws, n: c.length >= 300 && c.length <= 3000 }).toEqual({ ws, n: true });
-      }
+      contents.forEach((c, i) => {
+        const max = i === 0 ? 1500 : 3000;
+        expect({ ws, version: i + 1, inRange: c.length >= 300 && c.length <= max }).toEqual({ ws, version: i + 1, inRange: true });
+      });
       for (let i = 1; i < contents.length; i++) {
         expect({ ws, version: i + 1, longer: contents[i]!.length > contents[i - 1]!.length }).toEqual({ ws, version: i + 1, longer: true });
       }
@@ -81,8 +82,8 @@ describe('long-app', () => {
 
   test('long-app runs through all six groups; C has 0 core errors and finishes', async () => {
     const s = loadScenario(file('long-app'));
-    const opportunities = new Map((s.facts ?? []).map(f => [f.id, 0]));
     for (const g of GROUPS) {
+      const opportunities = new Map((s.facts ?? []).map(f => [f.id, 0]));
       const { records, stats } = await runScenario(s, createPolicy(g, defaults));
       expect(records.length).toBeGreaterThan(0);
       if (g === 'C') {
@@ -90,8 +91,8 @@ describe('long-app', () => {
         expect(stats.unfinished).toBe(false);
       }
       for (const r of records) for (const fid of [...(r.factsSeen ?? []), ...(r.factsMissed ?? [])]) opportunities.set(fid, (opportunities.get(fid) ?? 0) + 1);
+      // In every group, each fact's audience makes a scripted request after the fact is introduced.
+      for (const [fid, n] of opportunities) expect({ g, fid, n: n > 0 }).toEqual({ g, fid, n: true });
     }
-    // Every fact's audience makes a scripted request after the fact is introduced.
-    for (const [fid, n] of opportunities) expect({ fid, n: n > 0 }).toEqual({ fid, n: true });
   }, 60_000);
 });

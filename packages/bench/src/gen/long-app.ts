@@ -344,6 +344,7 @@ export function generateLongApp(): Scenario {
   b.review('security', false, 'The recipe importer fetches any URL a user gives it, and nothing limits how often someone can request login links. Both need concrete fixes before we go further.', [
     'Every public endpoint is rate limited per IP and per account, and limits are documented in the API (CONV-RATE-LIMITS-DOCUMENTED).',
   ]);
+  b.fact('conv-rate-limits-documented', 'CONV-RATE-LIMITS-DOCUMENTED', ['ops', 'backend']);
   b.deliver('backend', 'backend', {
     reply: 'First version of the backend services.',
     summary: 'Accounts, plans, recipes, lists and import on Postgres; tests and load numbers',
@@ -481,7 +482,7 @@ export function generateLongApp(): Scenario {
     summary: 'Invites, roles and the list change feed',
     add: [
       'Invites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it.',
-      'Sync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure).',
+      'Sync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure FAIL-WEBSOCKET-FANOUT).',
     ],
   });
   b.review('sharing', true, 'Approved; a simple design that survives phones going to sleep.');
@@ -515,7 +516,7 @@ export function generateLongApp(): Scenario {
       'TestFlight external review rejected the build under App Store guideline 3.1.1: digital subscriptions bought in the app must use in-app purchase. Google Play has the same rule.',
       ['mobile'],
     ),
-    op.message('Heads-up: App Review rejected the build because Larder Plus is bought through a Stripe webview. We cannot ship that.', 'inform'),
+    op.message('Heads-up (FAIL-STRIPE-IN-WEBVIEW): App Review rejected the build because Larder Plus is bought through a Stripe webview. We cannot ship that.', 'inform'),
   ]);
   b.fact('fail-stripe-in-webview', 'FAIL-STRIPE-IN-WEBVIEW', ['mobile', 'web', 'backend']);
 
@@ -616,6 +617,7 @@ export function generateLongApp(): Scenario {
   b.review('mobile', false, 'There is no restore purchases action, and App Review requires one. On Android a member who reinstalls loses Plus until the subscriber opens the app.', [
     'Every paid feature has a restore path that works on a fresh install for any household member (CONV-RESTORE-PATH).',
   ]);
+  b.fact('conv-restore-path', 'CONV-RESTORE-PATH', ['mobile', 'backend', 'qa']);
   b.deliver('web', 'web', {
     reply: 'Brought the web app under the size budget.',
     summary: 'Bundle 212 KB gzipped, LCP 1.6 s',
@@ -735,6 +737,7 @@ export function generateLongApp(): Scenario {
   b.review('offline', false, 'In my test an item that another member deleted came back after I ticked it offline. A delete has to win over an edit, as the contract says.', [
     'Sync conflicts follow the contract: the last writer wins per field and a delete wins over an edit; the losing side is told in the UI (CONV-DELETE-WINS).',
   ]);
+  b.fact('conv-delete-wins', 'CONV-DELETE-WINS', ['mobile', 'backend', 'qa']);
   progress('qa', 'testing', 'the traceability matrix for LR-01 to LR-10', 'the Detox offline scenarios');
   b.ask('qa', 'testing', 'mobile', {
     reply: 'Automating the offline cases.',
@@ -760,6 +763,7 @@ export function generateLongApp(): Scenario {
   b.review('testing', false, 'The plan does not say which devices we test on, and our users skew to older Android phones. It also has no sandbox purchase cases.', [
     'Every bug report and test result names the story id and the build number (CONV-STORY-AND-BUILD-IN-REPORTS).',
   ]);
+  b.fact('conv-story-and-build-in-reports', 'CONV-STORY-AND-BUILD-IN-REPORTS', ['qa', 'analyst']);
 
   // -------------------------------------------------------------------------
   // Change 4: EU first
