@@ -458,7 +458,7 @@
       "kind": "work",
       "botId": "eng",
       "workstreamId": "tech",
-      "reply": "With a five-minute refresh the dashboard can read hourly rollups. A realtime version did not fit the budget, so I recorded that. Submitting the architecture and the estimate: 10 engineer-weeks.",
+      "reply": "With a five-minute refresh the dashboard can read hourly rollups. A realtime version did not fit the budget, so I recorded that (FAIL-REALTIME-WEBSOCKET). Submitting the architecture and the estimate: 10 engineer-weeks.",
       "ops": [
         {
           "name": "recordFailure",
