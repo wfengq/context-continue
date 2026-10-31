@@ -153,8 +153,8 @@ describe('runScenario', () => {
     expect(out).toEqual([{ reply: 'Ok then.', ops: [] }]);
   });
 
-  test('scripted output for review and replan steps', async () => {
-    const plan = { workstreams: [ws('art', 'art')], contracts: [] };
+  test('scripted output for review and replan steps: the lead announces conventions and the new plan (R-L7)', async () => {
+    const plan = { workstreams: [ws('art', 'art')], contracts: [{ id: 'c1', from: 'art', to: 'art', spec: 'PNG sprites' }] };
     const s = tiny([
       { kind: 'review', deliverableOf: 'art', passed: false, notes: 'Too dark.', conventions: ['use palette P'] },
       { kind: 'review', deliverableOf: 'logic', passed: true, notes: 'Fine.' },
@@ -163,9 +163,12 @@ describe('runScenario', () => {
     const spy = new SpyModel();
     await runScenario(s, recordingPolicy([]), { model: spy });
     expect(spy.requests.map(r => [r.botId, r.scripted])).toEqual([
-      ['pm', { reply: 'Too dark.', ops: [{ name: 'submitReview', args: { deliverableOf: 'art', passed: false, notes: 'Too dark.', conventions: ['use palette P'] } }] }],
+      ['pm', { reply: 'Too dark.\nNew convention: use palette P', ops: [{ name: 'submitReview', args: { deliverableOf: 'art', passed: false, notes: 'Too dark.', conventions: ['use palette P'] } }] }],
       ['pm', { reply: 'Fine.', ops: [{ name: 'submitReview', args: { deliverableOf: 'logic', passed: true, notes: 'Fine.', conventions: [] } }] }],
-      ['pm', { reply: 'Replanning.', ops: [{ name: 'proposePlan', args: { plan } }] }],
+      ['pm', {
+        reply: `New plan:\nworkstream art (art): ${plan.workstreams[0]!.brief}\ncontract c1 art -> art: PNG sprites`,
+        ops: [{ name: 'proposePlan', args: { plan } }],
+      }],
     ]);
   });
 

@@ -45,6 +45,17 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 const rec = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {});
 
+/** A plan in the compact layout: `workstream <id> (<owner>): <brief>`, then `contract <id> <from> -> <to>: <spec>`. */
+export function planLines(plan: unknown): string[] {
+  const p = rec(plan);
+  const ws = Array.isArray(p.workstreams) ? p.workstreams.map(rec) : [];
+  const cs = Array.isArray(p.contracts) ? p.contracts.map(rec) : [];
+  return [
+    ...ws.map(w => `workstream ${str(w.id)} (${str(w.owner)}): ${str(w.brief)}`),
+    ...cs.map(c => `contract ${str(c.id)} ${str(c.from)} -> ${str(c.to)}: ${str(c.spec)}`),
+  ];
+}
+
 /**
  * A tool call's arguments in a compact field layout (R-L4; same style as group F's page entries):
  * readable `field: value` lines, no raw JSON. Null when the call has nothing to show
@@ -64,15 +75,8 @@ export function fmtToolArgs(op: ToolCall): string | null {
         ...(conventions.length > 0 ? [`conventions: ${conventions.join('; ')}`] : []),
       ]);
     }
-    case 'proposePlan': {
-      const plan = rec(a.plan);
-      const ws = Array.isArray(plan.workstreams) ? plan.workstreams.map(rec) : [];
-      const cs = Array.isArray(plan.contracts) ? plan.contracts.map(rec) : [];
-      return join([
-        ...ws.map(w => `workstream ${str(w.id)} (${str(w.owner)}): ${str(w.brief)}`),
-        ...cs.map(c => `contract ${str(c.id)} ${str(c.from)} -> ${str(c.to)}: ${str(c.spec)}`),
-      ]);
-    }
+    case 'proposePlan':
+      return join(planLines(a.plan));
     case 'recordFailure':
       return join([`tried: ${str(a.text)}`, `why it failed: ${str(a.reason)}`, `affects: ${strs(a.affects).join(', ')}`]);
     case 'proposeDecision': {

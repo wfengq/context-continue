@@ -220,11 +220,11 @@ describe('group E (DS Bot-style group chat)', () => {
       ['art', before, false], ['pm', before, false], ['logic', after, false], ['art', before, true],
     ]);
     // art at step 3: previous request = T + memory(60 chars → 15) + task(9); new: own reply, tool-less,
-    // others' replies "[bot pm] ok"(11 → 3), "[bot logic] L."(14 → 4), task 9
+    // others' replies "[bot pm] ok\nNew convention: use 16px grid"(41 → 11, R-L7), "[bot logic] L."(14 → 4), task 9
     const mem = 15; // before = 60 chars
     expect(records[3]).toMatchObject({ botId: 'art', cacheableTokens: T + mem + 9 });
     // own reply "[bot art] A." = 12 → 3; tool line for submitReview stays with pm
-    expect(records[3]!.inputTokens).toBe(T + mem + 9 + 3 + 3 + 4 + 9);
+    expect(records[3]!.inputTokens).toBe(T + mem + 9 + 3 + 11 + 4 + 9);
   });
 
   test('E: group memory is cut to 8000 characters', async () => {

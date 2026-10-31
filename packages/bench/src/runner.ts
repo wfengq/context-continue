@@ -1,6 +1,7 @@
 import { defaultCountTokens } from '@context-continue/core';
 import { ScriptedModel, type Model } from './model.js';
 import { DEFAULT_IDLE_REPLY } from './scenario.js';
+import { planLines } from './text.js';
 import type { CallRecord, Group, PolicyStats, Scenario, Step, ToolCall } from './types.js';
 
 /** The fixed instruction every group puts first in every request. */
@@ -36,21 +37,25 @@ export interface Policy {
   finish(): Promise<PolicyStats>;
 }
 
-/** The scripted model output of a step (R-B2). */
+/**
+ * The scripted model output of a step (R-B2, amended by R-L7): in a group chat the lead announces
+ * what it decides, so a review's reply is its notes plus one `New convention: …` line per
+ * convention, and a replan's reply is the new plan in the compact layout (`planLines`).
+ */
 export function scriptedOutput(step: Step, index: number): { reply: string; ops: ToolCall[] } {
   switch (step.kind) {
     case 'work':
       return { reply: step.reply, ops: step.ops ?? [] };
     case 'review':
       return {
-        reply: step.notes,
+        reply: [step.notes, ...(step.conventions ?? []).map(c => `New convention: ${c}`)].join('\n'),
         ops: [{
           name: 'submitReview',
           args: { deliverableOf: step.deliverableOf, passed: step.passed, notes: step.notes, conventions: step.conventions ?? [] },
         }],
       };
     case 'replan':
-      return { reply: 'Replanning.', ops: [{ name: 'proposePlan', args: { plan: step.plan } }] };
+      return { reply: ['New plan:', ...planLines(step.plan)].join('\n'), ops: [{ name: 'proposePlan', args: { plan: step.plan } }] };
     case 'human':
       throw new Error(`step ${index}: a human step has no scripted output`);
   }
