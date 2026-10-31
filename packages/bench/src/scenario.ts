@@ -137,3 +137,33 @@ export function loadScenario(path: string): Scenario {
   }
   return validateScenario(raw);
 }
+
+/** Words that mark a human message as a change of goal or constraints. */
+const CHANGE_MARKERS = /\b(chang(e|ed|es|ing)|instead|no longer|drop|switch(ed)?)\b/i;
+
+/**
+ * The coverage items a formal scenario must include (spec §3), in a fixed order; returns the ones
+ * missing (empty when the scenario qualifies):
+ * - human requirement change: a human message after the first work step that says what changed;
+ * - failed review; review with conventions; replan;
+ * - bot-to-bot query: a work step calling `sendMessage` with `act: 'query'`.
+ */
+export function checkCoverage(s: Scenario): string[] {
+  const firstWork = s.steps.findIndex(st => st.kind === 'work');
+  const has = {
+    'human requirement change': s.steps.some(
+      (st, i) => st.kind === 'human' && firstWork >= 0 && i > firstWork && CHANGE_MARKERS.test(st.text),
+    ),
+    'failed review': s.steps.some(st => st.kind === 'review' && !st.passed),
+    'review with conventions': s.steps.some(st => st.kind === 'review' && (st.conventions ?? []).length > 0),
+    replan: s.steps.some(st => st.kind === 'replan'),
+    'bot-to-bot query': s.steps.some(
+      st =>
+        st.kind === 'work' &&
+        (st.ops ?? []).some(
+          op => op.name === 'sendMessage' && typeof op.args === 'object' && op.args !== null && (op.args as { act?: unknown }).act === 'query',
+        ),
+    ),
+  };
+  return Object.entries(has).filter(([, ok]) => !ok).map(([item]) => item);
+}

@@ -1,0 +1,523 @@
+{
+  "id": "flappy-bird",
+  "goal": "Build a Flappy Bird style browser game with original pixel art, ready to share with friends.",
+  "constraints": [
+    "Plain HTML5 canvas and JavaScript, no game engine.",
+    "All art and sound are original.",
+    "The whole game loads in under 1 MB."
+  ],
+  "owner": "bob",
+  "lead": "lead",
+  "employees": [
+    {
+      "botId": "lead",
+      "persona": "Game director who splits the work, reviews every deliverable and keeps the art and code consistent.",
+      "skills": [
+        "planning",
+        "review",
+        "game design"
+      ]
+    },
+    {
+      "botId": "artist",
+      "persona": "Pixel artist.",
+      "skills": [
+        "pixel art",
+        "animation",
+        "sprite sheets"
+      ]
+    },
+    {
+      "botId": "coder",
+      "persona": "Game programmer.",
+      "skills": [
+        "canvas",
+        "game loops",
+        "physics"
+      ]
+    },
+    {
+      "botId": "sound",
+      "persona": "Sound designer.",
+      "skills": [
+        "chiptune",
+        "sound effects",
+        "music"
+      ]
+    },
+    {
+      "botId": "web",
+      "persona": "Front-end developer for mobile web.",
+      "skills": [
+        "mobile web",
+        "touch input",
+        "web app manifests"
+      ]
+    },
+    {
+      "botId": "qa",
+      "persona": "Play-tester who finds bugs and confirms fixes.",
+      "skills": [
+        "testing",
+        "bug reports"
+      ]
+    }
+  ],
+  "plan": {
+    "workstreams": [
+      {
+        "id": "art",
+        "title": "Sprites and backgrounds",
+        "brief": "Draw the bird (flap animation and tilt frames), the pipes, the ground strip, the sky background and the digits for the score, as one sprite sheet.",
+        "owner": "artist",
+        "dependsOn": []
+      },
+      {
+        "id": "gameplay",
+        "title": "Game loop and physics",
+        "brief": "Write the game loop, gravity and flap physics, pipe spawning, collision and scoring for an HTML5 canvas game.",
+        "owner": "coder",
+        "dependsOn": []
+      },
+      {
+        "id": "sfx",
+        "title": "Sound effects",
+        "brief": "Make the flap, score, hit and fall sound effects, small enough to load instantly on the web.",
+        "owner": "sound",
+        "dependsOn": []
+      },
+      {
+        "id": "music",
+        "title": "Background music",
+        "brief": "Compose a looping background track of about one minute that matches the art style.",
+        "owner": "sound",
+        "dependsOn": []
+      },
+      {
+        "id": "qa-pass",
+        "title": "Test pass",
+        "brief": "Play-test the finished game on desktop browsers, report bugs to their owners and confirm the fixes.",
+        "owner": "qa",
+        "dependsOn": [
+          "art",
+          "gameplay",
+          "sfx",
+          "music"
+        ]
+      }
+    ],
+    "contracts": [
+      {
+        "id": "c-sprites",
+        "from": "art",
+        "to": "gameplay",
+        "spec": "One PNG sprite sheet with a JSON atlas giving the name, x, y, width and height of every frame."
+      },
+      {
+        "id": "c-sounds",
+        "from": "sfx",
+        "to": "gameplay",
+        "spec": "OGG and MP3 files named flap, score, hit and fall, each under 20 KB."
+      }
+    ]
+  },
+  "steps": [
+    {
+      "kind": "human",
+      "text": "Let's make a Flappy Bird style game that runs in the browser. Original art, cute but crisp, and it should feel tight to play. Go!"
+    },
+    {
+      "kind": "work",
+      "botId": "artist",
+      "workstreamId": "art",
+      "reply": "Starting on the bird. Before I fix the sprite size I need the hitbox from the code side.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "@coder what hitbox and logical screen size are you using? I want the bird sprite to match.",
+            "act": "query",
+            "mentions": [
+              "coder"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "coder",
+      "workstreamId": "gameplay",
+      "reply": "@artist the logical screen is 288x512 and the hitbox is 12x12, so a bird around 17x12 pixels works well.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "Logical screen 288x512, hitbox 12x12; a bird of about 17x12 pixels fits.",
+            "act": "inform",
+            "mentions": [
+              "artist"
+            ]
+          }
+        },
+        {
+          "name": "updateNotes",
+          "args": {
+            "text": "Agreed with artist: logical screen 288x512, bird about 17x12, hitbox 12x12.",
+            "pinned": true
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "artist",
+      "workstreamId": "art",
+      "reply": "Sprite sheet v1 is done: 16-bit pixel art, hard edges, hand-drawn tilt frames for the bird.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "art",
+            "summary": "Pixel-art sprite sheet with bird, pipes, background, ground and digits",
+            "content": "Sprite sheet v1 (sprites.png, 256x256, with sprites.json atlas).\n\nStyle: 16-bit pixel art with a limited palette of 24 colours, hard edges and no anti-aliasing, drawn at a logical size of 288x512 for the whole screen.\n\nBird: 17x12 pixels, three flap frames (wings up, middle, down) and three tilt frames (up 20 degrees, level, nose down 90 degrees), drawn by hand so the pixels stay crisp when tilted.\n\nPipes: 26 pixels wide, green with a two-pixel dark outline; the cap is a separate 26x12 frame so pipes of any height can be built from a body tile.\n\nBackground: day sky with clouds and a city skyline, 288x512; ground strip 336x112 that tiles horizontally. Digits 0-9 for the score, 12x18 each, white with a black outline."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "art",
+      "passed": true,
+      "notes": "Lovely pixel art, and the atlas follows the contract. Approved."
+    },
+    {
+      "kind": "work",
+      "botId": "sound",
+      "workstreamId": "sfx",
+      "reply": "Four chiptune effects, all under 20 KB, named as the contract asks.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "sfx",
+            "summary": "Flap, score, hit and fall effects in OGG and MP3",
+            "content": "Sound effects v1.\n\nFour effects in OGG and MP3, mono, 22 kHz: flap (a short wing whoosh, 0.15 s, 6 KB), score (a two-note chime, 0.3 s, 9 KB), hit (a dull thud, 0.2 s, 7 KB) and fall (a descending swoop, 0.6 s, 15 KB).\n\nAll effects are normalised to -3 dB peak so none of them is louder than the others. The style is chiptune: square and noise channels only, so they match the pixel art.\n\nThe files follow the c-sounds contract: named flap, score, hit and fall, each under 20 KB."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "sound",
+      "workstreamId": "music",
+      "reply": "A first draft of the background loop, chiptune to match the effects. It is 410 KB, which is a big part of our 1 MB budget.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "music",
+            "summary": "A 55-second chiptune loop at 140 BPM, 410 KB",
+            "content": "Background music draft.\n\nA 64-bar chiptune loop at 140 BPM in C major, about 55 seconds, using two square channels for melody and harmony, a triangle bass and a noise channel for drums. The loop point is seamless.\n\nFile size: 410 KB as OGG at 96 kbps; an MP3 fallback is 520 KB. A shorter 16-bar version is possible if load time matters.\n\nThe track ducks by 6 dB while the game-over screen is shown so the hit sound stays clear."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "coder",
+      "workstreamId": "gameplay",
+      "reply": "Game loop v1 is ready: fixed-step physics, smooth rotation and smooth scaling to the window.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "gameplay",
+            "summary": "Fixed-step loop, physics, pipes, collision and scoring",
+            "content": "Game loop v1 (game.js).\n\nThe loop runs on requestAnimationFrame with a fixed physics step of 1/60 s. Gravity is 1,500 px/s^2, a flap sets the vertical speed to -420 px/s, and the bird rotates smoothly with its speed, from -25 to 90 degrees, using canvas rotate().\n\nPipes spawn every 1.4 s with a gap of 100 px at a random height and move left at 120 px/s. Positions are kept as floats for smooth motion. The canvas fills the browser window and the 288x512 scene is scaled to fit with imageSmoothingEnabled left on, so the scene looks smooth at any size.\n\nCollision uses a 12x12 hitbox centred on the bird. The score goes up when the bird passes the middle of a pipe; the best score is kept in localStorage."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "gameplay",
+      "passed": false,
+      "notes": "Style conflict between the art and the game logic: the art is crisp 16-bit pixel art, but the loop scales the scene with smoothing on, keeps sprites at sub-pixel positions and rotates the bird at runtime. On screen the bird is blurry, the pipe edges shimmer while scrolling and the hand-drawn tilt frames are never used. Please render at the logical size with whole-number scaling and use the tilt frames.",
+      "conventions": [
+        "Render the scene at 288x512 and scale it by whole-number factors only, with image smoothing turned off.",
+        "Draw every sprite at whole-pixel positions; never rotate or scale sprites at runtime, use the frames from the sprite sheet instead."
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "sfx",
+      "passed": true,
+      "notes": "Crisp, small and consistent in loudness. Approved."
+    },
+    {
+      "kind": "human",
+      "text": "Change of plan: most of my friends will play this on their phones, so it has to work in portrait with tap input. Also drop the background music; the sound effects are enough and I want it to load fast."
+    },
+    {
+      "kind": "replan",
+      "plan": {
+        "workstreams": [
+          {
+            "id": "art",
+            "title": "Sprites and backgrounds",
+            "brief": "Draw the bird (flap animation and tilt frames), the pipes, the ground strip, the sky background and the digits for the score, as one sprite sheet.",
+            "owner": "artist",
+            "dependsOn": []
+          },
+          {
+            "id": "gameplay",
+            "title": "Game loop and physics",
+            "brief": "Write the game loop, gravity and flap physics, pipe spawning, collision and scoring for an HTML5 canvas game.",
+            "owner": "coder",
+            "dependsOn": []
+          },
+          {
+            "id": "sfx",
+            "title": "Sound effects",
+            "brief": "Make the flap, score, hit and fall sound effects, small enough to load instantly on the web.",
+            "owner": "sound",
+            "dependsOn": []
+          },
+          {
+            "id": "mobile-shell",
+            "title": "Mobile web shell",
+            "brief": "Wrap the game for phones: portrait layout, tap input, full-screen and pause handling, and an installable web app manifest.",
+            "owner": "web",
+            "dependsOn": [
+              "gameplay"
+            ]
+          },
+          {
+            "id": "qa-pass",
+            "title": "Test pass on phones",
+            "brief": "Play-test the finished game on an iPhone and an Android phone in portrait, report bugs to their owners and confirm the fixes.",
+            "owner": "qa",
+            "dependsOn": [
+              "art",
+              "gameplay",
+              "sfx",
+              "mobile-shell"
+            ]
+          }
+        ],
+        "contracts": [
+          {
+            "id": "c-sprites",
+            "from": "art",
+            "to": "gameplay",
+            "spec": "One PNG sprite sheet with a JSON atlas giving the name, x, y, width and height of every frame."
+          },
+          {
+            "id": "c-sounds",
+            "from": "sfx",
+            "to": "gameplay",
+            "spec": "OGG and MP3 files named flap, score, hit and fall, each under 20 KB."
+          },
+          {
+            "id": "c-loop-api",
+            "from": "gameplay",
+            "to": "mobile-shell",
+            "spec": "A game object with start(), pause(), resume() and flap(), and a canvas sized 288x512."
+          }
+        ]
+      }
+    },
+    {
+      "kind": "work",
+      "botId": "coder",
+      "workstreamId": "gameplay",
+      "reply": "Reworked rendering to follow the new conventions: whole-number scaling, no smoothing, rounded positions, and the tilt frames instead of rotation. I also exposed pause() and resume() for the mobile shell.",
+      "ops": [
+        {
+          "name": "recordFailure",
+          "args": {
+            "text": "Scaling the 288x512 scene to fit the window with image smoothing on and drawing at float positions.",
+            "reason": "It blurs the pixel art and makes the pipes shimmer while scrolling.",
+            "affects": [
+              "gameplay"
+            ]
+          }
+        },
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "gameplay",
+            "summary": "Whole-number scaling, no smoothing, tilt frames, start/pause/resume/flap API",
+            "content": "Game loop v2 (game.js), following the rendering conventions.\n\nRendering: the scene is drawn at 288x512 into an offscreen canvas and scaled up to the screen by the largest whole factor that fits, with imageSmoothingEnabled set to false. Every sprite is drawn at Math.round of its position, so pipes and the ground no longer shimmer.\n\nBird tilt: no runtime rotation; the loop picks one of the three tilt frames from the sprite sheet based on the vertical speed (up when rising, level near zero, nose down when falling faster than 300 px/s).\n\nPhysics are unchanged: fixed 1/60 s step, gravity 1,500 px/s^2, flap speed -420 px/s, pipes every 1.4 s with a 100 px gap at 120 px/s. The game object exposes start(), pause(), resume() and flap() as the c-loop-api contract asks."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "web",
+      "workstreamId": "mobile-shell",
+      "reply": "Getting ready for the mobile shell. I need to know how the loop handles the tab being hidden before I design the pause overlay.",
+      "ops": [
+        {
+          "name": "searchLedger",
+          "args": {
+            "query": "pause resume"
+          }
+        },
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "@coder does the game object expose pause() and resume(), and does the loop stop requestAnimationFrame while paused?",
+            "act": "query",
+            "mentions": [
+              "coder"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "gameplay",
+      "passed": true,
+      "notes": "Crisp at every scale and the bird uses the drawn tilt frames now. Approved."
+    },
+    {
+      "kind": "work",
+      "botId": "coder",
+      "workstreamId": "gameplay",
+      "reply": "@web yes: pause() cancels the animation frame and freezes physics time, resume() restarts it without a time jump.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "pause() cancels the animation frame and freezes physics time; resume() restarts without a time jump.",
+            "act": "inform",
+            "mentions": [
+              "web"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "web",
+      "workstreamId": "mobile-shell",
+      "reply": "Mobile shell v1 is in: portrait, whole-factor scaling as the conventions require, tap to flap, pause on hide and a web app manifest.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "mobile-shell",
+            "summary": "Portrait layout, tap input, pause handling and manifest",
+            "content": "Mobile web shell v1 (index.html, shell.js, manifest.json).\n\nLayout: portrait only; the 288x512 canvas is centred and scaled by a whole factor, with the remaining space filled by the sky colour. On phones wider than 9:16 the side bars are coloured to match the ground.\n\nInput: a pointerdown anywhere on the page calls flap(); keyboard space still works on desktop. The page asks for full screen on the first tap.\n\nLifecycle: visibilitychange calls pause() when the tab is hidden and shows a tap-to-resume overlay when it returns. Audio is unlocked on the first tap, as mobile browsers require.\n\nInstall: manifest.json with the bird as the icon, display standalone and orientation portrait."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "human",
+      "text": "@artist I tried it on my phone outside and the pipes are really hard to see in sunlight. Can you brighten them?",
+      "mentions": [
+        "artist"
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "artist",
+      "workstreamId": "art",
+      "reply": "Brightened the pipes and the ground with a lighter green ramp and a highlight; the atlas is unchanged, so no code change is needed.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "art",
+            "summary": "Brighter pipes and ground for outdoor play, same atlas",
+            "content": "Sprite sheet v2: brighter pipes for outdoor play.\n\nThe pipe body and cap now use a lighter green ramp (three shades instead of two) and a one-pixel highlight down the left edge, so the pipes read clearly on a phone in sunlight. The dark outline stays two pixels wide.\n\nContrast between the pipes and the day sky went from 2.1:1 to 3.4:1. The ground strip got the same lighter ramp so it matches.\n\nEverything else is unchanged: 16-bit pixel art, 24-colour palette, hard edges, three flap and three tilt frames for the bird, and the same sprites.json atlas, so no code changes are needed."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "art",
+      "passed": true,
+      "notes": "Much easier to see, still crisp pixel art. Approved."
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "mobile-shell",
+      "passed": true,
+      "notes": "Works in portrait and follows the rendering conventions. Approved; qa can start."
+    },
+    {
+      "kind": "work",
+      "botId": "qa",
+      "workstreamId": "qa-pass",
+      "reply": "Testing on an iPhone and a Pixel. Two bugs in the shell so far, reported to web.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "@web on iOS Safari a fast double tap zooms the page, and on Android the flap feels about 300 ms late. Also the score sits under the notch on the iPhone 13.",
+            "act": "request",
+            "mentions": [
+              "web"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "web",
+      "workstreamId": "mobile-shell",
+      "reply": "Fixed all three: touch-action manipulation, flap on pointerdown, and safe-area insets.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "mobile-shell",
+            "summary": "Fixes for double-tap zoom, input delay and the notch",
+            "content": "Mobile web shell v2: fixes from the phone test pass.\n\nDouble-tap zoom: the canvas and the body now set touch-action: manipulation, and the viewport meta sets maximum-scale=1, so fast taps no longer zoom the page on iOS Safari.\n\nInput delay: flap() is called on pointerdown instead of click, removing the 300 ms delay that made the bird feel late on Android.\n\nSafe areas: the layout uses env(safe-area-inset-top) so the score is not hidden under the notch.\n\nEverything else is unchanged from v1: portrait only, whole-factor scaling, pause on visibilitychange and the web app manifest."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "mobile-shell",
+      "passed": true,
+      "notes": "All three fixes confirmed on the build. Approved."
+    },
+    {
+      "kind": "work",
+      "botId": "qa",
+      "workstreamId": "qa-pass",
+      "reply": "Retested on both phones; all bugs are fixed. Submitting the test report.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "qa-pass",
+            "summary": "Test pass on iPhone 13 and Pixel 7: ready to ship",
+            "content": "Test pass report (iPhone 13, Safari; Pixel 7, Chrome; both in portrait).\n\nPlayed 40 rounds on each phone. Found and confirmed fixed: double-tap zoom on iOS (mobile-shell v2), late flap on Android (mobile-shell v2), score hidden under the notch (mobile-shell v2).\n\nChecked: the pixel art stays crisp at every scale factor; no shimmer on pipes or ground; the bird tilt frames switch correctly; sounds play after the first tap; pause and resume work when switching apps; the best score survives a reload.\n\nOpen, low priority: on very small phones (iPhone SE) the scale factor is 1, so the game is small but still playable.\n\nResult: ready to ship."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "qa-pass",
+      "passed": true,
+      "notes": "Thorough report. The game is ready to share."
+    },
+    {
+      "kind": "human",
+      "text": "Played ten rounds on the bus. It looks great and feels tight. Ship it!"
+    }
+  ]
+}

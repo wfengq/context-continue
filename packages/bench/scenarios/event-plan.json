@@ -1,0 +1,508 @@
+{
+  "id": "event-plan",
+  "goal": "Organise the Lisbon Developer Day, a one-day meetup for developers on 14 March.",
+  "constraints": [
+    "About 120 attendees.",
+    "Total budget EUR 15,000.",
+    "The venue must be step-free and reachable by public transport."
+  ],
+  "owner": "carol",
+  "lead": "coord",
+  "employees": [
+    {
+      "botId": "coord",
+      "persona": "Event coordinator who splits the work, reviews every deliverable and tracks the budget.",
+      "skills": [
+        "event planning",
+        "budgeting",
+        "review"
+      ]
+    },
+    {
+      "botId": "venue",
+      "persona": "Venue scout who finds and books venues.",
+      "skills": [
+        "venues",
+        "negotiation"
+      ]
+    },
+    {
+      "botId": "program",
+      "persona": "Programme manager who builds agendas and books speakers.",
+      "skills": [
+        "agendas",
+        "speakers"
+      ]
+    },
+    {
+      "botId": "catering",
+      "persona": "Catering planner.",
+      "skills": [
+        "catering",
+        "dietary planning"
+      ]
+    },
+    {
+      "botId": "comms",
+      "persona": "Communications manager for invitations and registration.",
+      "skills": [
+        "email",
+        "registration pages"
+      ]
+    },
+    {
+      "botId": "av",
+      "persona": "Audio-visual technician.",
+      "skills": [
+        "livestreaming",
+        "recording",
+        "captions"
+      ]
+    }
+  ],
+  "plan": {
+    "workstreams": [
+      {
+        "id": "venue",
+        "title": "Venue",
+        "brief": "Find and book a venue in Lisbon for 14 March with a main hall, two breakout rooms and catering access, within budget.",
+        "owner": "venue",
+        "dependsOn": []
+      },
+      {
+        "id": "agenda",
+        "title": "Agenda and speakers",
+        "brief": "Build the one-day agenda: keynote, talks, two workshop tracks and breaks, and confirm the speakers.",
+        "owner": "program",
+        "dependsOn": []
+      },
+      {
+        "id": "catering",
+        "title": "Catering",
+        "brief": "Arrange breakfast, lunch, coffee breaks and the evening drinks for 120 people, following the venue's kitchen rules.",
+        "owner": "catering",
+        "dependsOn": [
+          "venue"
+        ]
+      },
+      {
+        "id": "invites",
+        "title": "Email invitations",
+        "brief": "Send personal email invitations to the 120 developers on the guest list, track replies and send reminders.",
+        "owner": "comms",
+        "dependsOn": [
+          "venue",
+          "agenda"
+        ]
+      }
+    ],
+    "contracts": [
+      {
+        "id": "c-venue-catering",
+        "from": "venue",
+        "to": "catering",
+        "spec": "The kitchen rules, the room layout and the times catering can set up."
+      },
+      {
+        "id": "c-agenda-invites",
+        "from": "agenda",
+        "to": "invites",
+        "spec": "The agenda as a list of time, title and speaker."
+      }
+    ]
+  },
+  "steps": [
+    {
+      "kind": "human",
+      "text": "We are hosting a one-day developer meetup in Lisbon on 14 March, for about 120 people, with a budget of EUR 15,000. Let's get the venue and the agenda going first."
+    },
+    {
+      "kind": "work",
+      "botId": "venue",
+      "workstreamId": "venue",
+      "reply": "Found a good fit at LX Factory, Hall B: right capacity, two breakout rooms, step-free and near the metro.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "venue",
+            "summary": "LX Factory Hall B: capacity, availability, hire price and why",
+            "content": "Venue proposal v1: LX Factory, Hall B, Lisbon.\n\nCapacity: main hall for 250 seated theatre style, two breakout rooms for 40 each, and a terrace for the evening drinks. Available on 14 March from 07:00 to 23:00.\n\nPrice: hall hire 6,800 for the day. Catering must use one of three approved caterers; the kitchen can be used from 07:00.\n\nWhy this one: it is 10 minutes from the metro, has step-free access, and its industrial look fits a developer audience. The two alternatives (a hotel conference floor and a university auditorium) were either more expensive or had no breakout rooms."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "program",
+      "workstreamId": "agenda",
+      "reply": "Working on the agenda. The workshop tracks depend on the breakout rooms, so I am checking with venue.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "@venue how many breakout rooms are there, how many people fit in each, and does the main hall have two screens?",
+            "act": "query",
+            "mentions": [
+              "venue"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "venue",
+      "workstreamId": "venue",
+      "reply": "@program two breakout rooms for 40 people each; the main hall has two screens and four microphones, at an extra cost.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "Two breakout rooms for 40 each; the main hall has two screens and four microphones (extra cost).",
+            "act": "inform",
+            "mentions": [
+              "program"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "venue",
+      "passed": false,
+      "notes": "The venue fits, but the price leaves out VAT, the projection and microphones, and cleaning and security, so I cannot check it against the budget. Please give the full cost.",
+      "conventions": [
+        "All costs are stated in EUR including VAT, with every extra listed."
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "venue",
+      "workstreamId": "venue",
+      "reply": "Here is the full cost including VAT and every extra: EUR 10,455 in total. The booking is on hold until 1 February.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "venue",
+            "summary": "LX Factory Hall B with full costs including VAT: EUR 10,455",
+            "content": "Venue proposal v2: LX Factory, Hall B, Lisbon, with full costs.\n\nCapacity: main hall for 250 seated theatre style, two breakout rooms for 40 each, terrace for the evening drinks. Booked on hold for 14 March, 07:00 to 23:00.\n\nCosts (EUR, including 23% VAT): hall hire EUR 8,364; projection, two screens and four microphones EUR 1,476; cleaning and security EUR 615. Total EUR 10,455.\n\nKitchen rules: catering must come from the three approved caterers; set-up from 07:00; the terrace closes at 22:30. Stage power: two 16 A circuits; wired ethernet at the stage and the control desk.\n\nThe hold expires on 1 February; a 30% deposit (EUR 3,137 including VAT) confirms the booking."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "venue",
+      "passed": true,
+      "notes": "Full costs are clear and the hold gives us time. Approved; catering can start."
+    },
+    {
+      "kind": "work",
+      "botId": "program",
+      "workstreamId": "agenda",
+      "reply": "The agenda is done: keynote, three talks, two workshops in the breakout rooms, lightning talks, a closing panel and drinks.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "agenda",
+            "summary": "Agenda for 14 March with confirmed speakers",
+            "content": "Agenda for 14 March.\n\n08:30 registration and breakfast. 09:30 opening keynote (Ana Ribeiro, \"Ten years of building in public\"). 10:30 coffee. 11:00 talks in the main hall: type-safe APIs, observability on a budget, and accessibility audits that stick. 12:30 lunch.\n\n14:00 two workshop tracks in the breakout rooms: \"Your first Rust service\" and \"Testing UI without flakiness\" (40 places each, sign-up on the day). 15:30 coffee. 16:00 lightning talks (eight five-minute slots, open call). 17:00 closing panel on open source funding. 18:00 drinks on the terrace until 22:00.\n\nAll speakers have confirmed except the lightning talks, which close their call on 20 February."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "catering",
+      "workstreamId": "catering",
+      "reply": "Starting on catering with the venue's kitchen rules. I need the break times before I can book the caterer.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "@program what are the exact times for breakfast, the coffee breaks, lunch and the drinks?",
+            "act": "query",
+            "mentions": [
+              "program"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "agenda",
+      "passed": true,
+      "notes": "A strong line-up and a realistic day. Approved."
+    },
+    {
+      "kind": "work",
+      "botId": "comms",
+      "workstreamId": "invites",
+      "reply": "Drafted the invitation email and the sending plan for the 120 people on the guest list.",
+      "ops": [
+        {
+          "name": "updateNotes",
+          "args": {
+            "text": "Invite plan: send 20 January, reminder 7 February, details one week before."
+          }
+        },
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "invites",
+            "summary": "Invitation email draft and sending plan",
+            "content": "Invitation email draft.\n\nSubject: You are invited: Lisbon Developer Day, 14 March.\n\nBody: Hi {first name}, we are hosting a one-day meetup for developers at LX Factory in Lisbon on Friday 14 March: a keynote by Ana Ribeiro, talks, two hands-on workshops and drinks on the terrace. It is free, and places are limited to 120. Please reply by 14 February so we can plan the catering, and tell us about any dietary needs.\n\nPlan: send to the 120 people on the guest list on 20 January, a reminder on 7 February to those who have not answered, and the practical details one week before the event."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "human",
+      "text": "Change of plans from management: we expect around 200 people now, and we want the opening keynote and the closing panel livestreamed. Instead of personal invitations, make it public with registration. The budget goes up to EUR 25,000. @coord please rework the plan.",
+      "mentions": [
+        "coord"
+      ]
+    },
+    {
+      "kind": "replan",
+      "plan": {
+        "workstreams": [
+          {
+            "id": "venue",
+            "title": "Venue",
+            "brief": "Find and book a venue in Lisbon for 14 March with a main hall, two breakout rooms and catering access, within budget.",
+            "owner": "venue",
+            "dependsOn": []
+          },
+          {
+            "id": "agenda",
+            "title": "Agenda and speakers",
+            "brief": "Build the one-day agenda: keynote, talks, two workshop tracks and breaks, and confirm the speakers.",
+            "owner": "program",
+            "dependsOn": []
+          },
+          {
+            "id": "catering",
+            "title": "Catering",
+            "brief": "Arrange breakfast, lunch, coffee breaks and the evening drinks for 200 people, following the venue's kitchen rules and the dietary answers from registration.",
+            "owner": "catering",
+            "dependsOn": [
+              "venue"
+            ]
+          },
+          {
+            "id": "livestream",
+            "title": "Keynote livestream",
+            "brief": "Stream the opening keynote and the closing panel to YouTube in 1080p with captions, and record them for later.",
+            "owner": "av",
+            "dependsOn": [
+              "venue",
+              "agenda"
+            ]
+          },
+          {
+            "id": "registration",
+            "title": "Public registration",
+            "brief": "Run a public registration page capped at 200 places with a waitlist, a dietary question and reminder emails.",
+            "owner": "comms",
+            "dependsOn": [
+              "venue",
+              "agenda"
+            ]
+          }
+        ],
+        "contracts": [
+          {
+            "id": "c-venue-catering",
+            "from": "venue",
+            "to": "catering",
+            "spec": "The kitchen rules, the room layout and the times catering can set up."
+          },
+          {
+            "id": "c-agenda-registration",
+            "from": "agenda",
+            "to": "registration",
+            "spec": "The agenda as a list of time, title and speaker."
+          },
+          {
+            "id": "c-venue-livestream",
+            "from": "venue",
+            "to": "livestream",
+            "spec": "Stage power, network and camera positions in the main hall."
+          }
+        ]
+      }
+    },
+    {
+      "kind": "work",
+      "botId": "program",
+      "workstreamId": "agenda",
+      "reply": "@catering breakfast at 08:30, coffee at 10:30 and 15:30, lunch at 12:30, drinks from 18:00 to 22:00.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "Breakfast 08:30, coffee 10:30 and 15:30, lunch 12:30, drinks 18:00 to 22:00.",
+            "act": "inform",
+            "mentions": [
+              "catering"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "catering",
+      "workstreamId": "catering",
+      "reply": "Catering plan for 200 people with the approved caterer, costed in EUR including VAT as the convention asks.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "catering",
+            "summary": "Catering for 200 with Cozinha Aberta: EUR 11,070 including VAT",
+            "content": "Catering plan for 200 people (approved caterer: Cozinha Aberta).\n\nBreakfast 08:30: pastries, fruit, yoghurt, coffee and tea. Coffee breaks at 10:30 and 15:30 with snacks. Lunch 12:30: a buffet with two hot dishes (one vegetarian), salads and bread; vegan and gluten-free plates prepared separately from the registration answers. Evening drinks 18:00-22:00: wine, beer, soft drinks and finger food.\n\nCosts (EUR, including VAT): breakfast and breaks EUR 2,460; lunch EUR 4,920; drinks EUR 3,690. Total EUR 11,070.\n\nSet-up from 07:00 as the venue requires; final numbers due to the caterer seven days before the event."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "av",
+      "workstreamId": "livestream",
+      "reply": "Planning the livestream. Before I choose the encoder I need to know the network at the stage.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "@venue is there wired ethernet at the stage or the control desk, and how much power is available on stage?",
+            "act": "query",
+            "mentions": [
+              "venue"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "venue",
+      "workstreamId": "venue",
+      "reply": "@av there is wired ethernet at both the stage and the control desk, and two 16 A circuits on stage.",
+      "ops": [
+        {
+          "name": "sendMessage",
+          "args": {
+            "text": "Wired ethernet at the stage and the control desk; two 16 A circuits on stage.",
+            "act": "inform",
+            "mentions": [
+              "av"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "comms",
+      "workstreamId": "registration",
+      "reply": "The public registration page is ready: 200 places, a waitlist and reminders with a cancel link.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "registration",
+            "summary": "Public registration with a 200 cap, waitlist and reminders",
+            "content": "Public registration page v1.\n\nThe page lists the date, venue, agenda and speakers, and offers 200 free places. When the places are gone, new sign-ups join a waitlist and are offered a place automatically if someone cancels before 10 March.\n\nEach person gets a confirmation email with a calendar file, a reminder one week before and a reminder the day before, both with a one-click cancel link so we free places early.\n\nPromotion: posted on the meetup groups, the company blog and the speakers' social accounts on 20 January."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "catering",
+      "passed": true,
+      "notes": "Costed correctly and the dietary plates are covered. Approved."
+    },
+    {
+      "kind": "work",
+      "botId": "av",
+      "workstreamId": "livestream",
+      "reply": "Livestream plan done: two cameras, a hardware encoder on the wired network and a 4G backup.",
+      "ops": [
+        {
+          "name": "proposeDecision",
+          "args": {
+            "text": "Use a 4G bonding unit as a backup for the livestream.",
+            "rationale": "The venue network is shared with 200 attendees; a backup keeps the keynote on air if it drops.",
+            "rejected": [
+              "Rely on the venue network alone"
+            ],
+            "affects": [
+              "livestream"
+            ]
+          }
+        },
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "livestream",
+            "summary": "Two-camera YouTube stream with captions and a 4G backup: EUR 2,583",
+            "content": "Livestream plan for the keynote and the closing panel.\n\nSetup: two cameras (a wide shot from the back and a close-up from the side), the venue's stage microphones into our mixer, and a hardware encoder on the wired ethernet at the control desk. Stream to YouTube in 1080p at 6 Mbps, with a 4G bonding unit as backup if the venue network drops.\n\nCaptions: live automatic captions on YouTube, corrected in the recordings within 48 hours. Recordings of both sessions are published on the company channel within a week.\n\nCosts (EUR, including VAT): camera crew and equipment EUR 2,214; 4G bonding rental EUR 369. Total EUR 2,583."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "registration",
+      "passed": true,
+      "notes": "Clear and the waitlist will help with no-shows. Approved."
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "livestream",
+      "passed": true,
+      "notes": "Solid plan with a backup. Total spend is now EUR 24,108 including VAT, inside the new budget. Approved."
+    },
+    {
+      "kind": "human",
+      "text": "Great progress. @comms one thing is missing: the caterer needs dietary needs, so please add a dietary question to the registration form.",
+      "mentions": [
+        "comms"
+      ]
+    },
+    {
+      "kind": "work",
+      "botId": "comms",
+      "workstreamId": "registration",
+      "reply": "Added the dietary question, a daily CSV export with counts, and the final export to the caterer seven days before.",
+      "ops": [
+        {
+          "name": "submitDeliverable",
+          "args": {
+            "workstreamId": "registration",
+            "summary": "Registration v2 with a dietary question and caterer export",
+            "content": "Public registration page v2, with the dietary question.\n\nEverything from v1: 200 free places, an automatic waitlist until 10 March, confirmation with a calendar file, and reminders one week and one day before with a one-click cancel link.\n\nNew: the form asks for dietary needs (none, vegetarian, vegan, gluten-free, halal, allergies with a free-text field). The answers are exported daily as a CSV with counts per option, and the final export goes to the caterer seven days before the event, as the catering plan requires.\n\nPrivacy: dietary answers are only shared as counts, except for allergies, which go to the caterer with the person's name so the plates can be labelled."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "review",
+      "deliverableOf": "registration",
+      "passed": true,
+      "notes": "This closes the loop with catering. Approved."
+    },
+    {
+      "kind": "human",
+      "text": "Thank you all. Registration opens on 20 January."
+    }
+  ]
+}
