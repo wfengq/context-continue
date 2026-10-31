@@ -3,6 +3,7 @@ import type { Group } from '../types.js';
 import { broadcastPolicy } from './broadcast.js';
 import { delmPolicy } from './delm.js';
 import { dsBotPolicy } from './dsbot.js';
+import { projectPolicy } from './project.js';
 import { singleAgentPolicy } from './single.js';
 import { spacePolicy } from './space.js';
 
@@ -21,6 +22,8 @@ export function createPolicy(group: Group, opts: PolicyOptions): Policy {
       return singleAgentPolicy();
     case 'B':
       return broadcastPolicy();
+    case 'C':
+      return projectPolicy();
     case 'D':
       return delmPolicy();
     case 'E':
