@@ -44,6 +44,22 @@ const proposalIdIn = (result: unknown): string | null => {
   return typeof id === 'string' ? id : null;
 };
 
+/**
+ * A compact rendering of a successful tool result for the bot's next trigger (R-B21):
+ * `tool <name>: ok <result as JSON>`. Wakes are left out (the core delivers them as wakes); a result
+ * that is only wakes renders as `tool <name>: ok`. Lookup tools (getBoardItem, searchLedger,
+ * getDeliverable) return content, which is included in full.
+ */
+export function resultLine(name: string, result: unknown): string {
+  let shown = result;
+  if (typeof result === 'object' && result !== null && !Array.isArray(result) && 'wakes' in result) {
+    const { wakes: _wakes, ...rest } = result as Record<string, unknown>;
+    shown = Object.keys(rest).length > 0 ? rest : undefined;
+  }
+  if (shown === undefined || shown === null) return `tool ${name}: ok`;
+  return `tool ${name}: ok ${typeof shown === 'string' ? shown : JSON.stringify(shown)}`;
+}
+
 /** One request per woken bot, in first-seen order; its reasons and details are combined. */
 function byBot(wakes: Wake[]): { botId: string; reason: Wake['reason']; detail: string }[] {
   const acc = new Map<string, { botId: string; reason: Wake['reason']; details: string[] }>();
@@ -62,8 +78,9 @@ function byBot(wakes: Wake[]): { botId: string; reason: Wake['reason']; detail: 
  * Who is woken is decided by the core alone (returned wakes and `wake` events, counted once per bot
  * per step); each request is exactly the seven `buildBrief` segments; cacheable per R-B19 (see `send`).
  * The core's optional models are not given, so it uses its fallback behaviour and makes no model calls.
- * A core error (a throw from `callTool` or `approvePlan`) is counted and shown to that bot as
- * `tool error: <message>` in the trigger of its next request; the run continues.
+ * Every tool result is shown to that bot in the trigger of its next request (R-B21): a success as
+ * `tool <name>: ok <result>` (see `resultLine`), a core error (a throw from `callTool` or
+ * `approvePlan`) as `tool error: <message>`, also counted; the run continues.
  */
 export function projectPolicy(): Policy & { readonly project: Project | null } {
   let project: Project | null = null;
@@ -74,17 +91,19 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
   const prevTexts = new Map<string, string[]>();
   /** Tokens the core flags cacheable, summed over all briefs: the report's upper bound. */
   let flaggedCacheable = 0;
-  /** Core errors per bot, not yet shown to it. */
-  const toolErrors = new Map<string, string[]>();
+  /** Tool results per bot (successes and core errors), not yet shown to it (R-B21). */
+  const toolResults = new Map<string, string[]>();
 
-  const withErrors = (botId: string, detail: string): string => {
-    const errs = toolErrors.get(botId) ?? [];
-    toolErrors.delete(botId);
-    return [detail, ...errs.map(m => `tool error: ${m}`)].join('; ');
+  const keepResult = (botId: string, line: string) => toolResults.set(botId, [...(toolResults.get(botId) ?? []), line]);
+
+  const withResults = (botId: string, detail: string): string => {
+    const lines = toolResults.get(botId) ?? [];
+    toolResults.delete(botId);
+    return [detail, ...lines].join('; ');
   };
 
   const brief = (p: Project, botId: string, reason: Wake['reason'] | 'manual', detail: string): Promise<ContextBundle> =>
-    p.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, trigger: { reason, detail: withErrors(botId, detail) } });
+    p.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, trigger: { reason, detail: withResults(botId, detail) } });
 
   /**
    * Sends a brief. Cacheable (R-B19, the rule every group uses): a segment counts only if the core
@@ -118,16 +137,20 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
     }
   }
 
-  /** Runs one tool call as `botId`; a core error is counted and kept for that bot's next request. */
+  /**
+   * Runs one tool call as `botId`; its result (or the core error, which is also counted) is kept for
+   * that bot's next request.
+   */
   async function runTool(p: Project, ctx: RunContext, botId: string, op: ToolCall) {
     try {
       const result = await p.callTool(botId, op.name, op.args);
+      keepResult(botId, resultLine(op.name, result));
       woken.push(...wakesIn(result));
       const proposalId = op.name === 'proposePlan' ? proposalIdIn(result) : null;
       if (proposalId !== null) woken.push(...(await p.approvePlan(proposalId, { by: ctx.scenario.owner })));
     } catch (e) {
       coreErrors++;
-      toolErrors.set(botId, [...(toolErrors.get(botId) ?? []), errText(e)]);
+      keepResult(botId, `tool error: ${errText(e)}`);
     }
   }
 

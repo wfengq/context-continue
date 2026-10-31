@@ -9,7 +9,7 @@ import type { CallRecord } from '../src/types.js';
 const ws = (id: string, owner: string, dependsOn: string[] = []) => ({ id, title: id, brief: `do ${id}`, owner, dependsOn });
 const defaults = { window: 128000, compactRatio: 0.8, summaryTokens: 1500 };
 
-function scenario(steps: unknown[], plan = { workstreams: [ws('art', 'art'), ws('logic', 'logic')], contracts: [] }) {
+function scenario(steps: unknown[], plan: { workstreams: ReturnType<typeof ws>[]; contracts: { id: string; from: string; to: string; spec: string }[] } = { workstreams: [ws('art', 'art'), ws('logic', 'logic')], contracts: [] }) {
   return validateScenario({
     id: 'three', goal: 'Build a tiny game', constraints: ['Runs in the browser'], owner: 'human', lead: 'pm',
     employees: [
@@ -167,6 +167,31 @@ describe('group C (project board, real core library)', () => {
     expect(triggerOf(seen[3]!)).toContain('[task art] work on workstream art');
     expect(triggerOf(seen[2]!)).not.toContain('tool error');
     expect(triggerOf(seen[4]!)).not.toContain('tool error');
+  });
+
+  test('C: every tool result, success or error, reaches that bot\'s next brief once (R-B21)', async () => {
+    const plan = { workstreams: [ws('art', 'art'), ws('logic', 'logic')], contracts: [{ id: 'c1', from: 'art', to: 'logic', spec: 'PNG sheets, 16px tiles' }] };
+    const { seen } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Checking.', ops: [
+        { name: 'getBoardItem', args: { id: 'c1' } },
+        { name: 'searchLedger', args: { query: 'nothing matches this' } },
+        { name: 'updateNotes', args: { text: 'remember the palette' } },
+      ] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: [deliver('art', 'tiles')] },
+    ], plan);
+    const art = seen.filter(r => r.botId === 'art');
+    const next = triggerOf(art[1]!);
+    // getBoardItem returns the contract itself: its content is in the trigger
+    expect(next).toContain('tool getBoardItem: ok');
+    expect(next).toContain('PNG sheets, 16px tiles');
+    expect(next).toContain('tool searchLedger: ok []');
+    // a wakes-only result renders as a bare ok
+    expect(next).toMatch(/tool updateNotes: ok(;|$)/m);
+    expect(next).toContain('[task art] work on workstream art');
+    // shown once: the first brief had none, the results are not repeated later
+    expect(triggerOf(art[0]!)).not.toContain('tool ');
+    const after = seen.filter(r => r.botId === 'art').slice(2).map(triggerOf);
+    for (const t of after) expect(t).not.toContain('getBoardItem');
   });
 
   test('C: review uses the latest deliverable id of deliverableOf; replan proposes and approves', async () => {
