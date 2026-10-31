@@ -148,6 +148,7 @@ export function validateScenario(raw: unknown): Scenario {
   for (const id of duplicates((s.facts ?? []).map(f => f.id))) problems.push(`facts: duplicate fact id "${id}"`);
   for (const f of s.facts ?? []) {
     const bad = (msg: string) => problems.push(`fact ${f.id}: ${msg}`);
+    if (!/^[A-Za-z0-9_-]+$/.test(f.marker)) bad(`marker "${f.marker}" must match /^[A-Za-z0-9_-]+$/`);
     const step = Number.isInteger(f.step) ? s.steps[f.step] : undefined;
     if (step === undefined) bad(`step ${f.step} does not exist (scenario has ${s.steps.length} steps)`);
     else if (!stepText(step).includes(f.marker)) bad(`step ${f.step} text does not contain marker "${f.marker}"`);

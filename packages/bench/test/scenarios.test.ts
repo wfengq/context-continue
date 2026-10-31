@@ -126,6 +126,39 @@ describe('the three scenarios', () => {
   });
 });
 
+describe('standard scenario facts', () => {
+  test.each(IDS)('%s has 4–6 annotated facts across all four categories', id => {
+    const s = load(id);
+    expect(s.facts).toBeDefined();
+    expect(s.facts!.length).toBeGreaterThanOrEqual(4);
+    expect(s.facts!.length).toBeLessThanOrEqual(6);
+    expect(checkCoverage(s)).toEqual([]);
+  });
+
+  test.each(IDS)('%s: every fact has at least one opportunity in some group', async id => {
+    const s = load(id);
+    const opportunities = new Map((s.facts ?? []).map(f => [f.id, 0]));
+    for (const g of GROUPS) {
+      const { records } = await runScenario(s, createPolicy(g, defaults));
+      for (const r of records) for (const fid of [...(r.factsSeen ?? []), ...(r.factsMissed ?? [])]) opportunities.set(fid, (opportunities.get(fid) ?? 0) + 1);
+    }
+    for (const [fid, n] of opportunities) expect({ fid, n: n > 0 }).toEqual({ fid, n: true });
+  });
+});
+
+describe('fact markers', () => {
+  test('a marker with characters outside [A-Za-z0-9_-] is rejected, naming the fact id', () => {
+    const base = {
+      id: 't', goal: 'g', constraints: [], owner: 'human', lead: 'pm',
+      employees: [{ botId: 'pm', persona: 'p', skills: [] }],
+      plan: { workstreams: [], contracts: [] },
+      steps: [{ kind: 'human', text: 'Use MAX 5MB please' }],
+    };
+    expect(() => validateScenario({ ...base, facts: [{ id: 'conv-a', marker: 'MAX 5MB', step: 0, audience: ['*'] }] })).toThrow(/fact conv-a: marker/);
+    expect(() => validateScenario({ ...base, steps: [{ kind: 'human', text: 'Use MAX-5MB_x' }], facts: [{ id: 'conv-a', marker: 'MAX-5MB_x', step: 0, audience: ['*'] }] })).not.toThrow();
+  });
+});
+
 describe('checkCoverage: tier and facts', () => {
   const human = (text: string) => ({ kind: 'human', text });
   const factsFor = (prefixes: string[], extra = 0) => {

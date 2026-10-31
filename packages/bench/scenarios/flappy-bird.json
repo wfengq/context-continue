@@ -121,6 +121,54 @@
       }
     ]
   },
+  "facts": [
+    {
+      "id": "contract-hitbox-12x12",
+      "marker": "CONTRACT-HITBOX-12X12",
+      "step": 2,
+      "audience": [
+        "artist",
+        "coder",
+        "web"
+      ]
+    },
+    {
+      "id": "conv-whole-number-scale",
+      "marker": "CONV-WHOLE-NUMBER-SCALE",
+      "step": 8,
+      "audience": [
+        "coder",
+        "web"
+      ]
+    },
+    {
+      "id": "change-portrait-tap",
+      "marker": "CHANGE-PORTRAIT-TAP",
+      "step": 10,
+      "audience": [
+        "coder",
+        "web",
+        "qa"
+      ]
+    },
+    {
+      "id": "contract-loop-api",
+      "marker": "CONTRACT-LOOP-API",
+      "step": 11,
+      "audience": [
+        "web"
+      ]
+    },
+    {
+      "id": "fail-smoothed-scaling",
+      "marker": "FAIL-SMOOTHED-SCALING",
+      "step": 12,
+      "audience": [
+        "coder",
+        "web"
+      ]
+    }
+  ],
   "steps": [
     {
       "kind": "human",
@@ -163,7 +211,7 @@
         {
           "name": "updateNotes",
           "args": {
-            "text": "Agreed with artist: logical screen 288x512, bird about 17x12, hitbox 12x12.",
+            "text": "Agreed with artist: logical screen 288x512, bird about 17x12, hitbox 12x12. (CONTRACT-HITBOX-12X12)",
             "pinned": true
           }
         }
@@ -245,7 +293,7 @@
       "passed": false,
       "notes": "Style conflict between the art and the game logic: the art is crisp 16-bit pixel art, but the loop scales the scene with smoothing on, keeps sprites at sub-pixel positions and rotates the bird at runtime. On screen the bird is blurry, the pipe edges shimmer while scrolling and the hand-drawn tilt frames are never used. Please render at the logical size with whole-number scaling and use the tilt frames.",
       "conventions": [
-        "Render the scene at 288x512 and scale it by whole-number factors only, with image smoothing turned off.",
+        "Render the scene at 288x512 and scale it by whole-number factors only, with image smoothing turned off. (CONV-WHOLE-NUMBER-SCALE)",
         "Draw every sprite at whole-pixel positions; never rotate or scale sprites at runtime, use the frames from the sprite sheet instead."
       ]
     },
@@ -257,7 +305,7 @@
     },
     {
       "kind": "human",
-      "text": "Change of plan: most of my friends will play this on their phones, so it has to work in portrait with tap input. Also drop the background music; the sound effects are enough and I want it to load fast."
+      "text": "Change of plan (CHANGE-PORTRAIT-TAP): most of my friends will play this on their phones, so it has to work in portrait with tap input. Also drop the background music; the sound effects are enough and I want it to load fast."
     },
     {
       "kind": "replan",
@@ -323,7 +371,7 @@
             "id": "c-loop-api",
             "from": "gameplay",
             "to": "mobile-shell",
-            "spec": "A game object with start(), pause(), resume() and flap(), and a canvas sized 288x512."
+            "spec": "A game object with start(), pause(), resume() and flap(), and a canvas sized 288x512. (CONTRACT-LOOP-API)"
           }
         ]
       }
@@ -337,7 +385,7 @@
         {
           "name": "recordFailure",
           "args": {
-            "text": "Scaling the 288x512 scene to fit the window with image smoothing on and drawing at float positions.",
+            "text": "Scaling the 288x512 scene to fit the window with image smoothing on and drawing at float positions. (FAIL-SMOOTHED-SCALING)",
             "reason": "It blurs the pixel art and makes the pipes shimmer while scrolling.",
             "affects": [
               "gameplay"

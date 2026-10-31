@@ -111,6 +111,41 @@
       }
     ]
   },
+  "facts": [
+    {
+      "id": "conv-eur-incl-vat",
+      "marker": "CONV-EUR-INCL-VAT",
+      "step": 4,
+      "audience": [
+        "catering",
+        "av"
+      ]
+    },
+    {
+      "id": "fail-venue-price-excl-vat",
+      "marker": "FAIL-VENUE-PRICE-EXCL-VAT",
+      "step": 4,
+      "audience": [
+        "venue"
+      ]
+    },
+    {
+      "id": "change-200-guests-eur-25k",
+      "marker": "CHANGE-200-GUESTS-EUR-25K",
+      "step": 11,
+      "audience": [
+        "*"
+      ]
+    },
+    {
+      "id": "contract-kitchen-rules",
+      "marker": "CONTRACT-KITCHEN-RULES",
+      "step": 12,
+      "audience": [
+        "catering"
+      ]
+    }
+  ],
   "steps": [
     {
       "kind": "human",
@@ -172,9 +207,9 @@
       "kind": "review",
       "deliverableOf": "venue",
       "passed": false,
-      "notes": "The venue fits, but the price leaves out VAT, the projection and microphones, and cleaning and security, so I cannot check it against the budget. Please give the full cost.",
+      "notes": "The venue fits, but the price leaves out VAT, the projection and microphones, and cleaning and security, so I cannot check it against the budget. Please give the full cost (FAIL-VENUE-PRICE-EXCL-VAT).",
       "conventions": [
-        "All costs are stated in EUR including VAT, with every extra listed."
+        "All costs are stated in EUR including VAT, with every extra listed. (CONV-EUR-INCL-VAT)"
       ]
     },
     {
@@ -263,7 +298,7 @@
     },
     {
       "kind": "human",
-      "text": "Change of plans from management: we expect around 200 people now, and we want the opening keynote and the closing panel livestreamed. Instead of personal invitations, make it public with registration. The budget goes up to EUR 25,000. @coord please rework the plan.",
+      "text": "Change of plans from management: we expect around 200 people now, and we want the opening keynote and the closing panel livestreamed. Instead of personal invitations, make it public with registration. The budget goes up to EUR 25,000 (ref CHANGE-200-GUESTS-EUR-25K). @coord please rework the plan.",
       "mentions": [
         "coord"
       ]
@@ -321,7 +356,7 @@
             "id": "c-venue-catering",
             "from": "venue",
             "to": "catering",
-            "spec": "The kitchen rules, the room layout and the times catering can set up."
+            "spec": "The kitchen rules, the room layout and the times catering can set up. (CONTRACT-KITCHEN-RULES)"
           },
           {
             "id": "c-agenda-registration",

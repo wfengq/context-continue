@@ -102,6 +102,42 @@
       }
     ]
   },
+  "facts": [
+    {
+      "id": "change-per-seat-teams",
+      "marker": "CHANGE-PER-SEAT-TEAMS",
+      "step": 8,
+      "audience": [
+        "*"
+      ]
+    },
+    {
+      "id": "conv-metric-per-feature",
+      "marker": "CONV-METRIC-PER-FEATURE",
+      "step": 7,
+      "audience": [
+        "ux",
+        "eng"
+      ]
+    },
+    {
+      "id": "contract-numbered-features",
+      "marker": "CONTRACT-NUMBERED-FEATURES",
+      "step": 9,
+      "audience": [
+        "eng"
+      ]
+    },
+    {
+      "id": "fail-realtime-websocket",
+      "marker": "FAIL-REALTIME-WEBSOCKET",
+      "step": 19,
+      "audience": [
+        "pm",
+        "research"
+      ]
+    }
+  ],
   "steps": [
     {
       "kind": "human",
@@ -218,12 +254,12 @@
       "passed": false,
       "notes": "Good flows, but there is no way to tell whether any feature works: none of them has a success metric, so we cannot cut scope later on evidence. Please add one metric per feature.",
       "conventions": [
-        "Every feature in the plan names the metric that shows it works."
+        "Every feature in the plan names the metric that shows it works. (CONV-METRIC-PER-FEATURE)"
       ]
     },
     {
       "kind": "human",
-      "text": "Change of requirements after talking to investors: we will sell Streakly to small teams instead of individual consumers. Pricing has to be per seat, and the buyers are managers who will ask about SSO and data privacy. The consumer pricing work can stop."
+      "text": "Change of requirements after talking to investors: we will sell Streakly to small teams instead of individual consumers. Pricing has to be per seat, and the buyers are managers who will ask about SSO and data privacy. The consumer pricing work can stop (ref CHANGE-PER-SEAT-TEAMS)."
     },
     {
       "kind": "replan",
@@ -279,7 +315,7 @@
             "id": "c-features-tech",
             "from": "features",
             "to": "tech",
-            "spec": "A numbered feature list with one user flow per feature, each marked must-have or later."
+            "spec": "A numbered feature list with one user flow per feature, each marked must-have or later. (CONTRACT-NUMBERED-FEATURES)"
           },
           {
             "id": "c-market-seats",
@@ -427,7 +463,7 @@
         {
           "name": "recordFailure",
           "args": {
-            "text": "A realtime websocket service for the manager dashboard.",
+            "text": "A realtime websocket service for the manager dashboard. (FAIL-REALTIME-WEBSOCKET)",
             "reason": "It adds about 2.5 engineer-weeks and pushes the release past the 10-week budget; a five-minute refresh meets the need.",
             "affects": [
               "tech"
