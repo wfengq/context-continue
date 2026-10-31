@@ -52,16 +52,19 @@ describe('group F (Dots + Space-style shared pages)', () => {
 
   test('F: decisions, failures and conventions are appended to the project page in order', async () => {
     const { seen } = await runCapturing([
-      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'a', ops: [{ name: 'proposeDecision', args: { t: 'D1' } }] },
-      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'b', ops: [{ name: 'recordFailure', args: { t: 'F1' } }] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'a', ops: [{ name: 'proposeDecision', args: { text: 'D1', rationale: 'R1', rejected: ['x', 'y'], affects: ['art', 'logic'], sourceEntryIds: ['e1'] } }] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'b', ops: [{ name: 'recordFailure', args: { text: 'F1', reason: 'because', affects: ['art'] } }] },
       { kind: 'review', deliverableOf: 'art', passed: true, notes: 'ok', conventions: ['C1', 'C2'] },
-      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'c', ops: [{ name: 'promote', args: { t: 'P1' } }] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'c', ops: [{ name: 'promote', args: { kind: 'fact', text: 'P1', affects: ['logic'], sourceEntryIds: ['e2'] } }] },
       { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'd' },
     ]);
     const project = seen[4]!.segments.find(s => s.text.startsWith('[page project]'))!.text;
-    const at = ['"D1"', '"F1"', 'convention: C1', 'convention: C2', '"P1"'].map(k => project.indexOf(k));
+    const at = ['decision: D1', 'tried: F1', 'convention: C1', 'convention: C2', '\nP1'].map(k => project.indexOf(k));
     expect(at.every(i => i > 0)).toBe(true);
     expect([...at].sort((x, y) => x - y)).toEqual(at);
+    expect(project).toContain('decision: D1\n  why: R1\n  rejected: x; y\n  affects: art, logic\ntried: F1\n  why it failed: because\n  affects: art\nconvention');
+    expect(project).toContain('\nP1\n  affects: logic');
+    expect(project).not.toMatch(/sourceEntryIds|e1|e2|\{/);
     expect(project.startsWith('[page project] goal: g | constraints: none')).toBe(true);
   });
 
@@ -117,5 +120,28 @@ describe('group F (Dots + Space-style shared pages)', () => {
     expect(second).toContain('[human human] Hi.');
     expect(second).not.toContain('Noted.');
     expect(second).not.toContain('[bot art]'); // other bots' replies are not in logic's history
+  });
+
+  test('F: promote renders by kind in the core layout, without kind or sourceEntryIds; token count by hand', async () => {
+    const { seen, records } = await runCapturing([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'p', ops: [
+        { name: 'promote', args: { kind: 'decision', text: 'Use grid', rationale: 'simple', affects: ['art'], sourceEntryIds: ['e9'] } },
+        { name: 'promote', args: { kind: 'failure', text: 'Tried A', reason: 'slow', affects: ['logic'], sourceEntryIds: ['e8'] } },
+      ] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'q' },
+    ]);
+    const project = seen[1]!.segments[1]!.text;
+    expect(project).toBe(
+      '[page project] goal: g | constraints: none\n' +
+      'decision: Use grid\n  why: simple\n  affects: art\n' +
+      'tried: Tried A\n  why it failed: slow\n  affects: logic');
+    expect(project).not.toMatch(/kind|e9|e8|sourceEntryIds/);
+    const T = defaultCountTokens(BASE_TEMPLATE);
+    // Hand counts (ASCII, ceil(chars / 4)). Project page chars: 42 (header) + 18 ("decision: Use grid") + 13 ("  why: simple")
+    // + 14 ("  affects: art") + 14 ("tried: Tried A") + 21 ("  why it failed: slow") + 16 ("  affects: logic") + 6 newlines = 144 -> 36.
+    const page = 36;
+    // Step 1 history: task (33 chars -> 9) + reply "[bot art] p" (11 -> 3) + two "[tool art] promote: ok" (22 -> 6 each); step 2 adds its task (9).
+    expect(records[1]!.inputTokens).toBe(T + page + 9 + 3 + 6 + 6 + 9);
+    expect(records[1]!.cacheableTokens).toBe(T); // the pages changed
   });
 });

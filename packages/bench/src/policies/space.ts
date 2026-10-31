@@ -15,12 +15,44 @@ interface BotState {
 }
 
 /** The project page: goal, constraints, then conventions/decisions/failures in order of occurrence. */
-export function projectPage(s: Scenario, entries: string[]): string {
+function projectPage(s: Scenario, entries: string[]): string {
   const list = s.constraints.length > 0 ? s.constraints.join('; ') : 'none';
   return [`[page project] goal: ${s.goal} | constraints: ${list}`, ...entries].join('\n');
 }
 
-const describe = (label: string, args: unknown): string => `${label}: ${JSON.stringify(args)}`;
+type Kind = 'decision' | 'failure' | 'fact';
+
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+
+/**
+ * A project-page entry in the core's field layout (render.ts) without item ids, `kind` or
+ * `sourceEntryIds`: a shared document has no item ids.
+ */
+function entryText(kind: Kind, args: unknown): string {
+  const a = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>;
+  const affects = strs(a.affects).join(', ');
+  switch (kind) {
+    case 'decision': {
+      const rejected = strs(a.rejected);
+      return [
+        `decision: ${str(a.text)}`,
+        `  why: ${str(a.rationale)}`,
+        ...(rejected.length > 0 ? [`  rejected: ${rejected.join('; ')}`] : []),
+        `  affects: ${affects}`,
+      ].join('\n');
+    }
+    case 'failure':
+      return [`tried: ${str(a.text)}`, `  why it failed: ${str(a.reason)}`, `  affects: ${affects}`].join('\n');
+    case 'fact':
+      return [str(a.text), ...(affects !== '' ? [`  affects: ${affects}`] : [])].join('\n');
+  }
+}
+
+const promotedKind = (args: unknown): Kind => {
+  const k = typeof args === 'object' && args !== null ? (args as Record<string, unknown>).kind : undefined;
+  return k === 'decision' || k === 'failure' ? k : 'fact';
+};
 
 /**
  * Group F (Dots + Space style): people and bots share a set of document pages. A request is the
@@ -84,12 +116,13 @@ export function spacePolicy(): Policy {
     for (const op of ops) {
       const d = deliverableIn(op);
       if (d) wsPages.set(d.workstreamId, d.content);
-      else if (op.name === 'proposeDecision') projectEntries.push(describe('decision', op.args));
-      else if (op.name === 'recordFailure') projectEntries.push(describe('failure', op.args));
-      else if (op.name === 'promote') projectEntries.push(describe('promoted', op.args));
+      else if (op.name === 'proposeDecision') projectEntries.push(entryText('decision', op.args));
+      else if (op.name === 'recordFailure') projectEntries.push(entryText('failure', op.args));
+      else if (op.name === 'promote') projectEntries.push(entryText(promotedKind(op.args), op.args));
     }
   };
 
+  // F has no compaction, call limit or core library calls, so its stats are always zero.
   return {
     group: 'F',
     async onStep(step, index, ctx) {
