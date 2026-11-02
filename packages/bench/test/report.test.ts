@@ -63,7 +63,7 @@ describe('renderReport', () => {
       "- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.",
     );
     expect(lines).toContain(
-      "- The bundled scenarios are short, so E's compaction does not trigger at the default window; pass a smaller --window to see it.",
+      "- The bundled scenarios, the long ones included, stay below E's compaction threshold at the default window; pass a smaller --window to see it.",
     );
     expect(lines).toContain(
       '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
@@ -126,7 +126,20 @@ describe('renderReport: facts, growth, tiers', () => {
     expect(md).toMatch(/## Summary \(long scenarios\)/);
     expect(md).not.toMatch(/## Summary \(all scenarios\)/);
     const one = renderReport(all(), meta);
-    expect(one.match(/^## Summary/gm)).toHaveLength(1);
+    expect(one.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)']);
+    const onlyLong = renderReport(mixed().filter(r => r.scenario === 's2'), { ...mixedMeta, scenarios: ['s2'] });
+    expect(onlyLong.match(/^## Summary.*$/gm)).toEqual(['## Summary (long scenarios)']);
+  });
+
+  test("each scenario's tier comes from its metrics; meta.tiers must agree and list every scenario", () => {
+    expect(() => renderReport(mixed(), { ...mixedMeta, tiers: { s1: 'standard', s2: 'standard' } })).toThrow(/s2/);
+    expect(() => renderReport(mixed(), { ...mixedMeta, tiers: { s1: 'standard' } })).toThrow(/s2/);
+  });
+
+  test('caveats name the doubled replan and conventions in the lead history and the D/E reviewer limit', () => {
+    const lines = renderReport(mixed(), mixedMeta).split('\n');
+    expect(lines).toContain("- In groups with chat history the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call.");
+    expect(lines).toContain('- In groups D and E reviewers get deliverable references, so facts written inside a deliverable reach them less often.');
   });
 
   test('long summary pools opportunities and hits of its own tier only', () => {

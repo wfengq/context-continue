@@ -8,15 +8,22 @@ import { runScenario } from './runner.js';
 import { loadScenario } from './scenario.js';
 import type { CallRecord, Group, Scenario } from './types.js';
 
-/** The formal scenarios, in report order. */
-export const SCENARIO_IDS = ['product-plan', 'flappy-bird', 'event-plan'] as const;
+/** The standard scenarios (20–40 steps), in report order. */
+export const STANDARD_IDS = ['product-plan', 'flappy-bird', 'event-plan'] as const;
+/** The long scenarios (tier long, 150–300 steps), in report order. */
+export const LONG_IDS = ['long-app', 'long-event'] as const;
+/** Every formal scenario, in report order: the standard ones, then the long ones. */
+export const SCENARIO_IDS = [...STANDARD_IDS, ...LONG_IDS] as const;
+
+/** `--scenario` names that stand for a set of scenarios. */
+const SCENARIO_SETS: Record<string, readonly string[]> = { all: SCENARIO_IDS, standard: STANDARD_IDS, long: LONG_IDS };
 const GROUPS: Group[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 /** `scenarios/` at the package root; the module sits one level below it in both `src/` and `dist/`. */
 const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 
 const USAGE =
-  'Usage: bench run --scenario <id|path.json|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
+  'Usage: bench run --scenario <id|path.json|standard|long|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--out results] [--stamp <s>]';
 
 interface Args {
@@ -97,7 +104,7 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   // Load and validate every scenario before running anything.
-  const ids = args.scenario === 'all' ? [...SCENARIO_IDS] : [args.scenario];
+  const ids = Object.hasOwn(SCENARIO_SETS, args.scenario) ? [...SCENARIO_SETS[args.scenario]!] : [args.scenario];
   const scenarios: Scenario[] = [];
   for (const id of ids) {
     try {

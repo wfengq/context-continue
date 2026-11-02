@@ -32,11 +32,43 @@ single personal agents such as Muse or Duet.
 
 ## Scenarios
 
-`scenarios/` holds three scripted projects of 20 to 40 steps each: `product-plan`, `flappy-bird`
-and `event-plan`. Every scenario covers a mid-project change of requirements, a failed review, a
-review that adds a convention, a replan and a question from one bot to another. Flappy Bird also
-contains an art-versus-game-logic style conflict found in review. Tool calls use the core
-library's tool names and argument shapes, because group C executes them for real.
+`scenarios/` holds five scripted projects in two tiers.
+
+**Standard scenarios** (20 to 40 steps each): `product-plan`, `flappy-bird` and `event-plan`. Every
+one covers a mid-project change of requirements, a failed review, a review that adds a convention,
+a replan and a question from one bot to another. Flappy Bird also contains an art-versus-game-logic
+style conflict found in review.
+
+**Long scenarios** (`tier: "long"`, 150 to 300 steps each):
+
+- `long-app`: eight bots take a meal-planning app from requirements to an EU launch, starting with
+  ten workstreams.
+- `long-event`: six bots prepare a two-day developer conference (venue, call for papers and
+  speakers, agenda, sponsors, tickets, promotion, on-site logistics, AV), starting with eight
+  workstreams. Requirement changes come at other points than in `long-app`, and other workstreams
+  fail review.
+
+Each long scenario has at least four requirement changes from the human owner, each followed by a
+replan that really changes the scope (new, removed or rewritten workstreams and contracts), at
+least six failed reviews, at least eight new conventions, at least ten questions between bots, and
+deliverables with several versions that grow (a first version is 300 to 1,500 characters, later
+ones up to 3,000). They test how each approach copes when the history keeps growing and earlier
+decisions are overtaken: how large requests get as the project goes on, and whether the
+information a bot needs still reaches it.
+
+Tool calls use the core library's tool names and argument shapes, because group C executes them
+for real; in every scenario group C must finish the project with no core errors.
+
+### Generating the long scenarios
+
+The long scenarios are not written by hand. Deterministic generators in `src/gen/` (no randomness,
+no clock) build them step by step and check the scenario rules as they go; the JSON files are
+committed, and a test fails if regenerating them does not reproduce the committed files byte for
+byte. After changing a generator, rewrite the files with:
+
+```sh
+pnpm -C packages/bench gen:scenarios
+```
 
 ## Running
 
@@ -47,17 +79,20 @@ pnpm install
 pnpm -C packages/bench bench run --scenario all --group all
 ```
 
+`--scenario standard` runs only the three standard scenarios and `--scenario long` only the two
+long ones; `all` runs all five.
+
 The `bench` script builds the core library and the bench, then runs `node dist/cli.js`. With
 `pnpm -C packages/bench`, the working directory is `packages/bench`, so the default output lands in
 `packages/bench/results/`. Results are written to `<out>/<stamp>/results.json` (every request record and the metrics) and
-`<out>/<stamp>/report.md` (one table per scenario and a summary table). The `results/` directory is
+`<out>/<stamp>/report.md` (one table per scenario and the summary tables). The `results/` directory is
 ignored by git.
 
 ### Flags
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--scenario <id\|path.json\|all>` | required | A scenario id from `scenarios/`, a path to a scenario JSON file, or `all` |
+| `--scenario <id\|path.json\|standard\|long\|all>` | required | A scenario id from `scenarios/`, a path to a scenario JSON file, `standard` (the three standard scenarios), `long` (the two long ones) or `all` (all five) |
 | `--group <A..F\|all>` | required | One group or all six |
 | `--window <n>` | `128000` | Group E: assumed context window in tokens |
 | `--compact-ratio <r>` | `0.8` | Group E: compact when history exceeds window x ratio |
@@ -72,11 +107,15 @@ An invalid scenario, group or flag value prints a message on stderr and exits wi
 
 ## Reading the results
 
+- Standard and long scenarios are summarised separately: the report has one summary table per tier
+  present in the run ("Summary (standard scenarios)", "Summary (long scenarios)") and never adds
+  the two tiers together, because the long scenarios would swamp the standard ones. Long scenarios
+  also get a table of the average request size per 25 steps, showing how each group grows.
 - Group A is a single-agent baseline, not a multi-bot alternative. Its one append-only history is
   mostly cacheable, so A can be the cheapest group on cost units even though it has no team at all.
   Compare the multi-bot groups (B to F) with each other, and A only as a reference point.
-- The bundled scenarios are short, so group E's compaction does not trigger at the default
-  128,000-token window. Pass a smaller `--window` (for example `--window 2000`) to see it.
+- Even the long scenarios stay well below the default 128,000-token window, so group E's
+  compaction does not trigger by default. Pass a smaller `--window` (for example `--window 2000`) to see it.
 - Wake counts (extra requests) for groups D, E and F depend on how often humans and bots
   @-mention each other in the scenario. A scenario with more or fewer mentions shifts these groups.
 - Cost units weight cacheable tokens by `--cache-ratio`; raw input tokens and the context-size
@@ -89,6 +128,26 @@ An invalid scenario, group or flag value prints a message on stderr and exits wi
 - Reviewers in C, D and E get a reference to a deliverable, not its text; F has shared pages but no
   chat thread; C, E and F always carry the goal and constraints, A, B and D only through human
   messages. The report's caveats list these and the other modelling choices.
+
+## Fact visibility
+
+Saving tokens is only useful if the bots still see what they need. Every scenario lists key
+facts (a requirement change, a new convention, an interface contract, a recorded failure), each
+with a unique marker such as `CONV-TIMES-24H`, the step that introduces it and its audience (the
+bots that need to know it, or all of them).
+
+- An **opportunity** is a scripted request by a bot in the fact's audience after the step that
+  introduced the fact. Extra requests (a bot woken without a scripted step) do not count.
+- A **hit** is an opportunity whose full request text contains the marker.
+- Visibility is hits / opportunities, per group, per scenario and per fact; with no opportunities
+  the report prints `n/a`.
+
+Limits: the matching is literal, so a group that carries a fact in other words (a summary, a
+paraphrase, a field of a structured brief) counts as missing it; real comprehension needs a real
+model. Group E's compaction summary is assumed to keep every marker seen before compacting, which
+favours E. A marker only reaches a bot through the text a group puts in its context, so where a
+fact is written (a chat message, a tool call, a deliverable) affects groups differently; the
+report's caveats list these effects.
 
 ## Development
 

@@ -2,7 +2,10 @@ import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { main } from '../src/cli.js';
+import { main, SCENARIO_IDS } from '../src/cli.js';
+
+const STANDARD = ['product-plan', 'flappy-bird', 'event-plan'];
+const LONG = ['long-app', 'long-event'];
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'bench-cli-'));
 
@@ -30,11 +33,38 @@ describe('bench cli', () => {
     expect((await run(['run', '--scenario', 'all', '--group', 'all', '--out', out, '--stamp', 'T'])).code).toBe(0);
     const report = readFileSync(join(out, 'T', 'report.md'), 'utf8');
     for (const g of ['A', 'B', 'C', 'D', 'E', 'F']) expect(report).toMatch(new RegExp(`^\\| ${g} \\|`, 'm'));
-    for (const id of ['product-plan', 'flappy-bird', 'event-plan']) expect(report).toContain(`## Scenario: ${id}`);
+    for (const id of [...STANDARD, ...LONG]) expect(report).toContain(`## Scenario: ${id}`);
+    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)', '## Summary (long scenarios)']);
     const json = JSON.parse(readFileSync(join(out, 'T', 'results.json'), 'utf8'));
     expect(json.params).toEqual({ cacheRatio: 0.1, compactRatio: 0.8, summaryTokens: 1500, window: 128000 });
-    expect(json.metrics).toHaveLength(18);
+    expect(json.metrics).toHaveLength(30);
     expect(json.records.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  test('--scenario long runs only the two long scenarios, with one long summary', async () => {
+    const out = tmp();
+    expect((await run(['run', '--scenario', 'long', '--group', 'all', '--out', out, '--stamp', 'L'])).code).toBe(0);
+    const report = readFileSync(join(out, 'L', 'report.md'), 'utf8');
+    expect(report.match(/^## Scenario: .*$/gm)).toEqual(LONG.map(id => `## Scenario: ${id}`));
+    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (long scenarios)']);
+    const json = JSON.parse(readFileSync(join(out, 'L', 'results.json'), 'utf8'));
+    expect([...new Set(json.metrics.map((m: { scenario: string }) => m.scenario))]).toEqual(LONG);
+    expect(json.metrics.every((m: { tier: string }) => m.tier === 'long')).toBe(true);
+  }, 60_000);
+
+  test('--scenario standard runs only the three standard scenarios, with one standard summary', async () => {
+    const out = tmp();
+    expect((await run(['run', '--scenario', 'standard', '--group', 'all', '--out', out, '--stamp', 'S'])).code).toBe(0);
+    const report = readFileSync(join(out, 'S', 'report.md'), 'utf8');
+    expect(report.match(/^## Scenario: .*$/gm)).toEqual(STANDARD.map(id => `## Scenario: ${id}`));
+    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)']);
+    const json = JSON.parse(readFileSync(join(out, 'S', 'results.json'), 'utf8'));
+    expect(json.metrics).toHaveLength(18);
+    expect(json.metrics.every((m: { tier: string }) => m.tier === 'standard')).toBe(true);
+  });
+
+  test('SCENARIO_IDS lists the three standard scenarios, then the two long ones', () => {
+    expect([...SCENARIO_IDS]).toEqual([...STANDARD, ...LONG]);
   });
 
   test('flags reach the metrics and the E policy', async () => {
@@ -61,7 +91,7 @@ describe('bench cli', () => {
     for (const f of ['results.json', 'report.md']) {
       expect(readFileSync(join(a, 'T', f)).equals(readFileSync(join(b, 'T', f)))).toBe(true);
     }
-  });
+  }, 120_000);
 
   test('without --stamp the directory is named by a UTC timestamp', async () => {
     const out = tmp();

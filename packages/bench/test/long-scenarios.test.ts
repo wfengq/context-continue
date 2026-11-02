@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { generateLongApp } from '../src/gen/long-app.js';
+import { generateLongEvent } from '../src/gen/long-event.js';
 import { scenarioJson } from '../src/gen/write.js';
 import { createPolicy } from '../src/policies/index.js';
 import { runScenario } from '../src/runner.js';
@@ -26,35 +27,40 @@ function deliverables(s: Scenario): Map<string, string[]> {
   return out;
 }
 
-describe('long-app', () => {
-  test('long-app regenerates byte-identically to the committed file', () => {
-    const committed = readFileSync(file('long-app'), 'utf8');
-    expect({ id: 'long-app', same: scenarioJson(generateLongApp()) === committed }).toEqual({ id: 'long-app', same: true });
+const CASES = [
+  { id: 'long-app', generate: generateLongApp, bots: 8, minWs: 9, maxWs: 11, delivered: 10 },
+  { id: 'long-event', generate: generateLongEvent, bots: 6, minWs: 7, maxWs: 9, delivered: 9 },
+];
+
+describe.each(CASES)('$id', ({ id, generate, bots, minWs, maxWs, delivered }) => {
+  test(`${id} regenerates byte-identically to the committed file`, () => {
+    const committed = readFileSync(file(id), 'utf8');
+    expect({ id, same: scenarioJson(generate()) === committed }).toEqual({ id, same: true });
   });
 
   test('generating twice gives the same JSON', () => {
-    expect(scenarioJson(generateLongApp())).toBe(scenarioJson(generateLongApp()));
+    expect(scenarioJson(generate())).toBe(scenarioJson(generate()));
   });
 
-  test('long-app loads, is tier long with 150–300 steps and full coverage', () => {
-    const s = loadScenario(file('long-app'));
-    expect(s.id).toBe('long-app');
+  test(`${id} loads, is tier long with 150–300 steps and full coverage`, () => {
+    const s = loadScenario(file(id));
+    expect(s.id).toBe(id);
     expect(s.tier).toBe('long');
     expect(s.steps.length).toBeGreaterThanOrEqual(150);
     expect(s.steps.length).toBeLessThanOrEqual(300);
     expect(checkCoverage(s)).toEqual([]);
   });
 
-  test('long-app: 8 bots and about 10 workstreams in the initial plan', () => {
-    const s = loadScenario(file('long-app'));
-    expect(s.employees.length).toBe(8);
-    expect(s.plan.workstreams.length).toBeGreaterThanOrEqual(9);
-    expect(s.plan.workstreams.length).toBeLessThanOrEqual(11);
+  test(`${id}: ${bots} bots and ${minWs}–${maxWs} workstreams in the initial plan`, () => {
+    const s = loadScenario(file(id));
+    expect(s.employees.length).toBe(bots);
+    expect(s.plan.workstreams.length).toBeGreaterThanOrEqual(minWs);
+    expect(s.plan.workstreams.length).toBeLessThanOrEqual(maxWs);
   });
 
-  test('long-app deliverables: first versions 300–1500 chars, later ones up to 3000 and longer than the one before', () => {
-    const byWs = deliverables(loadScenario(file('long-app')));
-    expect(byWs.size).toBeGreaterThanOrEqual(10);
+  test(`${id} deliverables: first versions 300–1500 chars, later ones up to 3000 and longer than the one before`, () => {
+    const byWs = deliverables(loadScenario(file(id)));
+    expect(byWs.size).toBeGreaterThanOrEqual(delivered);
     expect([...byWs.values()].some(v => v.length >= 3)).toBe(true);
     for (const [ws, contents] of byWs) {
       contents.forEach((c, i) => {
@@ -67,8 +73,8 @@ describe('long-app', () => {
     }
   });
 
-  test('long-app: a bot asking a question @-mentions the asked bot in its reply', () => {
-    const s = loadScenario(file('long-app'));
+  test(`${id}: a bot asking a question @-mentions the asked bot in its reply`, () => {
+    const s = loadScenario(file(id));
     for (const st of s.steps) {
       if (st.kind !== 'work') continue;
       for (const op of st.ops ?? []) {
@@ -80,8 +86,8 @@ describe('long-app', () => {
     }
   });
 
-  test('long-app runs through all six groups; C has 0 core errors and finishes', async () => {
-    const s = loadScenario(file('long-app'));
+  test(`${id} runs through all six groups; C has 0 core errors and finishes`, async () => {
+    const s = loadScenario(file(id));
     for (const g of GROUPS) {
       const opportunities = new Map((s.facts ?? []).map(f => [f.id, 0]));
       const { records, stats } = await runScenario(s, createPolicy(g, defaults));

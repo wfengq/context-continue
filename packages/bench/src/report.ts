@@ -82,7 +82,17 @@ export function renderReport(
     'Cost units = cacheable tokens x cache ratio + uncached tokens. Saved % = (reference cost - group cost) / reference cost x 100; n/a when the reference cost is 0.',
     '',
   ];
-  const tierOf = (sc: string): 'standard' | 'long' => meta.tiers[sc] ?? 'standard';
+  // R-L3: a scenario's tier is the one its metrics carry; meta.tiers must name every scenario and agree.
+  const tiers = new Map<string, 'standard' | 'long'>();
+  for (const sc of meta.scenarios) {
+    const given = meta.tiers[sc];
+    if (given === undefined) throw new Error(`renderReport: meta.tiers has no tier for scenario "${sc}"`);
+    for (const r of all.filter(x => x.scenario === sc)) {
+      if (r.tier !== given) throw new Error(`renderReport: scenario "${sc}" is ${r.tier} in the metrics of group ${r.group} but ${given} in meta.tiers`);
+    }
+    tiers.set(sc, given);
+  }
+  const tierOf = (sc: string): 'standard' | 'long' => tiers.get(sc)!;
   for (const sc of meta.scenarios) {
     const rows = all.filter(r => r.scenario === sc);
     out.push(`## Scenario: ${sc}`, '');
@@ -129,8 +139,10 @@ export function renderReport(
   }
   const tiersPresent = (['standard', 'long'] as const).filter(t => meta.scenarios.some(sc => tierOf(sc) === t));
   for (const t of tiersPresent) {
-    const sums = ORDER.map(g => sumGroup(all.filter(r => tierOf(r.scenario) === t), g)).filter((r): r is GroupMetrics => r !== undefined);
-    out.push(tiersPresent.length > 1 ? `## Summary (${t} scenarios)` : '## Summary (all scenarios)', '');
+    const sums = ORDER.map(g => sumGroup(all.filter(r => meta.scenarios.includes(r.scenario) && r.tier === t), g)).filter(
+      (r): r is GroupMetrics => r !== undefined,
+    );
+    out.push(`## Summary (${t} scenarios)`, '');
     out.push(...table(sums, g => {
       const s = sums.find(r => r.group === g)!;
       return [s.contextMedian, s.contextP90, s.contextMax];
@@ -148,7 +160,7 @@ export function renderReport(
     "- A fact's category is set by its id prefix; some failure facts come from failed review notes (event-plan records no failure op).",
     '- C pays one extra lead brief at step 0 when a scenario opens with a human message.',
     '- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.',
-    "- The bundled scenarios are short, so E's compaction does not trigger at the default window; pass a smaller --window to see it.",
+    "- The bundled scenarios, the long ones included, stay below E's compaction threshold at the default window; pass a smaller --window to see it.",
     '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
     "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.",
     "- F's context is the shared pages plus the bot's own history: there is no chat thread.",
@@ -158,6 +170,8 @@ export function renderReport(
     '- Fact visibility is literal text matching of a marker: a group that paraphrases a fact counts as missing it.',
     "- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).",
     "- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.",
+    "- In groups with chat history the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call.",
+    '- In groups D and E reviewers get deliverable references, so facts written inside a deliverable reach them less often.',
     '',
   );
   return out.join('\n');
