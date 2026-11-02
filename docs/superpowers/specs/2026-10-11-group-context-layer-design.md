@@ -218,7 +218,7 @@ interface Workspace {
   notes: string;                        // 工作笔记、草稿要点，默认上限约 2,000 token
   pinnedNotes: string[];                // 置顶笔记，压缩时不动
   condensed: string;                    // 三段式压缩中的滚动摘要
-  seenItemIds: string[];                // 已在简报中完整展示过的项目板条目，之后只显示 id、标题、状态
+  seenItemIds: string[];                // 已在简报中完整展示并经 Bot 之后的工具调用确认的项目板条目，之后只显示 id、标题、状态
   pendingSeenItemIds?: string[];        // 最近一次简报新完整展示、待 Bot 调用工具后确认的条目；旧数据缺省为 []
   lastSeenSeq: number;
   lastSeenBoardVersion: number;
@@ -361,7 +361,7 @@ type BoardOp =
 
 前四段标记为可缓存。项目板变化只使第 4 段及其后的缓存失效，第 1–3 段仍可复用。
 
-**已读条目压缩**（借鉴 DeLM）：第 5 段中，条目 id 不在 `Workspace.seenItemIds` 里的显示完整内容，展示后先记入 `pendingSeenItemIds`（每次简报覆盖上一次的待确认），该 Bot 之后调用任意工具（即使工具报错）时才把其中仍在项目板上的并入 `seenItemIds`；简报后没有调用工具的空转请求不算看过，下次照样完整显示，`peek` 不改动两者；已在其中且之后没有变化的，只显示 id、标题和状态。条目被覆盖或修改后从 `seenItemIds` 中移除，下次重新完整展示。Bot 需要再看完整内容时调用 `getBoardItem`。
+**已读条目压缩**（借鉴 DeLM）：第 5 段中，条目 id 不在 `Workspace.seenItemIds` 里的显示完整内容，展示后先记入 `pendingSeenItemIds`（每次简报覆盖上一次的待确认），该 Bot 之后调用任意工具（即使工具报错）时才把其中仍在项目板上的并入 `seenItemIds`；简报后没有调用工具的空转请求不算看过，下次照样完整显示，`peek` 不改动两者；为负责人组装审查或规划上下文时，丢弃该负责人的待确认条目（上下文取代了那次简报，不算看过；无工作区则不创建）；已在其中且之后没有变化的，只显示 id、标题和状态。条目被覆盖或修改后从 `seenItemIds` 中移除，下次重新完整展示。Bot 需要再看完整内容时调用 `getBoardItem`。
 
 **交付物按引用**：第 5 段只放上游交付物的摘要和引用，不放全文；Bot 需要时调用 `getDeliverable(ref)` 拉取。
 

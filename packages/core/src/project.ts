@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { structuralWakes, writeScopeOverlaps } from './board/diff.js';
 import { Merger, type MergeResult } from './board/merge.js';
-import { buildBrief as assembleBrief, confirmSeen, type BriefDeps, type BriefOptions } from './brief.js';
+import { buildBrief as assembleBrief, confirmSeen, discardPendingSeen as discardPendingSeenOf, type BriefDeps, type BriefOptions } from './brief.js';
 import { systemClock, type Clock } from './clock.js';
 import type { CondenseFn } from './condense.js';
 import { findDeliverable, planningContext, retroContext, reviewContext, type ContextDeps, type PlanMeta } from './contexts.js';
@@ -164,6 +164,7 @@ export function createProject(cfg: ProjectConfig): Project {
   let disposed = false;
 
   const getBoard = () => store.getBoard(projectId);
+  const discardPendingSeen = (botId: string) => discardPendingSeenOf(store, projectId, botId);
   const workstreamsOf = (b: ProjectBoard) => resolveWorkstreams(b, source);
   const ledger = () => store.read(projectId, 1);
   const log = (author: Author, event: ProjectEvent) =>
@@ -805,10 +806,14 @@ export function createProject(cfg: ProjectConfig): Project {
         return finish([{ botId: i.lead, reason: 'needsLead', detail: 'project started: propose a plan' }]);
       }),
 
-    async buildPlanningContext() {
-      const board = await getBoard();
-      return planningContext(contextDeps, board, await workstreamsOf(board));
-    },
+    // The context is the lead's: it replaces the lead's brief for this request, so any items that
+    // brief showed in full are not confirmed as seen (R-G1). Queued like other workspace writes.
+    buildPlanningContext: () =>
+      serial(async () => {
+        const board = await getBoard();
+        await discardPendingSeen(board.lead);
+        return planningContext(contextDeps, board, await workstreamsOf(board));
+      }),
 
     proposePlan: (plan, o) =>
       serial(async () => {
@@ -859,10 +864,12 @@ export function createProject(cfg: ProjectConfig): Project {
 
     submit: (botId, s) => serial(async () => finish(await submit(botId, s))),
 
-    async buildReviewContext(deliverableId) {
-      const board = await getBoard();
-      return reviewContext(contextDeps, board, await workstreamsOf(board), deliverableId);
-    },
+    buildReviewContext: deliverableId =>
+      serial(async () => {
+        const board = await getBoard();
+        await discardPendingSeen(board.lead);
+        return reviewContext(contextDeps, board, await workstreamsOf(board), deliverableId);
+      }),
 
     submitReview: (deliverableId, r) => serial(async () => finish(await review(deliverableId, r))),
 

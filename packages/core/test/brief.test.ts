@@ -173,12 +173,12 @@ describe('buildBrief', () => {
   test('the lead sees every human chat message in its delta, even unmentioned and unmatched', async () => {
     await brief('pm');
     const plain = await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'unrelated musing about lunch' });
-    const fin = await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'the fin needs a rethink' });
+    const snd = await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'the Sound needs a rethink' });
     const d = seg(await brief('pm'), 'delta');
     expect(d).toContain('unrelated musing about lunch');
-    expect(d).toContain('the fin needs a rethink');
+    expect(d).toContain('the Sound needs a rethink');
     expect(d).toContain(`#${plain.seq}`);
-    expect(d).toContain(`#${fin.seq}`);
+    expect(d).toContain(`#${snd.seq}`);
   });
 
   test('non-lead bots still see only mentioned, replied or matching human messages', async () => {
@@ -477,6 +477,47 @@ describe('two-phase seen (spec 2026-11-02 section 2.2)', () => {
     // another bot's tool call confirms nothing for art
     await f.p.callTool('logic', 'updateNotes', { text: 'waiting on art' });
     expect((await workspace('logic')).seenItemIds).toEqual([]);
+  });
+
+  test('a second consecutive tool call changes nothing more', async () => {
+    expect(await proj('art')).toContain(FULL);
+    await f.p.callTool('art', 'updateNotes', { text: 'one' });
+    const after = await workspace('art');
+    expect(after.seenItemIds).toEqual(['c1@1']);
+    expect(after.pendingSeenItemIds).toEqual([]);
+    await f.p.callTool('art', 'updateNotes', { text: 'two' });
+    const again = await workspace('art');
+    expect(again.seenItemIds).toEqual(after.seenItemIds);
+    expect(again.pendingSeenItemIds).toEqual([]);
+  });
+
+  // The fixture lead owns no workstream, so its brief shows no board item; give it a pending one directly.
+  const withPending = async () => {
+    await proj('pm');
+    await f.store.saveWorkspace({ ...(await workspace('pm')), pendingSeenItemIds: ['c1@1'] });
+  };
+
+  test('building a planning context discards the lead pending items; the next tool call confirms nothing (R-G1)', async () => {
+    await withPending();
+    await f.p.buildPlanningContext();
+    expect((await workspace('pm')).pendingSeenItemIds).toEqual([]);
+    await f.p.callTool('pm', 'updateNotes', { text: 'noted' });
+    expect((await workspace('pm')).seenItemIds).toEqual([]);
+  });
+
+  test('building a review context discards the lead pending items (R-G1)', async () => {
+    await f.p.callTool('art', 'submitDeliverable', { workstreamId: 'art', summary: 's', content: 'sprites v1' });
+    const dv = (await f.p.board()).workstreams.find(w => w.id === 'art')!.deliverables[0]!;
+    await withPending();
+    await f.p.buildReviewContext(dv.id);
+    expect((await workspace('pm')).pendingSeenItemIds).toEqual([]);
+    await f.p.callTool('pm', 'updateNotes', { text: 'noted' });
+    expect((await workspace('pm')).seenItemIds).toEqual([]);
+  });
+
+  test('a context for a lead without a workspace creates none', async () => {
+    await f.p.buildPlanningContext();
+    expect(await f.store.getWorkspace(f.projectId, 'pm')).toBeNull();
   });
 
   test('a failing tool call still confirms the pending items', async () => {

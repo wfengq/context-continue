@@ -115,7 +115,7 @@ export interface Workspace {
   notes: string; // working notes and draft points
   pinnedNotes: string[]; // pinned notes, untouched by condensing
   condensed: string; // rolling summary from three-part condensing
-  seenItemIds: string[]; // board items already shown in full in a brief; later shown as id/title/status only
+  seenItemIds: string[]; // board items shown in full in a brief and confirmed by a later tool call; later shown as id/title/status only
   /** Keys shown in full by the latest brief, moved to `seenItemIds` when the bot next calls a tool. Missing in old data: []. */
   pendingSeenItemIds?: string[];
   lastSeenSeq: number;

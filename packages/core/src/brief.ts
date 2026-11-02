@@ -226,6 +226,16 @@ export async function confirmSeen(store: Store, projectId: string, botId: string
   await store.saveWorkspace({ ...ws, seenItemIds: [...seen], pendingSeenItemIds: [] });
 }
 
+/**
+ * The bot's pending items were shown in a brief that a review or planning context has since replaced
+ * (spec 5.2), so they are not confirmed: they show in full again. No workspace is created.
+ */
+export async function discardPendingSeen(store: Store, projectId: string, botId: string): Promise<void> {
+  const ws = await store.getWorkspace(projectId, botId);
+  if (!ws || (ws.pendingSeenItemIds ?? []).length === 0) return;
+  await store.saveWorkspace({ ...ws, pendingSeenItemIds: [] });
+}
+
 // ---------------------------------------------------------------------------
 // buildBrief
 // ---------------------------------------------------------------------------
