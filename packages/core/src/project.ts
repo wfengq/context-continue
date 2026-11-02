@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { structuralWakes, writeScopeOverlaps } from './board/diff.js';
 import { Merger, type MergeResult } from './board/merge.js';
-import { buildBrief as assembleBrief, type BriefDeps, type BriefOptions } from './brief.js';
+import { buildBrief as assembleBrief, confirmSeen, type BriefDeps, type BriefOptions } from './brief.js';
 import { systemClock, type Clock } from './clock.js';
 import type { CondenseFn } from './condense.js';
 import { findDeliverable, planningContext, retroContext, reviewContext, type ContextDeps, type PlanMeta } from './contexts.js';
@@ -997,6 +997,7 @@ export function createProject(cfg: ProjectConfig): Project {
       const { board } = await memberView(botId, false);
       return { lead: board.lead };
     },
+    acted: botId => serial(() => confirmSeen(store, projectId, botId)),
   });
   return project;
 }

@@ -294,6 +294,16 @@ export function runStoreContract(name: string, make: () => Promise<Store>): void
     expect((await s.getMemory('art'))?.persona).toBe('p');
   });
 
+  test(`[${name}] a stored workspace without pendingSeenItemIds loads as empty`, async () => {
+    const s = await make();
+    const legacy: Workspace = ws('p1', 'art');
+    delete legacy.pendingSeenItemIds;
+    await s.saveWorkspace(legacy);
+    expect((await s.getWorkspace('p1', 'art'))!.pendingSeenItemIds).toEqual([]);
+    await s.saveWorkspace({ ...ws('p1', 'art'), pendingSeenItemIds: ['d1', 'c1@2'] });
+    expect((await s.getWorkspace('p1', 'art'))!.pendingSeenItemIds).toEqual(['d1', 'c1@2']);
+  });
+
   test(`[${name}] listMemories returns every saved memory`, async () => {
     const s = await make();
     expect(await s.listMemories()).toEqual([]);

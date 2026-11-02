@@ -128,7 +128,7 @@ describe('restart', () => {
     await a.p.callTool('art', 'updateNotes', { text: 'Palette is 8 colours.' });
     await a.p.callTool('art', 'updateNotes', { text: 'Pinned: grid is 16px.', pinned: true });
     await a.p.callTool('art', 'submitDeliverable', { workstreamId: 'art', summary: 'sheet', content: 'sprites' });
-    await a.p.buildBrief('art', { ...BUDGET }); // marks items as seen
+    await a.p.buildBrief('art', { ...BUDGET }); // marks items pending; art's next tool call confirms them
     await a.p.buildBrief('logic', { ...BUDGET });
     await a.p.callTool('art', 'proposeDecision', { text: 'Add a dark theme', rationale: 'Requested', affects: ['logic'] }); // pending for the lead
     await a.p.callTool('logic', 'sendMessage', { text: 'Tile size confirmed?', act: 'query', mentions: ['art'] });

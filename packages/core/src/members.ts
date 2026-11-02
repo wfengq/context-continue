@@ -43,6 +43,7 @@ export function defaultWorkspace(projectId: string, botId: string, latestSeq: nu
     pinnedNotes: [],
     condensed: '',
     seenItemIds: [],
+    pendingSeenItemIds: [],
     lastSeenSeq: latestSeq,
     lastSeenBoardVersion: 0,
     promotionsThisTurn: 0,

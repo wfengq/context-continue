@@ -59,6 +59,8 @@ export interface ToolHost
   projectId: string;
   /** Resolves with the board's lead; throws NOT_A_MEMBER when `botId` is not a bot member. */
   member(botId: string): Promise<{ lead: string }>;
+  /** A member called a tool (any tool, even one that then fails): confirms its pending seen items (spec 5.2). */
+  acted(botId: string): Promise<void>;
   /**
    * Queues and merges a proposal as `botId` and reports what happened to it. With `promotion`,
    * the call counts against `maxPromotionsPerTurn` and fails with FORBIDDEN beyond it.
@@ -374,10 +376,14 @@ export function toolDefinitions(role: 'lead' | 'member'): ToolDefinition[] {
   return structuredClone(definitions.filter(d => role === 'lead' || !lead.has(d.name)));
 }
 
-/** Builds `callTool`: non-member, then lead-only, then argument validation, then the facade call. */
+/**
+ * Builds `callTool`: non-member, then confirming the bot's pending seen items, then lead-only, then
+ * argument validation, then the facade call.
+ */
 export function createToolDispatcher(host: ToolHost): (botId: string, name: string, args: unknown) => Promise<unknown> {
   return async (botId, name, args) => {
     const { lead } = await host.member(botId);
+    await host.acted(botId);
     const t = TOOLS.find(x => x.name === name);
     if (!t) throw new ContextError('NOT_FOUND', `Unknown tool "${name}"`);
     if (t.leadOnly && botId !== lead) {

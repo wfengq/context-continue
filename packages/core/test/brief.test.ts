@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test } from 'vitest';
-import { buildBrief, selectProjection } from '../src/brief.js';
+import { buildBrief, confirmSeen, selectProjection } from '../src/brief.js';
 import { BudgetTooSmallError } from '../src/errors.js';
 import { splitParagraphs } from '../src/render.js';
 import { defaultCountTokens } from '../src/tokens.js';
 import type { ContextBundle, SegmentKind, WakeReason } from '../src/types.js';
-import { seedProject, TEST_TOOLS, type SeededProject } from './helpers.js';
+import { makeProject, seedProject, TEST_TOOLS, type FacadeProject, type SeededProject } from './helpers.js';
 
 let p: SeededProject;
 
@@ -87,6 +87,7 @@ describe('buildBrief', () => {
     expect(first).toContain(`[${id}] Use a 16-color palette`);
     expect(first).toContain('why: keeps the look coherent');
     expect(first).toContain('[c1@v1] art -> logic: PNG sprite sheets');
+    await confirmSeen(p.store, p.projectId, 'art'); // what callTool does: the bot acted on the brief
 
     const second = seg(await brief('art'), 'projection');
     expect(second).toContain(`[${id}] Use a 16-color palette (seen)`);
@@ -102,6 +103,7 @@ describe('buildBrief', () => {
     expect(third).toContain('why: more shading');
     expect(third).not.toContain(`[${id}]`);
     expect(third).toContain('[c1@v2] art -> logic: PNG sprite sheets, 32x32 tiles');
+    await confirmSeen(p.store, p.projectId, 'art');
 
     const ws = (await p.store.getWorkspace(p.projectId, 'art'))!;
     expect(ws.seenItemIds).toContain(newId);
@@ -114,7 +116,7 @@ describe('buildBrief', () => {
     expect(await p.store.getWorkspace(p.projectId, 'art')).toBeNull();
     expect(seg(await brief('art', { peek: true }), 'projection')).toContain('why: R1');
 
-    await brief('art'); // creates the workspace and marks the decision seen
+    await brief('art'); // creates the workspace and marks the decision pending
     await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'hero should be blue', mentions: ['art'] });
     await p.decide({ affects: ['art'], text: 'second decision', rationale: 'R2' });
     const before = await p.store.getWorkspace(p.projectId, 'art');
@@ -440,5 +442,94 @@ describe('buildBrief', () => {
       expect(splitParagraphs(paras.join('\n\n'))).toEqual(paras);
       kept = shown.length;
     }
+  });
+});
+
+describe('two-phase seen (spec 2026-11-02 section 2.2)', () => {
+  const BUDGET = { maxTokens: 100_000 };
+  const FULL = '[c1@v1] art -> logic: PNG sprite sheets, 16x16 tiles';
+  const COMPACT = '[c1@v1] art -> logic (seen)';
+  let f: FacadeProject;
+  const proj = async (botId: string, o: { peek?: boolean } = {}) => seg(await f.p.buildBrief(botId, { ...BUDGET, ...o }), 'projection');
+  const workspace = async (botId: string) => (await f.store.getWorkspace(f.projectId, botId))!;
+
+  beforeEach(async () => {
+    f = await makeProject({ approved: true });
+  });
+
+  test('an item shown in a brief with no tool call afterwards is shown in full again', async () => {
+    expect(await proj('art')).toContain(FULL);
+    expect(await proj('art')).toContain(FULL);
+    const ws = await workspace('art');
+    expect(ws.seenItemIds).toEqual([]);
+    expect(ws.pendingSeenItemIds).toEqual(['c1@1']);
+  });
+
+  test('after the bot calls any tool, the item is compacted in the next brief', async () => {
+    expect(await proj('art')).toContain(FULL);
+    await f.p.callTool('art', 'updateNotes', { text: 'started on the hero' });
+    const ws = await workspace('art');
+    expect(ws.seenItemIds).toEqual(['c1@1']);
+    expect(ws.pendingSeenItemIds).toEqual([]);
+    const next = await proj('art');
+    expect(next).toContain(COMPACT);
+    expect(next).not.toContain(FULL);
+    // another bot's tool call confirms nothing for art
+    await f.p.callTool('logic', 'updateNotes', { text: 'waiting on art' });
+    expect((await workspace('logic')).seenItemIds).toEqual([]);
+  });
+
+  test('a failing tool call still confirms the pending items', async () => {
+    expect(await proj('art')).toContain(FULL);
+    await expect(f.p.callTool('art', 'updateNotes', {})).rejects.toMatchObject({ code: 'INVALID_OP' });
+    expect(await proj('art')).toContain(COMPACT);
+  });
+
+  test('pending keys for items removed from the board are dropped on confirm', async () => {
+    expect(await proj('art')).toContain(FULL);
+    const b = await f.store.getBoard(f.projectId);
+    const c1 = b.contracts.find(c => c.id === 'c1')!;
+    c1.version = 2;
+    c1.spec = 'PNG sprite sheets, 32x32 tiles';
+    const v = b.version;
+    b.version = v + 1;
+    await f.store.saveBoard(b, v, { version: b.version, mergedAt: f.clock.now(), ops: [] });
+    await f.p.callTool('art', 'updateNotes', { text: 'noted' });
+    const ws = await workspace('art');
+    expect(ws.seenItemIds).toEqual([]);
+    expect(ws.pendingSeenItemIds).toEqual([]);
+    expect(await proj('art')).toContain('[c1@v2] art -> logic: PNG sprite sheets, 32x32 tiles');
+  });
+
+  test('peek briefs neither set nor confirm pending items', async () => {
+    await proj('art', { peek: true });
+    expect(await f.store.getWorkspace(f.projectId, 'art')).toBeNull();
+    await proj('art');
+    const before = await workspace('art');
+    expect(before.pendingSeenItemIds).toEqual(['c1@1']);
+    await proj('art', { peek: true });
+    expect(await workspace('art')).toEqual(before);
+    await f.p.callTool('art', 'updateNotes', { text: 'noted' });
+    expect(await proj('art', { peek: true })).toContain(COMPACT);
+  });
+
+  test('a new brief overwrites the pending set instead of adding to it', async () => {
+    await proj('art');
+    const b = await f.store.getBoard(f.projectId);
+    b.contracts.find(c => c.id === 'c1')!.version = 2;
+    const v = b.version;
+    b.version = v + 1;
+    await f.store.saveBoard(b, v, { version: b.version, mergedAt: f.clock.now(), ops: [] });
+    await proj('art');
+    expect((await workspace('art')).pendingSeenItemIds).toEqual(['c1@2']);
+  });
+
+  test('a tool call by a bot without a workspace creates none; a non-member is still refused', async () => {
+    await f.p.callTool('audio', 'updateNotes', { text: 'hi' }); // updateNotes itself saves a workspace
+    expect((await workspace('audio')).seenItemIds).toEqual([]);
+    await f.p.callTool('logic', 'getBoardItem', { id: 'c1' });
+    expect(await f.store.getWorkspace(f.projectId, 'logic')).toBeNull();
+    await expect(f.p.callTool('ghost', 'updateNotes', { text: 'x' })).rejects.toMatchObject({ code: 'NOT_A_MEMBER' });
+    expect(await f.store.getWorkspace(f.projectId, 'ghost')).toBeNull();
   });
 });

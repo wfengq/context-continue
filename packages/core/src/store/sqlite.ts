@@ -251,7 +251,9 @@ export function sqliteStore(path: string): Store & { close(): void } {
 
     async getWorkspace(projectId, botId) {
       const row = get('SELECT json FROM workspaces WHERE project_id = ? AND bot_id = ?', projectId, botId);
-      return row ? parse<Workspace>(row) : null;
+      if (!row) return null;
+      const w = parse<Workspace>(row);
+      return { ...w, pendingSeenItemIds: w.pendingSeenItemIds ?? [] };
     },
     async saveWorkspace(w) {
       run(

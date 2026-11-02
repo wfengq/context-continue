@@ -126,7 +126,9 @@ export function memoryStore(opts: { newId?: IdGenerator } = {}): Store {
 
     async getWorkspace(projectId, botId) {
       const w = workspaces.get(key(projectId, botId));
-      return w ? copy(w) : null;
+      if (!w) return null;
+      const c = copy(w);
+      return { ...c, pendingSeenItemIds: c.pendingSeenItemIds ?? [] };
     },
     async saveWorkspace(w) {
       workspaces.set(key(w.projectId, w.botId), copy(w));

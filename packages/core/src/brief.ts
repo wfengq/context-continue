@@ -200,6 +200,33 @@ async function relevantChanges(
 }
 
 // ---------------------------------------------------------------------------
+// seen-item keys
+// ---------------------------------------------------------------------------
+
+/** Every key the seen-item rule can refer to on this board (`itemKey` of each item and contract). */
+export function boardItemKeys(board: ProjectBoard): Set<string> {
+  return new Set<string>([
+    ...[...board.conventions, ...board.openQuestions, ...board.decisions, ...board.facts, ...board.failures].map(x => x.id),
+    ...board.contracts.map(itemKey),
+  ]);
+}
+
+/**
+ * Second phase of the seen-item rule (spec 5.2): the bot acted, so the items its latest brief showed
+ * in full count as seen. Keys no longer on the board are dropped. A bot without a workspace, or
+ * with nothing pending, is left untouched.
+ */
+export async function confirmSeen(store: Store, projectId: string, botId: string): Promise<void> {
+  const ws = await store.getWorkspace(projectId, botId);
+  const pending = ws?.pendingSeenItemIds ?? [];
+  if (!ws || pending.length === 0) return;
+  const boardKeys = boardItemKeys(await store.getBoard(projectId));
+  const seen = new Set(ws.seenItemIds);
+  for (const k of pending) if (boardKeys.has(k)) seen.add(k);
+  await store.saveWorkspace({ ...ws, seenItemIds: [...seen], pendingSeenItemIds: [] });
+}
+
+// ---------------------------------------------------------------------------
 // buildBrief
 // ---------------------------------------------------------------------------
 
@@ -221,12 +248,16 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
   // Segments that are never trimmed.
   const common = renderTeam(board, botMembers, id => memories.get(id)?.persona);
   const boardText = renderBoardPublic(board, workstreams);
+  // Two-phase seen (spec 5.2): items shown in full here only become seen once the bot calls a tool.
+  // Within one brief a key shown in an earlier block is compacted in later blocks.
   const seen = new Set(workspace.seenItemIds);
+  const shown: string[] = [];
   const blocks: string[] = [];
   for (const p of selectProjections(board, workstreams, botId, writeScopeOverlaps(workstreams))) {
     const r = renderProjection(p, seen);
     blocks.push(r.text);
     for (const k of r.shownKeys) seen.add(k);
+    shown.push(...r.shownKeys);
   }
   const projection = blocks.join('\n\n');
   const trigger = opts.trigger ?? { reason: 'manual' as const, detail: '' };
@@ -296,16 +327,13 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
   }
 
   if (!opts.peek) {
-    const boardKeys = new Set<string>([
-      ...[...board.conventions, ...board.openQuestions, ...board.decisions, ...board.facts, ...board.failures].map(
-        x => x.id,
-      ),
-      ...board.contracts.map(itemKey),
-    ]);
+    const boardKeys = boardItemKeys(board);
     await store.saveWorkspace({
       ...workspace,
       // Keys of items no longer on the board can never be shown again; drop them so the list stays bounded.
-      seenItemIds: [...seen].filter(k => boardKeys.has(k)),
+      seenItemIds: workspace.seenItemIds.filter(k => boardKeys.has(k)),
+      // Replaces any older pending set: a brief with no tool call after it confirms nothing.
+      pendingSeenItemIds: shown,
       lastSeenSeq: latestSeq,
       lastSeenBoardVersion: board.version,
       promotionsThisTurn: 0,
