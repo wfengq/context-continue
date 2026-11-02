@@ -28,7 +28,7 @@ single personal agents such as Muse or Duet.
 | C | This project: the real core library's project board and briefs |
 | D | DeLM style: shared log with per-reader deltas, deliverables by reference |
 | E | DS Bot style group chat with windowed deltas, group memory and compaction |
-| F | Dots + Space style: shared pages plus each bot's own history |
+| F | Dots + Space style: shared pages (project, current plan, one per delivered workstream) plus each bot's own history |
 
 ## Scenarios
 

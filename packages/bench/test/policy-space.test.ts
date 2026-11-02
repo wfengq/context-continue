@@ -34,7 +34,7 @@ async function runCapturing(steps: unknown[]) {
 const textOf = (r: ModelRequest) => r.segments.map(s => s.text).join('\n');
 
 describe('group F (Dots + Space-style shared pages)', () => {
-  test('F: pages = one project page plus one page per workstream with its latest deliverable', async () => {
+  test('F: pages = one project page, one plan page, plus one page per workstream with its latest deliverable', async () => {
     const { seen } = await runCapturing([
       { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'v1', ops: deliver('art', 'FIRST sprites') },
       { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'v2', ops: deliver('art', 'LATEST sprites') },
@@ -44,6 +44,7 @@ describe('group F (Dots + Space-style shared pages)', () => {
     expect(text).toContain('LATEST sprites');
     expect(text).not.toContain('FIRST sprites');
     expect(text.match(/\[page project\]/g)).toHaveLength(1);
+    expect(text.match(/\[page plan\]/g)).toHaveLength(1);
     expect(text).not.toContain('[page workstream logic]'); // no deliverable, no page
     // the deliverable is not duplicated into the history
     expect(text.match(/LATEST sprites/g)).toHaveLength(1);
@@ -78,6 +79,8 @@ describe('group F (Dots + Space-style shared pages)', () => {
     const T = defaultCountTokens(BASE_TEMPLATE);
     // Hand counts (ASCII → ceil(chars / 4)):
     const P0 = 11;     // "[page project] goal: g | constraints: none" = 42
+    // "[page plan]\nworkstream art (art): do art\nworkstream logic (logic): do logic" = 11 + 1 + 28 + 1 + 34 = 75
+    const PL = 19;
     const H = 7;       // "[human human] Build a game." = 27
     const task = 9;    // "[task art] work on workstream art" = 33
     const reply1 = 6;  // "[bot art] Drew sprites." = 23
@@ -86,12 +89,12 @@ describe('group F (Dots + Space-style shared pages)', () => {
     const reply2 = 5;  // "[bot art] Checked." = 18
     expect(records.map(r => [r.step, r.kind])).toEqual([[1, 'scripted'], [2, 'scripted'], [3, 'scripted']]); // step 0 merged
     // step 1: first request → only template cacheable
-    expect(records[0]).toMatchObject({ inputTokens: T + P0 + H + task, cacheableTokens: T });
-    // step 2: the deliverable added the art page after the unchanged project page → the identical
-    // leading run is template + project page (R-B19); the new page and all history after it are not cacheable
-    expect(records[1]).toMatchObject({ inputTokens: T + P0 + pageArt + (H + task + reply1 + tool) + task, cacheableTokens: T + P0 });
+    expect(records[0]).toMatchObject({ inputTokens: T + P0 + PL + H + task, cacheableTokens: T });
+    // step 2: the deliverable added the art page after the unchanged project and plan pages → the identical
+    // leading run is template + project page + plan page (R-B19); the new page and all history after it are not cacheable
+    expect(records[1]).toMatchObject({ inputTokens: T + P0 + PL + pageArt + (H + task + reply1 + tool) + task, cacheableTokens: T + P0 + PL });
     // step 3: pages identical to step 2's → template + pages + step 2's whole history cacheable
-    const prev = T + P0 + pageArt + (H + task + reply1 + tool + task);
+    const prev = T + P0 + PL + pageArt + (H + task + reply1 + tool + task);
     expect(records[1]!.inputTokens).toBe(prev);
     expect(records[2]).toMatchObject({ inputTokens: prev + reply2 + task, cacheableTokens: prev });
   });
@@ -146,7 +149,8 @@ describe('group F (Dots + Space-style shared pages)', () => {
     const tool = (rest: string) => defaultCountTokens(`[tool art] promote: ok\n${rest}`);
     const t1 = tool('  kind: decision\n  text: Use grid\n  rationale: simple');
     const t2 = tool('  kind: failure\n  text: Tried A\n  reason: slow');
-    expect(records[1]!.inputTokens).toBe(T + page + 9 + 3 + t1 + t2 + 9);
+    const plan = 19; // the plan page, as in the cache test above
+    expect(records[1]!.inputTokens).toBe(T + page + plan + 9 + 3 + t1 + t2 + 9);
     expect(records[1]!.cacheableTokens).toBe(T); // the pages changed
   });
 
@@ -162,9 +166,29 @@ describe('group F (Dots + Space-style shared pages)', () => {
     expect(review.botId).toBe('pm');
     const idx = review.segments.findIndex(g => g.text === '[page workstream sound] BEEP-BOOP sound pack');
     expect(idx).toBeGreaterThan(0);
-    // pm's previous request (the replan) had template, project page, art page: those stay cacheable;
-    // the new sound page and everything after it are not.
-    expect(review.segments.map(g => g.cacheable)).toEqual(review.segments.map((_, i) => i < idx));
+    // pm's previous request (the replan) had template, project page, old plan page, art page: the replan
+    // rewrote the plan page (R-L10), so only template and project page stay cacheable.
+    expect(review.segments[2]!.text).toContain('workstream sound (logic): do sound');
+    expect(review.segments.map(g => g.cacheable)).toEqual(review.segments.map((_, i) => i < 2));
+  });
+
+  test('F: the plan page carries the current plan; a replanned contract reaches a non-lead bot (R-L10)', async () => {
+    const replanned = {
+      workstreams: [ws('art', 'art'), ws('logic', 'logic')],
+      contracts: [{ id: 'c-art-logic', from: 'art', to: 'logic', spec: 'Sprites as 16px PNG (CONTRACT-NEW-SPEC).' }],
+    };
+    const { seen } = await runCapturing([
+      { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'Started.' },
+      { kind: 'replan', plan: replanned },
+      { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'Coded.' },
+    ]);
+    expect(seen[0]!.segments[2]!.text).toBe('[page plan]\nworkstream art (art): do art\nworkstream logic (logic): do logic');
+    expect(textOf(seen[0]!)).not.toContain('CONTRACT-NEW-SPEC');
+    const logic = seen[2]!;
+    expect(logic.botId).toBe('logic');
+    expect(logic.segments[2]!.text).toContain('contract c-art-logic art -> logic: Sprites as 16px PNG (CONTRACT-NEW-SPEC).');
+    // the plan page changed since logic's previous request: template and project page stay cacheable, nothing after
+    expect(logic.segments.map(g => g.cacheable)).toEqual(logic.segments.map((_, i) => i < 2));
   });
 
   test('F: a replan that removes a workstream drops its page (R-B20)', async () => {

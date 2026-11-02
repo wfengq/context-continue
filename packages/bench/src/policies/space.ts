@@ -1,5 +1,5 @@
 import { BASE_TEMPLATE, type Policy, type RunContext, type Segment } from '../runner.js';
-import { fmtBot, fmtHuman, fmtTask, fmtTool, fmtToolArgs, deliverableIn } from '../text.js';
+import { fmtBot, fmtHuman, fmtTask, fmtTool, fmtToolArgs, deliverableIn, planLines } from '../text.js';
 import { prefixCacheable } from './history.js';
 import type { Scenario, ToolCall } from '../types.js';
 
@@ -11,6 +11,11 @@ interface BotState {
   history: string[];
   /** Segment texts of the previous request, or null before the first request (R-B19). */
   prev: string[] | null;
+}
+
+/** The plan page (R-L10): the current plan in the compact layout (workstreams, then contracts). */
+function planPage(plan: unknown): string {
+  return ['[page plan]', ...planLines(plan)].join('\n');
 }
 
 /** The project page: goal, constraints, then conventions/decisions/failures in order of occurrence. */
@@ -55,9 +60,10 @@ const promotedKind = (args: unknown): Kind => {
 
 /**
  * Group F (Dots + Space style): people and bots share a set of document pages. A request is the
- * template, all current pages (the project page, then one page per workstream of the CURRENT plan
- * that has a deliverable, in plan order, holding that workstream's latest deliverable in full), the
- * bot's own history lines and, for scripted requests, the task line.
+ * template, all current pages (the project page, the plan page with the current plan's workstreams
+ * and contracts (R-L10), then one page per workstream of the CURRENT plan that has a deliverable, in
+ * plan order, holding that workstream's latest deliverable in full), the bot's own history lines and,
+ * for scripted requests, the task line.
  *
  * Cacheable (R-B19, the rule every group uses): the leading run of segments identical to the bot's
  * previous request; on its first request only the template. Pages come before history, so a
@@ -66,8 +72,8 @@ const promotedKind = (args: unknown): Kind => {
  * Pages are driven by tool calls, applied after the request that produced them:
  * submitDeliverable replaces the workstream page; proposeDecision / recordFailure / promote and
  * the conventions of a review are appended to the project page; proposePlan (a replan, R-B2 shape
- * `{ plan }`) replaces the plan, so pages of new workstreams can appear and pages of removed ones
- * are dropped (R-B20). A human message without mentions is appended to the project page (people
+ * `{ plan }`) replaces the plan: the plan page is rewritten (so it and every later segment lose the
+ * cache), pages of new workstreams can appear and pages of removed ones are dropped (R-B20). A human message without mentions is appended to the project page (people
  * write in the shared pages, R-B20); one with mentions goes to the mentioned bots' histories.
  *
  * Wakes: a human message with mentions wakes the mentioned bots (extra requests, merge rule); one
@@ -78,7 +84,9 @@ export function spacePolicy(): Policy {
   const bots = new Map<string, BotState>();
   const projectEntries: string[] = [];
   const wsPages = new Map<string, string>();
-  /** The current plan's workstream ids, in plan order; null until the first step reads the scenario's plan. */
+  /** The current plan, replaced on proposePlan; null while it is still the scenario's plan. */
+  let plan: unknown = null;
+  /** The current plan's workstream ids, in plan order; null while the plan is still the scenario's plan. */
   let planIds: string[] | null = null;
 
   const stateOf = (botId: string): BotState => {
@@ -91,7 +99,7 @@ export function spacePolicy(): Policy {
   };
 
   const pageTexts = (s: Scenario): string[] => {
-    const pages = [projectPage(s, projectEntries)];
+    const pages = [projectPage(s, projectEntries), planPage(plan ?? s.plan)];
     for (const id of planIds ?? s.plan.workstreams.map(w => w.id)) {
       const content = wsPages.get(id);
       if (content !== undefined) pages.push(`[page workstream ${id}] ${content}`);
@@ -120,11 +128,12 @@ export function spacePolicy(): Policy {
     }
   };
 
-  /** A replan replaces the plan; pages of workstreams it no longer has are dropped (R-B20). */
+  /** A replan replaces the plan (and so the plan page); pages of workstreams it no longer has are dropped (R-B20). */
   const replan = (args: unknown): void => {
-    const plan = typeof args === 'object' && args !== null ? (args as { plan?: unknown }).plan : undefined;
-    const list = typeof plan === 'object' && plan !== null ? (plan as { workstreams?: unknown }).workstreams : undefined;
+    const next = typeof args === 'object' && args !== null ? (args as { plan?: unknown }).plan : undefined;
+    const list = typeof next === 'object' && next !== null ? (next as { workstreams?: unknown }).workstreams : undefined;
     if (!Array.isArray(list)) throw new Error(`group F: malformed proposePlan args: ${JSON.stringify(args)}`);
+    plan = next;
     planIds = list.map(w => (w as { id: string }).id);
     for (const id of [...wsPages.keys()]) if (!planIds.includes(id)) wsPages.delete(id);
   };

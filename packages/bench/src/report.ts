@@ -163,7 +163,7 @@ export function renderReport(
     "- The bundled scenarios, the long ones included, stay below E's compaction threshold at the default window; pass a smaller --window to see it.",
     '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
     "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.",
-    "- F's context is the shared pages plus the bot's own history: there is no chat thread.",
+    "- F's context is the shared pages (project, current plan, one per delivered workstream) plus the bot's own history: there is no chat thread.",
     "- In C, D and E reviewers get a reference to the deliverable, not its text (in E only the author's chat message); a real reviewer would fetch the content with an extra tool call, which is not counted.",
     '- C, E and F always carry the goal and constraints; A, B and D see them only through human messages.',
     "- C's host adds the routed message and any wake merged into a bot's own next step to that bot's trigger; the core's wake detail only says why the bot was woken.",
