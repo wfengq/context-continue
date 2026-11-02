@@ -221,6 +221,22 @@ describe('group C (project board, real core library)', () => {
     expect(triggerOf(seen[i]!)).toContain('[human human] Please keep it cheerful.');
   });
 
+  test('C: a routed wake is delivered once, with its message, not again from the wake event (R-L13)', async () => {
+    const { records, seen } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+      { kind: 'human', text: 'Please keep it cheerful.' },
+      { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'Asking.', ops: [
+        { name: 'sendMessage', args: { text: 'Which sprite is the bird?', act: 'query', mentions: ['art'] } },
+      ] },
+    ]);
+    const human = triggerOf(seen[records.findIndex(r => r.step === 1 && r.botId === 'pm')]!);
+    expect(human.match(/routed: /g)).toHaveLength(1);
+    expect(human).toMatch(/routed: .* \[human human\] Please keep it cheerful\./);
+    const query = triggerOf(seen[records.findIndex(r => r.step === 2 && r.botId === 'art')]!);
+    // a bot query wakes art as mentioned (the message reaches it through the brief), once
+    expect(query.match(/mentioned: /g)).toHaveLength(1);
+  });
+
   test('C: review uses the latest deliverable id of deliverableOf; replan proposes and approves', async () => {
     const replanned = { workstreams: [ws('art', 'art'), ws('logic', 'logic'), ws('sound', 'logic')], contracts: [] };
     const { records, seen, project, stats } = await runC([

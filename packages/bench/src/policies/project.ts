@@ -71,6 +71,17 @@ function withMessage(wakes: Wake[], line: string): Wake[] {
   return wakes.map(w => (w.reason === 'routed' ? { ...w, detail: `${w.detail} ${line}` } : w));
 }
 
+const sameWake = (a: Wake, b: Wake): boolean => a.botId === b.botId && a.reason === b.reason && a.detail === b.detail;
+
+/**
+ * R-L13: the core both emits a `wake` event and returns the same wakes. The event's copy is already
+ * in `caught` when the call returns; drop it, so only the returned copy (which the host may enrich,
+ * e.g. with the routed message) remains.
+ */
+function withoutEcho(caught: Wake[], returned: Wake[]): Wake[] {
+  return caught.filter(w => !returned.some(r => sameWake(w, r)));
+}
+
 /** One request per woken bot, in first-seen order; its reasons and details are combined. */
 function byBot(wakes: Wake[]): { botId: string; reason: Wake['reason']; detail: string }[] {
   const acc = new Map<string, { botId: string; reason: Wake['reason']; details: string[] }>();
@@ -87,7 +98,7 @@ function byBot(wakes: Wake[]): { botId: string; reason: Wake['reason']; detail: 
  * Group C (this project): drives the real core library. The scenario's employees and plan set up a
  * project (start → proposePlan → approvePlan); scripted steps map onto the facade and `callTool`.
  * Who is woken is decided by the core alone (returned wakes and `wake` events, counted once per bot
- * per step); each request is exactly the seven `buildBrief` segments; cacheable per R-B19 (see `send`).
+ * per step; a returned wake's echo in the event is dropped, R-L13); each request is exactly the seven `buildBrief` segments; cacheable per R-B19 (see `send`).
  * The core's optional models are not given, so it uses its fallback behaviour and makes no model calls.
  * Every tool result is shown to that bot in the trigger of its next request (R-B21): a success as
  * `tool <name>: ok <result>` (see `resultLine`), a core error (a throw from `callTool` or
@@ -163,7 +174,9 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
       const result = await p.callTool(botId, op.name, op.args);
       keepResult(botId, resultLine(op.name, result));
       const text = op.name === 'sendMessage' ? (op.args as { text?: unknown }).text : undefined;
-      woken.push(...(typeof text === 'string' ? withMessage(wakesIn(result), fmtBot(botId, text)) : wakesIn(result)));
+      const returned = wakesIn(result);
+      woken = withoutEcho(woken, returned);
+      woken.push(...(typeof text === 'string' ? withMessage(returned, fmtBot(botId, text)) : returned));
       const proposalId = op.name === 'proposePlan' ? proposalIdIn(result) : null;
       if (proposalId !== null) woken.push(...(await p.approvePlan(proposalId, { by: ctx.scenario.owner })));
     } catch (e) {
@@ -220,7 +233,9 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
           text: step.text,
           ...(step.mentions && { mentions: [...step.mentions] }),
         });
-        woken.push(...withMessage(await p.route(entry), fmtHuman(ctx.scenario.owner, step.text)));
+        const routed = await p.route(entry);
+        woken = withoutEcho(woken, routed);
+        woken.push(...withMessage(routed, fmtHuman(ctx.scenario.owner, step.text)));
       } else {
         const botId = ctx.actorOf(step);
         const merged = mergedWakes.get(botId) ?? [];
