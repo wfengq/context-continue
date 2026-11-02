@@ -2488,7 +2488,7 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "logistics",
-      "reply": "Status: Kraanhal and the Hotel New York rooms are confirmed; catering and the run sheet are approved; badge printers and the volunteer briefing are next.",
+      "reply": "Status for the week: Kraanhal and the Hotel New York rooms are confirmed; catering and the run sheet are approved; badge printers and the volunteer briefing are next.",
       "ops": [
         {
           "name": "sendMessage",
@@ -2503,7 +2503,7 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "workshops",
-      "reply": "Status: the agenda is final with 52 sessions; the workshops are published with setup guides; 43 of 45 recording releases are signed and travel is half booked (CONV-SETUP-GUIDE-7D, CONV-RECORDING-RELEASE).",
+      "reply": "Status for the week: the agenda is final with 52 sessions; the workshops are published with setup guides; 43 of 45 recording releases are signed and travel is half booked (CONV-SETUP-GUIDE-7D, CONV-RECORDING-RELEASE).",
       "ops": [
         {
           "name": "sendMessage",
@@ -2518,7 +2518,7 @@
       "kind": "work",
       "botId": "partners",
       "workstreamId": "sponsors",
-      "reply": "Status: EUR 248,000 sold against a target of EUR 220,000; booth power requests are with the venue; two start-up booths are still open.",
+      "reply": "Status for the week: EUR 248,000 sold against a target of EUR 220,000; booth power requests are with the venue; two start-up booths are still open.",
       "ops": [
         {
           "name": "sendMessage",
@@ -2533,7 +2533,7 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "promotion",
-      "reply": "Status: 934 tickets and 287 workshop seats sold; the August push and the last speaker cards are scheduled.",
+      "reply": "Status for the week: 934 tickets and 287 workshop seats sold; the August push and the last speaker cards are scheduled.",
       "ops": [
         {
           "name": "sendMessage",
@@ -2548,7 +2548,7 @@
       "kind": "work",
       "botId": "production",
       "workstreamId": "recordings",
-      "reply": "Status: AV, captioners and the recording crew are booked; the editing room at Kraanhal is reserved; the speaker glossaries are due 26 August.",
+      "reply": "Status for the week: AV, captioners and the recording crew are booked; the editing room at Kraanhal is reserved; the speaker glossaries are due 26 August.",
       "ops": [
         {
           "name": "sendMessage",

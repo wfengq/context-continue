@@ -73,6 +73,21 @@ describe.each(CASES)('$id', ({ id, generate, bots, minWs, maxWs, delivered }) =>
     }
   });
 
+  test(`${id}: a status step's reply is its message text, so the message is posted once (R-L14, R-L9)`, () => {
+    const s = loadScenario(file(id));
+    let statuses = 0;
+    for (const st of s.steps) {
+      if (st.kind !== 'work') continue;
+      for (const op of st.ops ?? []) {
+        const text = op.name === 'sendMessage' ? (op.args as { text?: unknown }).text : undefined;
+        if (typeof text !== 'string' || !text.startsWith('Status for the week:')) continue;
+        statuses++;
+        expect({ step: st.reply, same: st.reply === text }).toEqual({ step: st.reply, same: true });
+      }
+    }
+    expect(statuses).toBeGreaterThan(0);
+  });
+
   test(`${id}: a bot asking a question @-mentions the asked bot in its reply`, () => {
     const s = loadScenario(file(id));
     for (const st of s.steps) {

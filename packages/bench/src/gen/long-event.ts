@@ -721,7 +721,11 @@ export function generateLongEvent(): Scenario {
   });
   b.answer('venue', 'venue', 'partners', 'Booths E-01 to E-04 can get a wired port on the expo VLAN and 32 A power for EUR 450 each including VAT; tell me which ones by 1 August.');
   b.human('How are we tracking for September? I would like a short status from each of you by Friday.');
-  const status = (bot: string, ws: string, text: string) => b.work(bot, ws, `Status: ${text}`, [op.message(`Status for the week: ${text}`, 'inform')]);
+  // The reply is the message itself, so it is posted once (R-L14, R-L9).
+  const status = (bot: string, ws: string, text: string) => {
+    const message = `Status for the week: ${text}`;
+    b.work(bot, ws, message, [op.message(message, 'inform')]);
+  };
   status('venue', 'logistics', 'Kraanhal and the Hotel New York rooms are confirmed; catering and the run sheet are approved; badge printers and the volunteer briefing are next.');
   status('program', 'workshops', 'the agenda is final with 52 sessions; the workshops are published with setup guides; 43 of 45 recording releases are signed and travel is half booked.');
   status('partners', 'sponsors', 'EUR 248,000 sold against a target of EUR 220,000; booth power requests are with the venue; two start-up booths are still open.');

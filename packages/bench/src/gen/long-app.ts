@@ -514,7 +514,11 @@ export function generateLongApp(): Scenario {
   });
   b.review('sharing', true, 'Approved; a simple design that survives phones going to sleep.');
   b.human('How are we tracking against the quarter? I would like a short status from each of you by the end of the week.');
-  const status = (bot: string, ws: string, text: string) => b.work(bot, ws, `Status: ${text}`, [op.message(`Status for the week: ${text}`, 'inform')]);
+  // The reply is the message itself, so it is posted once (R-L14, R-L9).
+  const status = (bot: string, ws: string, text: string) => {
+    const message = `Status for the week: ${text}`;
+    b.work(bot, ws, message, [op.message(message, 'inform')]);
+  };
   status('analyst', 'requirements', 'requirements are approved with households (LR-01 to LR-09); the analytics events are revised and waiting for review.');
   status('design', 'ux', 'flows, UI kit and household screens are approved; next I support web and mobile and run one more usability test on the list.');
   status('backend', 'sharing', 'API and household sharing are approved; the service migration to households is in review this week. On track.');

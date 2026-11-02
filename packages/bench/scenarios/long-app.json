@@ -1545,7 +1545,7 @@
       "kind": "work",
       "botId": "analyst",
       "workstreamId": "requirements",
-      "reply": "Status: requirements are approved with households (LR-01 to LR-09); the analytics events are revised and waiting for review.",
+      "reply": "Status for the week: requirements are approved with households (LR-01 to LR-09); the analytics events are revised and waiting for review.",
       "ops": [
         {
           "name": "sendMessage",
@@ -1560,7 +1560,7 @@
       "kind": "work",
       "botId": "design",
       "workstreamId": "ux",
-      "reply": "Status: flows, UI kit and household screens are approved; next I support web and mobile and run one more usability test on the list.",
+      "reply": "Status for the week: flows, UI kit and household screens are approved; next I support web and mobile and run one more usability test on the list.",
       "ops": [
         {
           "name": "sendMessage",
@@ -1575,7 +1575,7 @@
       "kind": "work",
       "botId": "backend",
       "workstreamId": "sharing",
-      "reply": "Status: API and household sharing are approved; the service migration to households is in review this week. On track.",
+      "reply": "Status for the week: API and household sharing are approved; the service migration to households is in review this week. On track.",
       "ops": [
         {
           "name": "sendMessage",
@@ -1590,7 +1590,7 @@
       "kind": "work",
       "botId": "web",
       "workstreamId": "web",
-      "reply": "Status: planner and list routes work against staging; household settings and the subscription panel are next. About a week of work left before the first full version.",
+      "reply": "Status for the week: planner and list routes work against staging; household settings and the subscription panel are next. About a week of work left before the first full version.",
       "ops": [
         {
           "name": "sendMessage",
@@ -1605,7 +1605,7 @@
       "kind": "work",
       "botId": "mobile",
       "workstreamId": "mobile",
-      "reply": "Status: planner, import and the list work on both platforms; invites and payments are next. Payments are the risk: App Review has not seen our checkout yet.",
+      "reply": "Status for the week: planner, import and the list work on both platforms; invites and payments are next. Payments are the risk: App Review has not seen our checkout yet.",
       "ops": [
         {
           "name": "sendMessage",
@@ -1620,7 +1620,7 @@
       "kind": "work",
       "botId": "ops",
       "workstreamId": "security",
-      "reply": "Status: infrastructure is approved and the security fixes are in; I start the penetration test booking for two weeks before launch.",
+      "reply": "Status for the week: infrastructure is approved and the security fixes are in; I start the penetration test booking for two weeks before launch.",
       "ops": [
         {
           "name": "sendMessage",
@@ -1635,7 +1635,7 @@
       "kind": "work",
       "botId": "qa",
       "workstreamId": "testing",
-      "reply": "Status: nothing to test end to end yet; I am preparing the staging seed data and the Playwright project so the first run can start the day web is ready.",
+      "reply": "Status for the week: nothing to test end to end yet; I am preparing the staging seed data and the Playwright project so the first run can start the day web is ready.",
       "ops": [
         {
           "name": "sendMessage",
