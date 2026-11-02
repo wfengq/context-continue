@@ -157,6 +157,7 @@ async function relevantEntries(
     if (e.author.id === botId) return false; // the bot knows what it said or did
     const body = e.body;
     if (body.type === 'chat') {
+      if (isLead && e.author.kind === 'human') return true; // the lead coordinates everything, like R33
       if (body.mentions.includes(botId)) return true;
       if (body.replyTo !== undefined && authors.get(body.replyTo) === botId) return true;
       return matchWorkstreams(body.text, own).length > 0;

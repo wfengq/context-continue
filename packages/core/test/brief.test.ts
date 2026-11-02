@@ -168,6 +168,36 @@ describe('buildBrief', () => {
     expect(seg(await brief('art'), 'delta')).toBe('# Since you last looked\n\n(nothing yet)');
   });
 
+  test('the lead sees every human chat message in its delta, even unmentioned and unmatched', async () => {
+    await brief('pm');
+    const plain = await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'unrelated musing about lunch' });
+    const fin = await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'the fin needs a rethink' });
+    const d = seg(await brief('pm'), 'delta');
+    expect(d).toContain('unrelated musing about lunch');
+    expect(d).toContain('the fin needs a rethink');
+    expect(d).toContain(`#${plain.seq}`);
+    expect(d).toContain(`#${fin.seq}`);
+  });
+
+  test('non-lead bots still see only mentioned, replied or matching human messages', async () => {
+    await brief('art');
+    await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'unrelated musing about lunch' });
+    await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'ping', mentions: ['art'] });
+    const d = seg(await brief('art'), 'delta');
+    expect(d).not.toContain('unrelated musing about lunch');
+    expect(d).toContain('ping');
+  });
+
+  test('the lead does not see its own messages and does not see a human message twice', async () => {
+    await brief('pm');
+    await p.chat({ author: { kind: 'bot', id: 'pm' }, text: 'lead says something odd', act: 'inform' });
+    await p.chat({ author: { kind: 'human', id: 'alice' }, text: 'unrelated musing about lunch' });
+    const first = seg(await brief('pm'), 'delta');
+    expect(first).toContain('unrelated musing about lunch');
+    expect(first).not.toContain('lead says something odd');
+    expect(seg(await brief('pm'), 'delta')).not.toContain('unrelated musing about lunch');
+  });
+
   test('delta board changes: contract ends and workstream touches are relevant', async () => {
     await brief('logic');
     await brief('audio');
