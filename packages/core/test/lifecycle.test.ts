@@ -32,6 +32,11 @@ const fact = (affects: string[]): BoardOp => ({
   fact: { text: 'Tiles are 16px', affects, source: { entryIds: [], by: 'art' } },
 });
 
+const failure = (affects: string[], text: string, reason: string): BoardOp => ({
+  op: 'addFailure',
+  failure: { text, reason, affects, source: { entryIds: [], by: 'art' } },
+});
+
 describe('events', () => {
   test('the bus delivers typed events and unsubscribes', () => {
     const bus = createEventBus();
@@ -539,6 +544,38 @@ describe('facade wiring', () => {
     expect(seg(plan, 'board')).toBe(seg(brief, 'board'));
     expect(seg(review, 'common')).toBe(seg(brief2, 'common'));
     expect(seg(review, 'board')).toBe(seg(brief2, 'board'));
+  });
+
+  test('reviewContext shows failures and facts recorded on the reviewed workstream', async () => {
+    const fx = await makeProject({ approved: true });
+    await fx.p.submit('art', { type: 'proposal', ops: [fact(['art']), failure(['art'], 'Tried SVG sprites', 'Renderer blurs them')] });
+    const { id } = await deliverArt(fx);
+    const text = seg(await fx.p.buildReviewContext(id), 'projection');
+    expect(text).toContain('## Failures');
+    expect(text).toContain('tried: Tried SVG sprites');
+    expect(text).toContain('why it failed: Renderer blurs them');
+    expect(text).toContain('affects: art');
+    expect(text).toContain('## Facts');
+    expect(text).toContain('Tiles are 16px');
+  });
+
+  test('reviewContext omits failures that do not affect the reviewed workstream', async () => {
+    const fx = await makeProject({ approved: true });
+    await fx.p.submit('art', {
+      type: 'proposal',
+      ops: [fact(['logic']), failure(['logic'], 'Tried global state', 'Race conditions')],
+    });
+    const { id } = await deliverArt(fx);
+    const text = seg(await fx.p.buildReviewContext(id), 'projection');
+    expect(text).not.toContain('Tried global state');
+    expect(text).not.toContain('Tiles are 16px');
+  });
+
+  test('reviewContext with no failures renders the empty placeholder', async () => {
+    const fx = await makeProject({ approved: true });
+    const { id } = await deliverArt(fx);
+    const text = seg(await fx.p.buildReviewContext(id), 'projection');
+    expect(text).toMatch(/## Facts\n\(nothing yet\)\n\n## Failures\n\(nothing yet\)\n\n## Content to review/);
   });
 
   test('buildBrief delegates and enforces membership', async () => {

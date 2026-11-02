@@ -89,6 +89,10 @@ function decisionBlock(d: Decision): string {
   return lines.join('\n');
 }
 
+function failureBlock(f: Failure): string {
+  return [`- [${f.id}] tried: ${f.text}`, `  why it failed: ${f.reason}`, `  affects: ${f.affects.join(', ')}`].join('\n');
+}
+
 function entryLine(e: LedgerEntry): string {
   if (e.body.type === 'chat') return `- #${e.seq} ${e.author.id}: ${e.body.text}`;
   const { kind, ...rest } = e.body.event;
@@ -203,9 +207,7 @@ export function renderProjection(p: Projection, seen: Set<string>): { text: stri
   );
   const decisions = entries(p.decisions, compactItem, decisionBlock);
   const facts = entries(p.facts, compactItem, itemLine);
-  const failures = entries(p.failures, compactItem, (f) =>
-    [`- [${f.id}] tried: ${f.text}`, `  why it failed: ${f.reason}`, `  affects: ${f.affects.join(', ')}`].join('\n'),
-  );
+  const failures = entries(p.failures, compactItem, failureBlock);
 
   const text = [
     '# Your part',
@@ -319,6 +321,8 @@ export function renderReview(i: {
   contracts: Contract[];
   conventions: Item[];
   decisions: Decision[];
+  failures: Failure[];
+  facts: Fact[];
 }): string {
   return [
     REVIEW_INSTRUCTION,
@@ -334,6 +338,12 @@ export function renderReview(i: {
     '',
     '## Decisions',
     ...list(i.decisions.map(decisionBlock)),
+    '',
+    '## Facts',
+    ...list(i.facts.map(itemLine)),
+    '',
+    '## Failures',
+    ...list(i.failures.map(failureBlock)),
     '',
     '## Content to review',
     i.content,

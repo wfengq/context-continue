@@ -395,12 +395,25 @@ describe('renderReview', () => {
       contracts: [c],
       conventions: board.conventions,
       decisions: [d1],
+      failures: [],
+      facts: [],
     });
     expect(t.startsWith('Check only whether the content violates')).toBe(true);
     expect(t).toContain(content);
     expect(t).toContain('- [k1] snake_case file names');
     expect(t).toContain('- [c1@v1] art -> code: PNG sprites 64x64');
     expect(t).toContain(d1.rationale);
+  });
+});
+
+describe('renderReview failures and facts', () => {
+  test('renders failures and facts like the projection, with placeholders when empty', () => {
+    const base = { content: 'X', workstream: art, contracts: [], conventions: [], decisions: [] };
+    const t = renderReview({ ...base, failures: [failure], facts: [{ ...item('f1', 'Tiles are 16px'), affects: ['art'] }] });
+    expect(t).toContain('## Facts\n- [f1] Tiles are 16px');
+    expect(t).toContain('## Failures\n- [x1] tried: Tried SVG sprites\n  why it failed: Renderer blurs them\n  affects: art');
+    const e = renderReview({ ...base, failures: [], facts: [] });
+    expect(e).toContain('## Facts\n(nothing yet)\n\n## Failures\n(nothing yet)');
   });
 });
 

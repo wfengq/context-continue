@@ -311,7 +311,7 @@ type BoardOp =
 | ② 拆分 | 负责人 Bot | 立项完成；拆分被打回；重新拆分请求 | `buildPlanningContext`：目标、约束、人的原始描述、员工名录（每人一行 persona + skills）；若是打回或重拆，附上一版提案、反馈或当前项目板 |
 | ③ 确认 | 人 | 拆分提案提交 | 拆分摘要：工作块、负责人、依赖、接口约定 |
 | ④ 执行 | 工作块负责人 | 被分配，且所有 `dependsOn` 已交付 | `buildBrief`（见 5.2） |
-| ⑤ 交付检查 | 负责人 Bot | `deliverableSubmitted` | `buildReviewContext`：交付物全文、该工作块的接口约定、全局约定、影响它的决定。只检查是否违反约定和接口 |
+| ⑤ 交付检查 | 负责人 Bot | `deliverableSubmitted` | `buildReviewContext`：交付物全文、该工作块的接口约定、全局约定、影响它的决定、影响它的事实与失败记录。只检查是否违反约定和接口 |
 | ⑥ 重新拆分 | 负责人 Bot 提议，人确认 | `reportBlocked` 指出拆分不合理；人要求调整 | 同 ②。确认后，受影响工作块的负责人被唤醒，拿到变化摘要 |
 | ⑦ 收尾 | 人确认，各员工复盘 | 所有工作块已交付 | `buildRetroContext`：自己的工作区、自己工作块的结果和检查记录、现有长期记忆 |
 

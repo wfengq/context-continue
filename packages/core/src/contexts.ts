@@ -73,6 +73,8 @@ export async function reviewContext(
     contracts: board.contracts.filter(c => c.from === w.id || c.to === w.id),
     conventions: board.conventions,
     decisions: board.decisions.filter(x => x.affects.includes(w.id)),
+    facts: board.facts.filter(x => x.affects.includes(w.id)),
+    failures: board.failures.filter(x => x.affects.includes(w.id)),
   });
   return bundle(deps, board, ws, body, 'lead');
 }
