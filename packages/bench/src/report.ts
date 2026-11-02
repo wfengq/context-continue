@@ -157,7 +157,6 @@ export function renderReport(
     '- A also stands for Muse/Duet.',
     "- C uses the core's own common segment instead of the shared template.",
     '- Tool definitions are not counted in any group.',
-    "- A fact's category is set by its id prefix; some failure facts come from failed review notes (event-plan records no failure op).",
     '- C pays one extra lead brief at step 0 when a scenario opens with a human message.',
     '- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.',
     "- The bundled scenarios, the long ones included, stay below E's compaction threshold at the default window; pass a smaller --window to see it.",
@@ -169,11 +168,19 @@ export function renderReport(
     "- C's host adds the routed message and any wake merged into a bot's own next step to that bot's trigger; the core's wake detail only says why the bot was woken.",
     '- Fact visibility is literal text matching of a marker: a group that paraphrases a fact counts as missing it.',
     "- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).",
-    "- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.",
     "- In groups A, B, D, E and F the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call (in A, the single agent's history).",
     '- In groups D and E reviewers get deliverable references, so facts written inside a deliverable reach them less often.',
-    '',
+    "- C misses a fact in three ways, all core behaviour reported as results: after a bot has viewed a board item in an idle (extra) request the core shows it compactly as seen (a contract without its spec, other items cut short), so later briefs can lack its marker; a human message that mentions nobody is routed only to the owner of the matching workstream, which may not be the lead; a bot's brief shows failures and contracts of its own part of the plan only, so a reviewer does not see failures recorded on the workstream it reviews.",
+    "- Tool-call arguments are rendered in the author's own history only (R-L4); other bots see a call's effect (a page, a board item, a deliverable) but not its arguments. A sendMessage text is a posted message, posted once: not again when the same step's reply already contains it.",
   );
+  // Scenario- and run-specific caveats print only when they apply (R-L12).
+  if (meta.scenarios.includes('event-plan')) {
+    out.push("- A fact's category is set by its id prefix; some failure facts come from failed review notes (event-plan records no failure op).");
+  }
+  if (all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0)) {
+    out.push("- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.");
+  }
+  out.push('');
   return out.join('\n');
 }
 

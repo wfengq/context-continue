@@ -76,6 +76,21 @@ Segments 1 to 4 are the cacheable prefix, ordered from most to least stable. Kee
 
 The state lives in the `Store`. A new `createProject` over the same store resumes with the same briefs, routing, extraction progress and pending lead timeouts.
 
+## Known gaps
+
+Behaviours a multi-bot benchmark (`packages/bench`) shows as missed facts; candidates for follow-up work:
+
+- **Unmentioned changes reach only the matched owner.** A human message that mentions nobody and
+  matches a workstream is routed to that workstream's owner only. A requirement change usually
+  concerns the plan as well, so it should also be routed to the lead.
+- **Seen-compression after a view in an idle request.** Once a bot has been shown a board item, later
+  briefs render it compactly as seen (a contract without its spec, other items cut short), even when
+  the view happened in a request where the bot did nothing (an idle wake). The item should stay in
+  full until the bot has acted on a brief that showed it.
+- **Reviewers do not see failures on the reviewed workstream.** A bot's projection shows failures and
+  contracts of its own part of the plan; a reviewer reviewing another workstream does not see the
+  failures recorded on that workstream, though they bear on the review.
+
 ## Limits
 
 An MCP-only integration cannot reduce a closed product's own full-history re-reads. Exposing the tools and briefs over MCP lets several bots share one project board and receive their own projection and updates, but the closed product still re-reads its own conversation history on every turn, and the core cannot change that.

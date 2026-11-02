@@ -178,7 +178,30 @@ describe('renderReport: facts, growth, tiers', () => {
     const lines = renderReport(mixed(), mixedMeta).split('\n');
     expect(lines).toContain('- Fact visibility is literal text matching of a marker: a group that paraphrases a fact counts as missing it.');
     expect(lines).toContain("- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).");
-    expect(lines).toContain("- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.");
+  });
+
+  const TRUNCATION = "- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.";
+  const EVENT_PLAN = "- A fact's category is set by its id prefix; some failure facts come from failed review notes (event-plan records no failure op).";
+
+  test('the E marker-budget caveat prints only when E compacted at least once (R-L12)', () => {
+    expect(renderReport(mixed(), mixedMeta).split('\n')).not.toContain(TRUNCATION);
+    const compacted = mixed().map(r => (r.group === 'E' && r.scenario === 's2' ? { ...r, compactions: 1 } : r));
+    expect(renderReport(compacted, mixedMeta).split('\n')).toContain(TRUNCATION);
+  });
+
+  test('the event-plan caveat prints only when event-plan is in the run (R-L12)', () => {
+    expect(renderReport(all(), meta).split('\n')).not.toContain(EVENT_PLAN);
+    const withEventPlan = all().map(r => (r.scenario === 's2' ? { ...r, scenario: 'event-plan' } : r));
+    const md = renderReport(withEventPlan, { ...meta, scenarios: ['s1', 'event-plan'], tiers: { s1: 'standard', 'event-plan': 'standard' } });
+    expect(md.split('\n')).toContain(EVENT_PLAN);
+  });
+
+  test("caveats explain C's three miss mechanisms and that only sendMessage text is shared (R-L12, R-L4, R-L9)", () => {
+    const lines = renderReport(all(), meta).split('\n');
+    for (const l of [
+      "- C misses a fact in three ways, all core behaviour reported as results: after a bot has viewed a board item in an idle (extra) request the core shows it compactly as seen (a contract without its spec, other items cut short), so later briefs can lack its marker; a human message that mentions nobody is routed only to the owner of the matching workstream, which may not be the lead; a bot's brief shows failures and contracts of its own part of the plan only, so a reviewer does not see failures recorded on the workstream it reviews.",
+      "- Tool-call arguments are rendered in the author's own history only (R-L4); other bots see a call's effect (a page, a board item, a deliverable) but not its arguments. A sendMessage text is a posted message, posted once: not again when the same step's reply already contains it.",
+    ]) expect(lines).toContain(l);
   });
 
   test('byte-identical for identical input; no NaN or Infinity', () => {

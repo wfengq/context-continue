@@ -149,6 +149,26 @@ favours E. A marker only reaches a bot through the text a group puts in its cont
 fact is written (a chat message, a tool call, a deliverable) affects groups differently; the
 report's caveats list these effects.
 
+What reaches whom:
+
+- Tool-call arguments (a decision's rationale, a failure's reason, a review's notes and
+  conventions, a plan) are rendered in the author's own history only; other bots see what the call
+  changes (a page in F, a board item in C, a deliverable) but not the arguments. A `sendMessage`
+  text is a posted message that B, D and E share, posted once: not again when the same step's
+  reply already contains it.
+- Group C's misses come from three core behaviours, reported as results rather than patched in
+  the bench (see "Known gaps" in `packages/core/README.md`):
+  1. Seen-compression: after a bot has viewed a board item, even in an idle (extra) request, later
+     briefs show it compactly as seen (a contract without its spec, other items cut short), so the
+     marker can drop out of the next scripted request.
+  2. Routing: a human message that mentions nobody is routed only to the owner of the workstream it
+     matches, so a requirement change that names a workstream can miss the lead.
+  3. Projection: a bot's brief shows failures and contracts of its own part of the plan only, so a
+     reviewer does not see failures recorded on the workstream it reviews.
+- Scenario text follows one marker rule (R-L11): wherever a fact's content is restated later
+  (replies, messages, deliverables, replanned briefs, contract specs, review notes), the text
+  carries the fact's marker, so a group that only sees the restatement still counts a hit.
+
 ## Development
 
 ```sh
