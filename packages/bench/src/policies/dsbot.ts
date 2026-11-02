@@ -1,5 +1,5 @@
 import { BASE_TEMPLATE, type Policy, type RunContext, type Segment } from '../runner.js';
-import { fmtBot, fmtHuman, fmtOps, fmtTask, messagesIn } from '../text.js';
+import { fmtBot, fmtHuman, fmtOps, fmtTask, messagesBesides } from '../text.js';
 import { prefixCacheable } from './history.js';
 import type { Scenario } from '../types.js';
 
@@ -194,9 +194,10 @@ export function dsBotPolicy(opts: DsBotOptions): Policy {
       }
       const actor = ctx.actorOf(step);
       const { session, out } = await request(ctx, actor, index, 'scripted', fmtTask(actor, step));
-      session.history.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, false));
+      session.history.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, false, true, out.reply));
       post(actor, fmtBot(actor, out.reply));
-      for (const m of messagesIn(out.ops)) post(actor, fmtBot(actor, m)); // a posted message; wakes nobody (R-L4)
+      // A posted message; wakes nobody (R-L4). Not posted again when the reply already contains it (R-L9).
+      for (const m of messagesBesides(out.reply, out.ops)) post(actor, fmtBot(actor, m));
       if (step.kind === 'review') conventions.push(...(step.conventions ?? []));
       for (const target of mentionsIn(ctx, actor, out.reply)) await relayWake(ctx, target, index);
     },

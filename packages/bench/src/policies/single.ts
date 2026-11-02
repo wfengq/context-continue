@@ -27,7 +27,7 @@ export function singleAgentPolicy(): Policy {
       const segments = historySegments(history, seen);
       seen = history.length;
       const out = await ctx.call({ botId: SOLO, step: index, kind: 'scripted', segments });
-      history.push(fmtBot(SOLO, out.reply), ...fmtOps(SOLO, out.ops, versions, false));
+      history.push(fmtBot(SOLO, out.reply), ...fmtOps(SOLO, out.ops, versions, false, true, out.reply));
     },
     async finish() {
       return { compactions: 0, pauses: 0, coreErrors: 0 };

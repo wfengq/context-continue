@@ -68,4 +68,28 @@ describe('tool-call arguments in histories (R-L4)', () => {
     const seen = await run('E', [failureStep, { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'ok' }]);
     expect(text(last(seen.filter(r => r.botId === 'logic')))).not.toContain('TRIED-THING');
   });
+
+  // R-L9: a bot sends one message. When the step's reply already contains the sendMessage text, the
+  // text is not posted (B/D/E) or rendered as the call's `text:` field (A, and the author's own history in E/F) again.
+  const echoStep = { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Asking. @logic ECHO-TEXT-QQ',
+    ops: [{ name: 'sendMessage', args: { text: '@logic ECHO-TEXT-QQ', act: 'query', mentions: ['logic'] } }] };
+  const count = (r: ModelRequest, needle: string) => text(r).split(needle).length - 1;
+
+  test.each(['B', 'D', 'E'] as Group[])('%s: a message the reply already contains is posted once (R-L9)', async group => {
+    const seen = await run(group, [echoStep, { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'ok' }]);
+    expect(count(last(seen.filter(r => r.botId === 'logic')), 'ECHO-TEXT-QQ')).toBe(1);
+  });
+
+  test.each(['A', 'E', 'F'] as Group[])('%s: the author\'s own history shows such a message once, without a text field (R-L9)', async group => {
+    const seen = await run(group, [echoStep, next]);
+    const req = last(seen.filter(r => r.botId === (group === 'A' ? 'solo' : 'art')));
+    expect(count(req, 'ECHO-TEXT-QQ')).toBe(1);
+    expect(text(req)).toContain('[tool art] sendMessage: ok'.replace('art', group === 'A' ? 'solo' : 'art'));
+    expect(text(req)).toContain('act: query');
+  });
+
+  test('A: a message the reply does not contain keeps its text field', async () => {
+    const seen = await run('A', [msgStep, next]);
+    expect(text(seen[1]!)).toContain('text: MSG-TEXT-XYZ');
+  });
 });

@@ -1,5 +1,5 @@
 import type { Policy, RunContext } from '../runner.js';
-import { fmtBot, fmtHuman, fmtOps, fmtTask, fmtToolArgs, messagesIn } from '../text.js';
+import { fmtBot, fmtHuman, fmtOps, fmtTask, fmtToolArgs, messagesBesides } from '../text.js';
 import { historyReader, type LogLine } from './history.js';
 
 /**
@@ -40,8 +40,9 @@ export function broadcastPolicy(): Policy {
       const actor = ctx.actorOf(step);
       const out = await request(ctx, actor, index, 'scripted', fmtTask(actor, step));
       transcript.push(fmtBot(actor, out.reply), ...fmtOps(actor, out.ops, versions, false, false));
-      // A sendMessage text is a posted message everyone reads; every other call's arguments stay private to the author (R-L4).
-      for (const m of messagesIn(out.ops)) transcript.push(fmtBot(actor, m));
+      // A sendMessage text is a posted message everyone reads, unless the reply already contains it (R-L9);
+      // every other call's arguments stay private to the author (R-L4).
+      for (const m of messagesBesides(out.reply, out.ops)) transcript.push(fmtBot(actor, m));
       for (const op of out.ops) {
         const shown = op.name === 'sendMessage' ? null : fmtToolArgs(op);
         if (shown !== null) transcript.push({ text: shown, only: actor });

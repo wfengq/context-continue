@@ -59,9 +59,10 @@ export function planLines(plan: unknown): string[] {
 /**
  * A tool call's arguments in a compact field layout (R-L4; same style as group F's page entries):
  * readable `field: value` lines, no raw JSON. Null when the call has nothing to show
- * (`submitDeliverable`: its content is rendered as the deliverable line).
+ * (`submitDeliverable`: its content is rendered as the deliverable line). A `sendMessage` whose
+ * text the same step's `reply` already contains has no `text:` field: a bot sends one message (R-L9).
  */
-export function fmtToolArgs(op: ToolCall): string | null {
+export function fmtToolArgs(op: ToolCall, reply?: string): string | null {
   const a = rec(op.args);
   const join = (lines: string[]): string => lines.map(l => `  ${l}`).join('\n');
   switch (op.name) {
@@ -88,8 +89,11 @@ export function fmtToolArgs(op: ToolCall): string | null {
         `affects: ${strs(a.affects).join(', ')}`,
       ]);
     }
-    case 'sendMessage':
-      return join([`to: ${strs(a.mentions).join(', ') || 'all'}`, `act: ${str(a.act)}`, `text: ${str(a.text)}`]);
+    case 'sendMessage': {
+      const text = str(a.text);
+      const echoed = reply !== undefined && text !== '' && reply.includes(text);
+      return join([`to: ${strs(a.mentions).join(', ') || 'all'}`, `act: ${str(a.act)}`, ...(echoed ? [] : [`text: ${text}`])]);
+    }
     case 'updateNotes':
       return join([`text: ${str(a.text)}`]);
     default: {
@@ -104,14 +108,20 @@ export const messagesIn = (ops: ToolCall[]): string[] =>
   ops.filter(op => op.name === 'sendMessage').map(op => str(rec(op.args).text)).filter(t => t !== '');
 
 /**
- * History lines for a bot's tool calls: one tool result line per call (followed by the call's
- * arguments unless `args` is false), then the deliverable line for each `submitDeliverable`
- * (`versions` counts deliverables per workstream and is updated).
+ * The `sendMessage` texts a step posts besides its reply: those the reply does not already contain.
+ * A bot sends one message, so a text its reply repeats is not posted again (R-L9).
  */
-export function fmtOps(botId: string, ops: ToolCall[], versions: Map<string, number>, refOnly: boolean, args = true): string[] {
+export const messagesBesides = (reply: string, ops: ToolCall[]): string[] => messagesIn(ops).filter(t => !reply.includes(t));
+
+/**
+ * History lines for a bot's tool calls: one tool result line per call (followed by the call's
+ * arguments unless `args` is false; `reply` is the same step's reply, see `fmtToolArgs`), then the
+ * deliverable line for each `submitDeliverable` (`versions` counts deliverables per workstream and is updated).
+ */
+export function fmtOps(botId: string, ops: ToolCall[], versions: Map<string, number>, refOnly: boolean, args = true, reply?: string): string[] {
   const lines: string[] = [];
   for (const op of ops) {
-    const shown = args ? fmtToolArgs(op) : null;
+    const shown = args ? fmtToolArgs(op, reply) : null;
     lines.push(shown === null ? fmtTool(botId, op.name) : `${fmtTool(botId, op.name)}\n${shown}`);
     const d = deliverableIn(op);
     if (d) {

@@ -150,7 +150,7 @@ export function spacePolicy(): Policy {
       const out = await request(ctx, actor, index, 'scripted', fmtTask(actor, step));
       const b = stateOf(actor);
       b.history.push(fmtBot(actor, out.reply), ...out.ops.map(op => {
-        const shown = fmtToolArgs(op);
+        const shown = fmtToolArgs(op, out.reply); // R-L9: no text field when the reply carries the message
         return shown === null ? fmtTool(actor, op.name) : `${fmtTool(actor, op.name)}\n${shown}`;
       }));
       applyOps(out.ops);
