@@ -567,14 +567,14 @@
       "kind": "work",
       "botId": "analyst",
       "workstreamId": "requirements",
-      "reply": "Added Given/When/Then acceptance criteria to the stories.",
+      "reply": "Added Given/When/Then acceptance criteria to the stories (CONV-GIVEN-WHEN-THEN).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "requirements",
-            "summary": "Stories now carry Given/When/Then acceptance criteria",
-            "content": "Product requirements, version 2.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload."
+            "summary": "Stories now carry Given/When/Then acceptance criteria (CONV-GIVEN-WHEN-THEN)",
+            "content": "Product requirements, version 2.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload (CONV-GIVEN-WHEN-THEN)."
           }
         }
       ]
@@ -769,14 +769,14 @@
       "kind": "work",
       "botId": "backend",
       "workstreamId": "api",
-      "reply": "Revised the API: cursor pagination everywhere and UTC timestamps.",
+      "reply": "Revised the API: cursor pagination everywhere and UTC timestamps (CONV-CURSOR-PAGINATION, CONV-ISO8601-UTC).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "api",
-            "summary": "Cursor pagination and ISO 8601 UTC timestamps",
-            "content": "API specification, version 2.\n\nResources: /v1/auth (email magic link, refresh tokens), /v1/recipes, /v1/plans/{week}, /v1/lists/{id}/items and /v1/import (URL to recipe, asynchronous). JSON over HTTPS; bearer access tokens valid for 15 minutes, refresh tokens for 60 days.\n\nPagination uses page and pageSize query parameters. Dates are sent as the local date and time strings the user entered.\n\nRevision after review: pagination is cursor-based on every list endpoint (cursor and limit, at most 100, nextCursor in the response); page and pageSize are removed. Every timestamp is ISO 8601 in UTC with a Z suffix and plan days are plain YYYY-MM-DD dates, so a plan reads the same in every time zone."
+            "summary": "Cursor pagination and ISO 8601 UTC timestamps (CONV-CURSOR-PAGINATION, CONV-ISO8601-UTC)",
+            "content": "API specification, version 2.\n\nResources: /v1/auth (email magic link, refresh tokens), /v1/recipes, /v1/plans/{week}, /v1/lists/{id}/items and /v1/import (URL to recipe, asynchronous). JSON over HTTPS; bearer access tokens valid for 15 minutes, refresh tokens for 60 days.\n\nPagination uses page and pageSize query parameters. Dates are sent as the local date and time strings the user entered.\n\nRevision after review: pagination is cursor-based on every list endpoint (cursor and limit, at most 100, nextCursor in the response); page and pageSize are removed. Every timestamp is ISO 8601 in UTC with a Z suffix and plan days are plain YYYY-MM-DD dates, so a plan reads the same in every time zone (CONV-CURSOR-PAGINATION, CONV-ISO8601-UTC)."
           }
         }
       ]
@@ -858,8 +858,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "ux",
-            "summary": "WCAG 2.2 AA contrast and 44-point targets",
-            "content": "UX flows and UI kit, version 2.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA."
+            "summary": "WCAG 2.2 AA contrast and 44-point targets (CONV-WCAG-AA-CONTRAST)",
+            "content": "UX flows and UI kit, version 2.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA (CONV-WCAG-AA-CONTRAST)."
           }
         }
       ]
@@ -975,7 +975,7 @@
           "args": {
             "workstreamId": "ux",
             "summary": "One-screen onboarding with suggested dinners",
-            "content": "UX flows and UI kit, version 3.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA.\n\nOnboarding shortened to one screen: household name and an optional row of dietary chips. The first week is created with three suggested dinners the user can swap. In a usability test with 6 people the median time to a first plan fell from 3 min 40 s to 1 min 10 s."
+            "content": "UX flows and UI kit, version 3.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA (CONV-WCAG-AA-CONTRAST).\n\nOnboarding shortened to one screen: household name and an optional row of dietary chips. The first week is created with three suggested dinners the user can swap. In a usability test with 6 people the median time to a first plan fell from 3 min 40 s to 1 min 10 s."
           }
         }
       ]
@@ -1104,14 +1104,14 @@
       "kind": "work",
       "botId": "backend",
       "workstreamId": "backend",
-      "reply": "Added idempotency keys to every POST.",
+      "reply": "Added idempotency keys to every POST (CONV-IDEMPOTENCY-KEY).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "backend",
-            "summary": "Idempotency keys on every POST",
-            "content": "Backend services, version 2.\n\nServices: one Node 22 service (Fastify) with Postgres 16; tables accounts, recipes, plans, plan_entries, lists and list_items. Recipe import runs in a worker with a 10 second timeout per URL and parses schema.org Recipe data, falling back to the page text.\n\nTests: 212 unit and integration tests with 84% line coverage. In staging, list edits have a p95 latency of 38 ms at 200 requests per second.\n\nIdempotency: every POST accepts an Idempotency-Key header; keys are stored for 24 hours and a replay returns the first response. Duplicate list items from retries no longer occur, verified with a 30% packet-loss test."
+            "summary": "Idempotency keys on every POST (CONV-IDEMPOTENCY-KEY)",
+            "content": "Backend services, version 2.\n\nServices: one Node 22 service (Fastify) with Postgres 16; tables accounts, recipes, plans, plan_entries, lists and list_items. Recipe import runs in a worker with a 10 second timeout per URL and parses schema.org Recipe data, falling back to the page text.\n\nTests: 212 unit and integration tests with 84% line coverage. In staging, list edits have a p95 latency of 38 ms at 200 requests per second.\n\nIdempotency: every POST accepts an Idempotency-Key header; keys are stored for 24 hours and a replay returns the first response. Duplicate list items from retries no longer occur, verified with a 30% packet-loss test (CONV-IDEMPOTENCY-KEY)."
           }
         }
       ]
@@ -1133,7 +1133,7 @@
           {
             "id": "requirements",
             "title": "Product requirements",
-            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members.",
+            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members (CHANGE-HOUSEHOLD-6).",
             "owner": "analyst",
             "dependsOn": []
           },
@@ -1281,8 +1281,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "requirements",
-            "summary": "Households of up to 6 members; stories LR-07 to LR-09",
-            "content": "Product requirements, version 3.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload.\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive."
+            "summary": "Households of up to 6 members; stories LR-07 to LR-09 (CHANGE-HOUSEHOLD-6)",
+            "content": "Product requirements, version 3.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload (CONV-GIVEN-WHEN-THEN).\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive (CHANGE-HOUSEHOLD-6)."
           }
         }
       ]
@@ -1337,7 +1337,7 @@
       "kind": "work",
       "botId": "analyst",
       "workstreamId": "analytics",
-      "reply": "Finished an event validator in CI that rejects events with unknown fields this morning. Removing personal data from the event payloads is next.",
+      "reply": "Finished an event validator in CI that rejects events with unknown fields this morning. Removing personal data from the event payloads is next (CONV-NO-PII-IN-EVENTS).",
       "ops": [
         {
           "name": "updateNotes",
@@ -1351,14 +1351,14 @@
       "kind": "work",
       "botId": "analyst",
       "workstreamId": "analytics",
-      "reply": "Removed personal data from the events.",
+      "reply": "Removed personal data from the events (CONV-NO-PII-IN-EVENTS).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "analytics",
             "summary": "Events identified by a salted account hash only",
-            "content": "Product analytics, version 2.\n\nEvents: app_opened, plan_created, recipe_imported, list_generated, item_ticked and subscription_started; each event carries the user email and the household name so the dashboards can be filtered by customer.\n\nDashboards: activation (first plan within 24 hours of sign-up) and week-2 retention (planned or shopped in the second week), split by platform.\n\nRevision after review: events carry only a salted hash of the account id and of the household id; email, names and free text are gone. The dashboards keep working because activation and retention only need a stable id per user."
+            "content": "Product analytics, version 2.\n\nEvents: app_opened, plan_created, recipe_imported, list_generated, item_ticked and subscription_started; each event carries the user email and the household name so the dashboards can be filtered by customer.\n\nDashboards: activation (first plan within 24 hours of sign-up) and week-2 retention (planned or shopped in the second week), split by platform.\n\nRevision after review: events carry only a salted hash of the account id and of the household id; email, names and free text are gone. The dashboards keep working because activation and retention only need a stable id per user (CONV-NO-PII-IN-EVENTS)."
           }
         }
       ]
@@ -1374,7 +1374,7 @@
           "args": {
             "workstreamId": "api",
             "summary": "Households, members and invites",
-            "content": "API specification, version 3.\n\nResources: /v1/auth (email magic link, refresh tokens), /v1/recipes, /v1/plans/{week}, /v1/lists/{id}/items and /v1/import (URL to recipe, asynchronous). JSON over HTTPS; bearer access tokens valid for 15 minutes, refresh tokens for 60 days.\n\nPagination uses page and pageSize query parameters. Dates are sent as the local date and time strings the user entered.\n\nRevision after review: pagination is cursor-based on every list endpoint (cursor and limit, at most 100, nextCursor in the response); page and pageSize are removed. Every timestamp is ISO 8601 in UTC with a Z suffix and plan days are plain YYYY-MM-DD dates, so a plan reads the same in every time zone.\n\nHouseholds: /v1/households, /v1/households/{id}/members and /v1/households/{id}/invites. Every list and plan belongs to a household; members have role owner or member, and only owners remove members. Invite links are single use and expire after 72 hours."
+            "content": "API specification, version 3.\n\nResources: /v1/auth (email magic link, refresh tokens), /v1/recipes, /v1/plans/{week}, /v1/lists/{id}/items and /v1/import (URL to recipe, asynchronous). JSON over HTTPS; bearer access tokens valid for 15 minutes, refresh tokens for 60 days.\n\nPagination uses page and pageSize query parameters. Dates are sent as the local date and time strings the user entered.\n\nRevision after review: pagination is cursor-based on every list endpoint (cursor and limit, at most 100, nextCursor in the response); page and pageSize are removed. Every timestamp is ISO 8601 in UTC with a Z suffix and plan days are plain YYYY-MM-DD dates, so a plan reads the same in every time zone (CONV-CURSOR-PAGINATION, CONV-ISO8601-UTC).\n\nHouseholds: /v1/households, /v1/households/{id}/members and /v1/households/{id}/invites. Every list and plan belongs to a household; members have role owner or member, and only owners remove members. Invite links are single use and expire after 72 hours (CONTRACT-INVITE-LINK-72H)."
           }
         }
       ]
@@ -1432,7 +1432,7 @@
           "args": {
             "workstreamId": "ux",
             "summary": "Members, invites and who-did-what on list items",
-            "content": "UX flows and UI kit, version 4.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA.\n\nOnboarding shortened to one screen: household name and an optional row of dietary chips. The first week is created with three suggested dinners the user can swap. In a usability test with 6 people the median time to a first plan fell from 3 min 40 s to 1 min 10 s.\n\nHousehold screens: a member list with roles, an invite sheet with a share link and a note that it expires after 72 hours, and small avatars on list items that show who added or ticked them."
+            "content": "UX flows and UI kit, version 4.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA (CONV-WCAG-AA-CONTRAST).\n\nOnboarding shortened to one screen: household name and an optional row of dietary chips. The first week is created with three suggested dinners the user can swap. In a usability test with 6 people the median time to a first plan fell from 3 min 40 s to 1 min 10 s.\n\nHousehold screens: a member list with roles, an invite sheet with a share link and a note that it expires after 72 hours, and small avatars on list items that show who added or ticked them (CONTRACT-INVITE-LINK-72H)."
           }
         }
       ]
@@ -1467,8 +1467,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "security",
-            "summary": "Import egress proxy, documented rate limits, invite links",
-            "content": "Security review, version 2.\n\nThreat model (STRIDE): stolen magic-link tokens (links are single use and expire after 15 minutes), server-side request forgery through recipe import, injection through list item text (all output is escaped), tokens on devices (Keychain on iOS, Keystore on Android, httpOnly cookies on the web).\n\nOpen items: dependency scanning in CI, a penetration test two weeks before launch.\n\nFixes: recipe import fetches through an egress proxy that blocks private and link-local IP ranges and follows at most 3 redirects. Login-link and invite endpoints are limited to 5 requests per minute per IP and 20 per hour per account; the limits are listed in the API document.\n\nHouseholds: invite links are stored as SHA-256 hashes, are single use, and a removed member loses access on the next request."
+            "summary": "Import egress proxy, documented rate limits, invite links (CONV-RATE-LIMITS-DOCUMENTED)",
+            "content": "Security review, version 2.\n\nThreat model (STRIDE): stolen magic-link tokens (links are single use and expire after 15 minutes), server-side request forgery through recipe import, injection through list item text (all output is escaped), tokens on devices (Keychain on iOS, Keystore on Android, httpOnly cookies on the web).\n\nOpen items: dependency scanning in CI, a penetration test two weeks before launch.\n\nFixes: recipe import fetches through an egress proxy that blocks private and link-local IP ranges and follows at most 3 redirects. Login-link and invite endpoints are limited to 5 requests per minute per IP and 20 per hour per account; the limits are listed in the API document (CONV-RATE-LIMITS-DOCUMENTED).\n\nHouseholds: invite links are stored as SHA-256 hashes, are single use, and a removed member loses access on the next request."
           }
         }
       ]
@@ -1526,7 +1526,7 @@
           "args": {
             "workstreamId": "sharing",
             "summary": "Invites, roles and the list change feed",
-            "content": "Household sharing, version 1.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it.\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure FAIL-WEBSOCKET-FANOUT)."
+            "content": "Household sharing, version 1.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it (CONTRACT-INVITE-LINK-72H).\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure FAIL-WEBSOCKET-FANOUT)."
           }
         }
       ]
@@ -1721,7 +1721,7 @@
           "args": {
             "workstreamId": "backend",
             "summary": "household_id with row-level security, backfill migration",
-            "content": "Backend services, version 3.\n\nServices: one Node 22 service (Fastify) with Postgres 16; tables accounts, recipes, plans, plan_entries, lists and list_items. Recipe import runs in a worker with a 10 second timeout per URL and parses schema.org Recipe data, falling back to the page text.\n\nTests: 212 unit and integration tests with 84% line coverage. In staging, list edits have a p95 latency of 38 ms at 200 requests per second.\n\nIdempotency: every POST accepts an Idempotency-Key header; keys are stored for 24 hours and a replay returns the first response. Duplicate list items from retries no longer occur, verified with a 30% packet-loss test.\n\nHouseholds: every plan and list row carries household_id, enforced by Postgres row-level security. A migration created a one-member household for every existing account; tests grew to 268."
+            "content": "Backend services, version 3.\n\nServices: one Node 22 service (Fastify) with Postgres 16; tables accounts, recipes, plans, plan_entries, lists and list_items. Recipe import runs in a worker with a 10 second timeout per URL and parses schema.org Recipe data, falling back to the page text.\n\nTests: 212 unit and integration tests with 84% line coverage. In staging, list edits have a p95 latency of 38 ms at 200 requests per second.\n\nIdempotency: every POST accepts an Idempotency-Key header; keys are stored for 24 hours and a replay returns the first response. Duplicate list items from retries no longer occur, verified with a 30% packet-loss test (CONV-IDEMPOTENCY-KEY).\n\nHouseholds: every plan and list row carries household_id, enforced by Postgres row-level security. A migration created a one-member household for every existing account; tests grew to 268."
           }
         }
       ]
@@ -1768,7 +1768,7 @@
           {
             "id": "requirements",
             "title": "Product requirements",
-            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members.",
+            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members (CHANGE-HOUSEHOLD-6).",
             "owner": "analyst",
             "dependsOn": []
           },
@@ -1802,7 +1802,7 @@
           {
             "id": "web",
             "title": "Web app",
-            "brief": "Build the responsive web app for planning meals and editing the grocery list, against the API and the UI kit. The web app shows the subscription but sells nothing.",
+            "brief": "Build the responsive web app for planning meals and editing the grocery list, against the API and the UI kit. The web app shows the subscription but sells nothing (CHANGE-STORE-BILLING).",
             "owner": "web",
             "dependsOn": [
               "ux",
@@ -1856,7 +1856,7 @@
           {
             "id": "billing",
             "title": "Store billing",
-            "brief": "Verify App Store and Google Play receipts on the server and keep each household's Larder Plus entitlement up to date, including renewals and refunds.",
+            "brief": "Verify App Store and Google Play receipts on the server and keep each household's Larder Plus entitlement up to date, including renewals and refunds (CHANGE-STORE-BILLING).",
             "owner": "backend",
             "dependsOn": [
               "api"
@@ -1917,7 +1917,7 @@
             "id": "c-billing-mobile",
             "from": "billing",
             "to": "mobile",
-            "spec": "The app posts the raw store receipt to POST /v1/billing/receipts (CONTRACT-RECEIPT-POST) with an Idempotency-Key; the response is the household entitlement {plan, expiresAt, source}. GET /v1/billing/entitlement returns the same for any member."
+            "spec": "The app posts the raw store receipt to POST /v1/billing/receipts (CONTRACT-RECEIPT-POST) with an Idempotency-Key; the response is the household entitlement {plan, expiresAt, source}. GET /v1/billing/entitlement returns the same for any member (CONV-IDEMPOTENCY-KEY)."
           }
         ]
       }
@@ -1933,7 +1933,7 @@
           "args": {
             "workstreamId": "requirements",
             "summary": "Store billing for the household; web shows status only",
-            "content": "Product requirements, version 4.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload.\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive.\n\nBilling: Larder Plus is bought through the App Store or Google Play only and covers the whole household; the web app shows the plan and links to the store to manage it. LR-05 is rewritten: Given a member on iOS, when they subscribe, then every member of the household has Plus within one minute on every device."
+            "content": "Product requirements, version 4.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload (CONV-GIVEN-WHEN-THEN).\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive (CHANGE-HOUSEHOLD-6).\n\nBilling: Larder Plus is bought through the App Store or Google Play only and covers the whole household; the web app shows the plan and links to the store to manage it. LR-05 is rewritten: Given a member on iOS, when they subscribe, then every member of the household has Plus within one minute on every device (CHANGE-STORE-BILLING)."
           }
         }
       ]
@@ -2011,7 +2011,7 @@
           "args": {
             "workstreamId": "billing",
             "summary": "Receipt verification and household entitlements",
-            "content": "Store billing, version 1.\n\nReceipts: POST /v1/billing/receipts verifies App Store receipts with the App Store Server API and Play purchases with the Play Developer API, then stores the entitlement on the household. App Store Server Notifications v2 and Play real-time developer notifications update renewals, refunds and expiries.\n\nEntitlement: GET /v1/billing/entitlement returns {plan, expiresAt, source}; Plus features check it on the server, never on the device."
+            "content": "Store billing, version 1.\n\nReceipts: POST /v1/billing/receipts verifies App Store receipts with the App Store Server API and Play purchases with the Play Developer API, then stores the entitlement on the household. App Store Server Notifications v2 and Play real-time developer notifications update renewals, refunds and expiries (CONTRACT-RECEIPT-POST).\n\nEntitlement: GET /v1/billing/entitlement returns {plan, expiresAt, source}; Plus features check it on the server, never on the device."
           }
         }
       ]
@@ -2033,7 +2033,7 @@
           "args": {
             "workstreamId": "api",
             "summary": "Billing endpoints; Stripe endpoints removed",
-            "content": "API specification, version 4.\n\nResources: /v1/auth (email magic link, refresh tokens), /v1/recipes, /v1/plans/{week}, /v1/lists/{id}/items and /v1/import (URL to recipe, asynchronous). JSON over HTTPS; bearer access tokens valid for 15 minutes, refresh tokens for 60 days.\n\nPagination uses page and pageSize query parameters. Dates are sent as the local date and time strings the user entered.\n\nRevision after review: pagination is cursor-based on every list endpoint (cursor and limit, at most 100, nextCursor in the response); page and pageSize are removed. Every timestamp is ISO 8601 in UTC with a Z suffix and plan days are plain YYYY-MM-DD dates, so a plan reads the same in every time zone.\n\nHouseholds: /v1/households, /v1/households/{id}/members and /v1/households/{id}/invites. Every list and plan belongs to a household; members have role owner or member, and only owners remove members. Invite links are single use and expire after 72 hours.\n\nBilling: POST /v1/billing/receipts accepts an App Store or Google Play receipt and GET /v1/billing/entitlement returns {plan, expiresAt, source}. The Stripe checkout and webhook endpoints are removed."
+            "content": "API specification, version 4.\n\nResources: /v1/auth (email magic link, refresh tokens), /v1/recipes, /v1/plans/{week}, /v1/lists/{id}/items and /v1/import (URL to recipe, asynchronous). JSON over HTTPS; bearer access tokens valid for 15 minutes, refresh tokens for 60 days.\n\nPagination uses page and pageSize query parameters. Dates are sent as the local date and time strings the user entered.\n\nRevision after review: pagination is cursor-based on every list endpoint (cursor and limit, at most 100, nextCursor in the response); page and pageSize are removed. Every timestamp is ISO 8601 in UTC with a Z suffix and plan days are plain YYYY-MM-DD dates, so a plan reads the same in every time zone (CONV-CURSOR-PAGINATION, CONV-ISO8601-UTC).\n\nHouseholds: /v1/households, /v1/households/{id}/members and /v1/households/{id}/invites. Every list and plan belongs to a household; members have role owner or member, and only owners remove members. Invite links are single use and expire after 72 hours (CONTRACT-INVITE-LINK-72H).\n\nBilling: POST /v1/billing/receipts accepts an App Store or Google Play receipt and GET /v1/billing/entitlement returns {plan, expiresAt, source}. The Stripe checkout and webhook endpoints are removed (CHANGE-STORE-BILLING, CONTRACT-RECEIPT-POST)."
           }
         }
       ]
@@ -2091,7 +2091,7 @@
           "args": {
             "workstreamId": "web",
             "summary": "Planner, recipes, grocery list, household and subscription settings",
-            "content": "Web app, version 1.\n\nBuilt with React 19 and Vite; routes /plan, /recipes, /list and /settings; the API client is generated from the OpenAPI document. Errors show the server message and retry when Retry-After is set.\n\nHousehold settings list the members with roles and create invite links; the subscription panel shows the household plan and \"Manage it in the App Store\" or \"in Google Play\", with no purchase flow. Bundle size is 410 KB gzipped."
+            "content": "Web app, version 1.\n\nBuilt with React 19 and Vite; routes /plan, /recipes, /list and /settings; the API client is generated from the OpenAPI document. Errors show the server message and retry when Retry-After is set (CONTRACT-ERROR-ENVELOPE).\n\nHousehold settings list the members with roles and create invite links; the subscription panel shows the household plan and \"Manage it in the App Store\" or \"in Google Play\", with no purchase flow. Bundle size is 410 KB gzipped."
           }
         }
       ]
@@ -2113,7 +2113,7 @@
           "args": {
             "workstreamId": "mobile",
             "summary": "Planner, import, list, households, StoreKit 2 and Play Billing",
-            "content": "iOS and Android apps, version 1.\n\nReact Native 0.80 app for iOS 17+ and Android 10+; planner, recipe import from the share sheet and the grocery list; the API client is shared with the web app.\n\nHouseholds: invites open through universal links and app links; list items show who added or ticked them. Store billing uses StoreKit 2 and Play Billing 7; the raw receipt goes to POST /v1/billing/receipts with an Idempotency-Key."
+            "content": "iOS and Android apps, version 1.\n\nReact Native 0.80 app for iOS 17+ and Android 10+; planner, recipe import from the share sheet and the grocery list; the API client is shared with the web app.\n\nHouseholds: invites open through universal links and app links; list items show who added or ticked them. Store billing uses StoreKit 2 and Play Billing 7; the raw receipt goes to POST /v1/billing/receipts with an Idempotency-Key (CONV-IDEMPOTENCY-KEY, CONTRACT-RECEIPT-POST)."
           }
         }
       ]
@@ -2138,7 +2138,7 @@
           "args": {
             "workstreamId": "web",
             "summary": "Bundle 212 KB gzipped, LCP 1.6 s",
-            "content": "Web app, version 2.\n\nBuilt with React 19 and Vite; routes /plan, /recipes, /list and /settings; the API client is generated from the OpenAPI document. Errors show the server message and retry when Retry-After is set.\n\nHousehold settings list the members with roles and create invite links; the subscription panel shows the household plan and \"Manage it in the App Store\" or \"in Google Play\", with no purchase flow. Bundle size is 410 KB gzipped.\n\nPerformance: the recipes and settings routes are lazy loaded and the date library is replaced by Intl; the bundle is 212 KB gzipped and LCP is 1.6 s on a mid-range phone over 4G."
+            "content": "Web app, version 2.\n\nBuilt with React 19 and Vite; routes /plan, /recipes, /list and /settings; the API client is generated from the OpenAPI document. Errors show the server message and retry when Retry-After is set (CONTRACT-ERROR-ENVELOPE).\n\nHousehold settings list the members with roles and create invite links; the subscription panel shows the household plan and \"Manage it in the App Store\" or \"in Google Play\", with no purchase flow. Bundle size is 410 KB gzipped.\n\nPerformance: the recipes and settings routes are lazy loaded and the date library is replaced by Intl; the bundle is 212 KB gzipped and LCP is 1.6 s on a mid-range phone over 4G."
           }
         }
       ]
@@ -2153,14 +2153,14 @@
       "kind": "work",
       "botId": "mobile",
       "workstreamId": "mobile",
-      "reply": "Added restore purchases on both platforms.",
+      "reply": "Added restore purchases on both platforms (CONV-RESTORE-PATH).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "mobile",
-            "summary": "Restore purchases; entitlement read from the server",
-            "content": "iOS and Android apps, version 2.\n\nReact Native 0.80 app for iOS 17+ and Android 10+; planner, recipe import from the share sheet and the grocery list; the API client is shared with the web app.\n\nHouseholds: invites open through universal links and app links; list items show who added or ticked them. Store billing uses StoreKit 2 and Play Billing 7; the raw receipt goes to POST /v1/billing/receipts with an Idempotency-Key.\n\nRestore: settings has Restore purchases on both platforms; on Android it re-queries Play purchases and posts them. Every member reads Plus from GET /v1/billing/entitlement, so a reinstall shows Plus right away without the subscriber opening the app."
+            "summary": "Restore purchases; entitlement read from the server (CONV-RESTORE-PATH)",
+            "content": "iOS and Android apps, version 2.\n\nReact Native 0.80 app for iOS 17+ and Android 10+; planner, recipe import from the share sheet and the grocery list; the API client is shared with the web app.\n\nHouseholds: invites open through universal links and app links; list items show who added or ticked them. Store billing uses StoreKit 2 and Play Billing 7; the raw receipt goes to POST /v1/billing/receipts with an Idempotency-Key (CONV-IDEMPOTENCY-KEY, CONTRACT-RECEIPT-POST).\n\nRestore: settings has Restore purchases on both platforms; on Android it re-queries Play purchases and posts them. Every member reads Plus from GET /v1/billing/entitlement, so a reinstall shows Plus right away without the subscriber opening the app (CONV-RESTORE-PATH)."
           }
         }
       ]
@@ -2186,7 +2186,7 @@
       "kind": "work",
       "botId": "web",
       "workstreamId": "web",
-      "reply": "Done with a two-column grocery list on screens wider than 1024 px, split by aisle. Next I am on checking it against the WCAG contrast rules.",
+      "reply": "Done with a two-column grocery list on screens wider than 1024 px, split by aisle. Next I am on checking it against the WCAG contrast rules (CONV-WCAG-AA-CONTRAST).",
       "ops": [
         {
           "name": "updateNotes",
@@ -2207,7 +2207,7 @@
           "args": {
             "workstreamId": "security",
             "summary": "Security review of receipts, entitlements and the change feed",
-            "content": "Security review, version 3.\n\nThreat model (STRIDE): stolen magic-link tokens (links are single use and expire after 15 minutes), server-side request forgery through recipe import, injection through list item text (all output is escaped), tokens on devices (Keychain on iOS, Keystore on Android, httpOnly cookies on the web).\n\nOpen items: dependency scanning in CI, a penetration test two weeks before launch.\n\nFixes: recipe import fetches through an egress proxy that blocks private and link-local IP ranges and follows at most 3 redirects. Login-link and invite endpoints are limited to 5 requests per minute per IP and 20 per hour per account; the limits are listed in the API document.\n\nHouseholds: invite links are stored as SHA-256 hashes, are single use, and a removed member loses access on the next request.\n\nBilling and sharing: receipts are verified only on the server and entitlements are checked on every Plus request; store notification endpoints verify the Apple JWS signature and the Google Pub/Sub token. The change feed checks household membership on every call and silent pushes carry no item text."
+            "content": "Security review, version 3.\n\nThreat model (STRIDE): stolen magic-link tokens (links are single use and expire after 15 minutes), server-side request forgery through recipe import, injection through list item text (all output is escaped), tokens on devices (Keychain on iOS, Keystore on Android, httpOnly cookies on the web).\n\nOpen items: dependency scanning in CI, a penetration test two weeks before launch.\n\nFixes: recipe import fetches through an egress proxy that blocks private and link-local IP ranges and follows at most 3 redirects. Login-link and invite endpoints are limited to 5 requests per minute per IP and 20 per hour per account; the limits are listed in the API document (CONV-RATE-LIMITS-DOCUMENTED).\n\nHouseholds: invite links are stored as SHA-256 hashes, are single use, and a removed member loses access on the next request.\n\nBilling and sharing: receipts are verified only on the server and entitlements are checked on every Plus request; store notification endpoints verify the Apple JWS signature and the Google Pub/Sub token. The change feed checks household membership on every call and silent pushes carry no item text."
           }
         }
       ]
@@ -2285,7 +2285,7 @@
           {
             "id": "requirements",
             "title": "Product requirements",
-            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members.",
+            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members (CHANGE-HOUSEHOLD-6).",
             "owner": "analyst",
             "dependsOn": []
           },
@@ -2319,7 +2319,7 @@
           {
             "id": "web",
             "title": "Web app",
-            "brief": "Build the responsive web app for planning meals and editing the grocery list, against the API and the UI kit. The web app shows the subscription but sells nothing.",
+            "brief": "Build the responsive web app for planning meals and editing the grocery list, against the API and the UI kit. The web app shows the subscription but sells nothing (CHANGE-STORE-BILLING).",
             "owner": "web",
             "dependsOn": [
               "ux",
@@ -2364,7 +2364,7 @@
           {
             "id": "billing",
             "title": "Store billing",
-            "brief": "Verify App Store and Google Play receipts on the server and keep each household's Larder Plus entitlement up to date, including renewals and refunds.",
+            "brief": "Verify App Store and Google Play receipts on the server and keep each household's Larder Plus entitlement up to date, including renewals and refunds (CHANGE-STORE-BILLING).",
             "owner": "backend",
             "dependsOn": [
               "api"
@@ -2373,7 +2373,7 @@
           {
             "id": "offline",
             "title": "Offline grocery list",
-            "brief": "Make the grocery list work fully offline on iOS and Android: local storage, queued edits and reconciliation with other members on reconnect.",
+            "brief": "Make the grocery list work fully offline on iOS and Android: local storage, queued edits and reconciliation with other members on reconnect (CHANGE-OFFLINE-LIST).",
             "owner": "mobile",
             "dependsOn": [
               "sharing"
@@ -2435,7 +2435,7 @@
             "id": "c-billing-mobile",
             "from": "billing",
             "to": "mobile",
-            "spec": "The app posts the raw store receipt to POST /v1/billing/receipts (CONTRACT-RECEIPT-POST) with an Idempotency-Key; the response is the household entitlement {plan, expiresAt, source}. GET /v1/billing/entitlement returns the same for any member."
+            "spec": "The app posts the raw store receipt to POST /v1/billing/receipts (CONTRACT-RECEIPT-POST) with an Idempotency-Key; the response is the household entitlement {plan, expiresAt, source}. GET /v1/billing/entitlement returns the same for any member (CONV-IDEMPOTENCY-KEY)."
           },
           {
             "id": "c-sharing-offline",
@@ -2450,14 +2450,14 @@
       "kind": "work",
       "botId": "analyst",
       "workstreamId": "requirements",
-      "reply": "Added the offline story and the LR-04 ordering rule; dashboards are out of scope.",
+      "reply": "Added the offline story and the LR-04 ordering rule; dashboards are out of scope (CHANGE-OFFLINE-LIST).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "requirements",
-            "summary": "Offline list (LR-10), ticked-item order, dashboards dropped",
-            "content": "Product requirements, version 5.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload.\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive.\n\nBilling: Larder Plus is bought through the App Store or Google Play only and covers the whole household; the web app shows the plan and links to the store to manage it. LR-05 is rewritten: Given a member on iOS, when they subscribe, then every member of the household has Plus within one minute on every device.\n\nOffline: LR-10 Given no signal in the store, when I tick items and add milk, then the changes are kept and sent when the phone is back online, without losing other members' edits. LR-04 adds: ticked items keep aisle order among themselves. Analytics dashboards are out of scope for launch; events are still logged."
+            "summary": "Offline list (LR-10), ticked-item order, dashboards dropped (CHANGE-OFFLINE-LIST)",
+            "content": "Product requirements, version 5.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload (CONV-GIVEN-WHEN-THEN).\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive (CHANGE-HOUSEHOLD-6).\n\nBilling: Larder Plus is bought through the App Store or Google Play only and covers the whole household; the web app shows the plan and links to the store to manage it. LR-05 is rewritten: Given a member on iOS, when they subscribe, then every member of the household has Plus within one minute on every device (CHANGE-STORE-BILLING).\n\nOffline: LR-10 Given no signal in the store, when I tick items and add milk, then the changes are kept and sent when the phone is back online, without losing other members' edits. LR-04 adds: ticked items keep aisle order among themselves. Analytics dashboards are out of scope for launch; events are still logged (CHANGE-OFFLINE-LIST)."
           }
         }
       ]
@@ -2530,12 +2530,12 @@
       "kind": "work",
       "botId": "mobile",
       "workstreamId": "offline",
-      "reply": "@design In the store tests the longest queue was 23 edits. Only the list works offline, so put the banner on the list and a small cloud icon in the tab bar elsewhere.",
+      "reply": "@design In the store tests the longest queue was 23 edits. Only the list works offline, so put the banner on the list and a small cloud icon in the tab bar elsewhere (CHANGE-OFFLINE-LIST).",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "In the store tests the longest queue was 23 edits. Only the list works offline, so put the banner on the list and a small cloud icon in the tab bar elsewhere.",
+            "text": "In the store tests the longest queue was 23 edits. Only the list works offline, so put the banner on the list and a small cloud icon in the tab bar elsewhere (CHANGE-OFFLINE-LIST).",
             "act": "inform",
             "mentions": [
               "design"
@@ -2555,7 +2555,7 @@
           "args": {
             "workstreamId": "ux",
             "summary": "Offline banner, queued items and conflict toast",
-            "content": "UX flows and UI kit, version 5.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA.\n\nOnboarding shortened to one screen: household name and an optional row of dietary chips. The first week is created with three suggested dinners the user can swap. In a usability test with 6 people the median time to a first plan fell from 3 min 40 s to 1 min 10 s.\n\nHousehold screens: a member list with roles, an invite sheet with a share link and a note that it expires after 72 hours, and small avatars on list items that show who added or ticked them.\n\nOffline states: a banner \"Offline - changes will sync\" on the list, queued items marked with a small clock icon, a cloud icon in the tab bar on other screens, and a toast when an item you edited was removed by another member."
+            "content": "UX flows and UI kit, version 5.\n\nFlows: onboarding in three screens (household name, dietary preferences, first week); planner as a week grid with drag and drop; recipe import (paste a URL, review the parsed ingredients, save); grocery list grouped by aisle, where ticking an item moves it to the bottom.\n\nUI kit: 8 px grid, Inter for text, colour tokens larder-green-600 for primary actions and slate for text; components Button, Chip, RecipeCard, ListItem, WeekGrid and Sheet.\n\nEmpty states and errors: every screen has an empty state with one primary action; errors show the server message and a retry button.\n\nAccessibility: ticked items now use slate-600 with a strike-through (5.1:1), primary buttons are 4.8:1, and every interactive target is at least 44 x 44 points. Checked every screen against WCAG 2.2 AA (CONV-WCAG-AA-CONTRAST).\n\nOnboarding shortened to one screen: household name and an optional row of dietary chips. The first week is created with three suggested dinners the user can swap. In a usability test with 6 people the median time to a first plan fell from 3 min 40 s to 1 min 10 s.\n\nHousehold screens: a member list with roles, an invite sheet with a share link and a note that it expires after 72 hours, and small avatars on list items that show who added or ticked them (CONTRACT-INVITE-LINK-72H).\n\nOffline states: a banner \"Offline - changes will sync\" on the list, queued items marked with a small clock icon, a cloud icon in the tab bar on other screens, and a toast when an item you edited was removed by another member."
           }
         }
       ]
@@ -2577,7 +2577,7 @@
           "args": {
             "workstreamId": "sharing",
             "summary": "clientEditId replay, 30-day feed retention",
-            "content": "Household sharing, version 2.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it.\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure FAIL-WEBSOCKET-FANOUT).\n\nOffline clients: PATCH and POST on list items accept clientEditId, so a replayed queue is applied once. The change feed keeps 30 days of edits; a client with an older cursor gets 410 and reloads the list after sending its queue."
+            "content": "Household sharing, version 2.\n\nInvites: single-use links that expire after 72 hours, stored hashed. Roles: owner and member. Every plan and list row carries household_id and Postgres row-level security enforces it (CONTRACT-INVITE-LINK-72H).\n\nSync: every edit is written to list_changes with a monotonically increasing cursor; members get a silent push with the list id and cursor and pull GET /v1/lists/{id}/changes. Websockets were tried and dropped (see the recorded failure FAIL-WEBSOCKET-FANOUT).\n\nOffline clients: PATCH and POST on list items accept clientEditId, so a replayed queue is applied once. The change feed keeps 30 days of edits; a client with an older cursor gets 410 and reloads the list after sending its queue."
           }
         }
       ]
@@ -2599,7 +2599,7 @@
           "args": {
             "workstreamId": "offline",
             "summary": "SQLite store, queued edits, ordered replay",
-            "content": "Offline grocery list, version 1.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure FAIL-FULL-LIST-RESYNC).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design."
+            "content": "Offline grocery list, version 1.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure FAIL-FULL-LIST-RESYNC) (CONTRACT-SYNC-CURSOR).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design (CHANGE-OFFLINE-LIST)."
           }
         }
       ]
@@ -2667,14 +2667,14 @@
       "kind": "work",
       "botId": "mobile",
       "workstreamId": "offline",
-      "reply": "Fixed delete-versus-edit conflicts.",
+      "reply": "Fixed delete-versus-edit conflicts (CONV-DELETE-WINS).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "offline",
             "summary": "Delete wins; conflict toast; 3-device test",
-            "content": "Offline grocery list, version 2.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure FAIL-FULL-LIST-RESYNC).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design.\n\nConflicts: an edit to an item another member deleted is dropped and the conflict toast tells the user. Tested with 3 devices and 200 random offline edits per device; no edit was lost and every device ended with the same list."
+            "content": "Offline grocery list, version 2.\n\nLocal store in SQLite through op-sqlite; every edit is queued with a clientEditId. On reconnect the queue is sent in order, then the change feed is pulled from the stored cursor. Full list downloads are no longer used (see the recorded failure FAIL-FULL-LIST-RESYNC) (CONTRACT-SYNC-CURSOR).\n\nScope: only the grocery list works offline; the planner and recipes show cached data read-only. The queue survives the app being killed, and the offline banner and clock icons follow the UX design (CHANGE-OFFLINE-LIST).\n\nConflicts: an edit to an item another member deleted is dropped and the conflict toast tells the user. Tested with 3 devices and 200 random offline edits per device; no edit was lost and every device ended with the same list (CONV-DELETE-WINS)."
           }
         }
       ]
@@ -2724,7 +2724,7 @@
           {
             "id": "requirements",
             "title": "Product requirements",
-            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members.",
+            "brief": "Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members (CHANGE-HOUSEHOLD-6).",
             "owner": "analyst",
             "dependsOn": []
           },
@@ -2758,7 +2758,7 @@
           {
             "id": "web",
             "title": "Web app",
-            "brief": "Build the responsive web app for planning meals and editing the grocery list, against the API and the UI kit. The web app shows the subscription but sells nothing.",
+            "brief": "Build the responsive web app for planning meals and editing the grocery list, against the API and the UI kit. The web app shows the subscription but sells nothing (CHANGE-STORE-BILLING).",
             "owner": "web",
             "dependsOn": [
               "ux",
@@ -2803,7 +2803,7 @@
           {
             "id": "billing",
             "title": "Store billing",
-            "brief": "Verify App Store and Google Play receipts on the server and keep each household's Larder Plus entitlement up to date, including renewals and refunds.",
+            "brief": "Verify App Store and Google Play receipts on the server and keep each household's Larder Plus entitlement up to date, including renewals and refunds (CHANGE-STORE-BILLING).",
             "owner": "backend",
             "dependsOn": [
               "api"
@@ -2812,7 +2812,7 @@
           {
             "id": "offline",
             "title": "Offline grocery list",
-            "brief": "Make the grocery list work fully offline on iOS and Android: local storage, queued edits and reconciliation with other members on reconnect.",
+            "brief": "Make the grocery list work fully offline on iOS and Android: local storage, queued edits and reconciliation with other members on reconnect (CHANGE-OFFLINE-LIST).",
             "owner": "mobile",
             "dependsOn": [
               "sharing"
@@ -2821,7 +2821,7 @@
           {
             "id": "privacy",
             "title": "EU privacy and data residency",
-            "brief": "Keep all personal data in eu-west-1, build data export and account deletion, and write the records of processing for the EU launch.",
+            "brief": "Keep all personal data in eu-west-1, build data export and account deletion, and write the records of processing for the EU launch (CHANGE-EU-FIRST).",
             "owner": "ops",
             "dependsOn": [
               "backend"
@@ -2845,7 +2845,7 @@
           {
             "id": "launch",
             "title": "Launch kit",
-            "brief": "Prepare the store listings, help centre articles and release notes for the EU launch in four languages.",
+            "brief": "Prepare the store listings, help centre articles and release notes for the EU launch in four languages (CHANGE-EU-FIRST).",
             "owner": "analyst",
             "dependsOn": [
               "testing"
@@ -2893,7 +2893,7 @@
             "id": "c-billing-mobile",
             "from": "billing",
             "to": "mobile",
-            "spec": "The app posts the raw store receipt to POST /v1/billing/receipts (CONTRACT-RECEIPT-POST) with an Idempotency-Key; the response is the household entitlement {plan, expiresAt, source}. GET /v1/billing/entitlement returns the same for any member."
+            "spec": "The app posts the raw store receipt to POST /v1/billing/receipts (CONTRACT-RECEIPT-POST) with an Idempotency-Key; the response is the household entitlement {plan, expiresAt, source}. GET /v1/billing/entitlement returns the same for any member (CONV-IDEMPOTENCY-KEY)."
           },
           {
             "id": "c-sharing-offline",
@@ -2914,14 +2914,14 @@
       "kind": "work",
       "botId": "analyst",
       "workstreamId": "requirements",
-      "reply": "Updated the requirements for the EU launch.",
+      "reply": "Updated the requirements for the EU launch (CHANGE-EU-FIRST).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "requirements",
-            "summary": "EU launch countries, euro prices, export and deletion",
-            "content": "Product requirements, version 6.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload.\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive.\n\nBilling: Larder Plus is bought through the App Store or Google Play only and covers the whole household; the web app shows the plan and links to the store to manage it. LR-05 is rewritten: Given a member on iOS, when they subscribe, then every member of the household has Plus within one minute on every device.\n\nOffline: LR-10 Given no signal in the store, when I tick items and add milk, then the changes are kept and sent when the phone is back online, without losing other members' edits. LR-04 adds: ticked items keep aisle order among themselves. Analytics dashboards are out of scope for launch; events are still logged.\n\nEU launch: Germany, the Netherlands, Ireland and France; Larder Plus costs EUR 4.99 a month including VAT. LR-06 becomes account deletion with a 14-day grace period and LR-11 is data export as a ZIP of JSON files within 30 days. All personal data stays in eu-west-1."
+            "summary": "EU launch countries, euro prices, export and deletion (CHANGE-EU-FIRST)",
+            "content": "Product requirements, version 6.\n\nPersonas: the weekly planner plans dinners for a household of two to five on Sunday evening; the shopper takes the list to the store on Monday, often with poor signal; the occasional cook opens a recipe on the phone in the kitchen.\n\nScope for v1: a weekly meal plan (7 days, up to 3 meals a day), a recipe library with import from a URL, a grocery list generated from the plan and merged by ingredient, and Larder Plus (unlimited recipes, pantry tracking) at USD 4.99 a month. Non-goals: nutrition tracking, grocery delivery integrations, a social feed.\n\nStories: LR-01 plan a week; LR-02 import a recipe from a URL; LR-03 generate the grocery list; LR-04 tick items off in the store; LR-05 subscribe to Larder Plus; LR-06 delete my account.\n\nAcceptance criteria (Given/When/Then): LR-01 Given an empty week, when I drag a recipe onto Tuesday dinner, then it appears there on every device within 5 seconds. LR-03 Given two planned recipes that both use onions, when I generate the list, then onions appear once with the summed quantity. LR-04 Given an item on the list, when I tick it, then it moves to the bottom and stays ticked after a reload (CONV-GIVEN-WHEN-THEN).\n\nHouseholds: every account belongs to one household of up to 6 members that shares the meal plan and the grocery list. LR-07 invite a member by link; LR-08 see who added or ticked an item; LR-09 leave a household, or remove a member as its owner. Given two members ticking different items at the same time, when both lists sync, then both ticks survive (CHANGE-HOUSEHOLD-6).\n\nBilling: Larder Plus is bought through the App Store or Google Play only and covers the whole household; the web app shows the plan and links to the store to manage it. LR-05 is rewritten: Given a member on iOS, when they subscribe, then every member of the household has Plus within one minute on every device (CHANGE-STORE-BILLING).\n\nOffline: LR-10 Given no signal in the store, when I tick items and add milk, then the changes are kept and sent when the phone is back online, without losing other members' edits. LR-04 adds: ticked items keep aisle order among themselves. Analytics dashboards are out of scope for launch; events are still logged (CHANGE-OFFLINE-LIST).\n\nEU launch: Germany, the Netherlands, Ireland and France; Larder Plus costs EUR 4.99 a month including VAT. LR-06 becomes account deletion with a 14-day grace period and LR-11 is data export as a ZIP of JSON files within 30 days. All personal data stays in eu-west-1 (CHANGE-EU-FIRST, CONTRACT-EXPORT-ZIP-30D)."
           }
         }
       ]
@@ -2972,13 +2972,13 @@
       "kind": "work",
       "botId": "ops",
       "workstreamId": "infra",
-      "reply": "Moving everything to eu-west-1 before launch.",
+      "reply": "Moving everything to eu-west-1 before launch (CHANGE-EU-FIRST).",
       "ops": [
         {
           "name": "proposeDecision",
           "args": {
-            "text": "Run production and all backups in eu-west-1 (Ireland) only; staging moves too so it matches production.",
-            "rationale": "The EU launch requires data residency in the EU, and one region keeps latency low for all four launch countries.",
+            "text": "Run production and all backups in eu-west-1 (Ireland) only; staging moves too so it matches production (CHANGE-EU-FIRST).",
+            "rationale": "The EU launch requires data residency in the EU, and one region keeps latency low for all four launch countries (CHANGE-EU-FIRST).",
             "rejected": [
               "Keep us-east-1 and add an EU replica"
             ],
@@ -2994,14 +2994,14 @@
       "kind": "work",
       "botId": "ops",
       "workstreamId": "infra",
-      "reply": "Infrastructure moved to eu-west-1.",
+      "reply": "Infrastructure moved to eu-west-1 (CHANGE-EU-FIRST).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "infra",
-            "summary": "Production, staging and backups in eu-west-1",
-            "content": "Infrastructure and delivery, version 2.\n\nEnvironments: dev, staging and prod in separate AWS accounts, provisioned with Terraform from the infra repository; changes go through pull requests and a plan review.\n\nDelivery: GitHub Actions builds and tests the API and the web app on every push and deploys main to staging; production deploys are manual promotions of a staging build. Mobile builds run nightly on EAS and go to TestFlight and the Play internal track.\n\nOperations: Grafana dashboards for latency and error rate, PagerDuty alerts on a 2% 5xx rate for five minutes, daily Postgres snapshots kept for 14 days.\n\nRegion: production and staging now run in eu-west-1 (Ireland); Postgres snapshots and the export bucket are in the same region and encrypted with a KMS key that never leaves it. The us-east-1 resources are deleted. Cutover took 12 minutes of read-only time."
+            "summary": "Production, staging and backups in eu-west-1 (CHANGE-EU-FIRST)",
+            "content": "Infrastructure and delivery, version 2.\n\nEnvironments: dev, staging and prod in separate AWS accounts, provisioned with Terraform from the infra repository; changes go through pull requests and a plan review.\n\nDelivery: GitHub Actions builds and tests the API and the web app on every push and deploys main to staging; production deploys are manual promotions of a staging build. Mobile builds run nightly on EAS and go to TestFlight and the Play internal track.\n\nOperations: Grafana dashboards for latency and error rate, PagerDuty alerts on a 2% 5xx rate for five minutes, daily Postgres snapshots kept for 14 days.\n\nRegion: production and staging now run in eu-west-1 (Ireland); Postgres snapshots and the export bucket are in the same region and encrypted with a KMS key that never leaves it. The us-east-1 resources are deleted. Cutover took 12 minutes of read-only time (CHANGE-EU-FIRST)."
           }
         }
       ]
@@ -3036,8 +3036,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "privacy",
-            "summary": "Records of processing, export and deletion jobs, eu-west-1",
-            "content": "EU privacy and data residency, version 1.\n\nRecords of processing list each personal data store (accounts, memberships, invites, recipes, list items, request logs) with purpose, legal basis and retention. Request logs keep IP addresses for 30 days.\n\nExport: POST /v1/me/export queues a job that writes a ZIP of JSON files (account, household, recipes, plans, lists) to an eu-west-1 bucket and emails a link valid for 7 days; median job time 40 seconds. Deletion: POST /v1/me/delete deletes after a 14-day grace period."
+            "summary": "Records of processing, export and deletion jobs, eu-west-1 (CHANGE-EU-FIRST)",
+            "content": "EU privacy and data residency, version 1.\n\nRecords of processing list each personal data store (accounts, memberships, invites, recipes, list items, request logs) with purpose, legal basis and retention. Request logs keep IP addresses for 30 days.\n\nExport: POST /v1/me/export queues a job that writes a ZIP of JSON files (account, household, recipes, plans, lists) to an eu-west-1 bucket and emails a link valid for 7 days; median job time 40 seconds. Deletion: POST /v1/me/delete deletes after a 14-day grace period (CHANGE-EU-FIRST, CONTRACT-EXPORT-ZIP-30D)."
           }
         }
       ]
@@ -3052,14 +3052,14 @@
       "kind": "work",
       "botId": "backend",
       "workstreamId": "backend",
-      "reply": "Backend changes for the EU launch.",
+      "reply": "Backend changes for the EU launch (CHANGE-EU-FIRST).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "backend",
             "summary": "Export and deletion endpoints, euro prices",
-            "content": "Backend services, version 4.\n\nServices: one Node 22 service (Fastify) with Postgres 16; tables accounts, recipes, plans, plan_entries, lists and list_items. Recipe import runs in a worker with a 10 second timeout per URL and parses schema.org Recipe data, falling back to the page text.\n\nTests: 212 unit and integration tests with 84% line coverage. In staging, list edits have a p95 latency of 38 ms at 200 requests per second.\n\nIdempotency: every POST accepts an Idempotency-Key header; keys are stored for 24 hours and a replay returns the first response. Duplicate list items from retries no longer occur, verified with a 30% packet-loss test.\n\nHouseholds: every plan and list row carries household_id, enforced by Postgres row-level security. A migration created a one-member household for every existing account; tests grew to 268.\n\nEU launch: POST /v1/me/export and POST /v1/me/delete call the privacy jobs; deleting the last owner of a household hands ownership to the longest-standing member. Entitlements show prices in EUR including VAT from the store data."
+            "content": "Backend services, version 4.\n\nServices: one Node 22 service (Fastify) with Postgres 16; tables accounts, recipes, plans, plan_entries, lists and list_items. Recipe import runs in a worker with a 10 second timeout per URL and parses schema.org Recipe data, falling back to the page text.\n\nTests: 212 unit and integration tests with 84% line coverage. In staging, list edits have a p95 latency of 38 ms at 200 requests per second.\n\nIdempotency: every POST accepts an Idempotency-Key header; keys are stored for 24 hours and a replay returns the first response. Duplicate list items from retries no longer occur, verified with a 30% packet-loss test (CONV-IDEMPOTENCY-KEY).\n\nHouseholds: every plan and list row carries household_id, enforced by Postgres row-level security. A migration created a one-member household for every existing account; tests grew to 268.\n\nEU launch: POST /v1/me/export and POST /v1/me/delete call the privacy jobs; deleting the last owner of a household hands ownership to the longest-standing member. Entitlements show prices in EUR including VAT from the store data (CHANGE-EU-FIRST)."
           }
         }
       ]
@@ -3117,7 +3117,7 @@
           "args": {
             "workstreamId": "web",
             "summary": "Export and delete my data, two-column list, four languages",
-            "content": "Web app, version 3.\n\nBuilt with React 19 and Vite; routes /plan, /recipes, /list and /settings; the API client is generated from the OpenAPI document. Errors show the server message and retry when Retry-After is set.\n\nHousehold settings list the members with roles and create invite links; the subscription panel shows the household plan and \"Manage it in the App Store\" or \"in Google Play\", with no purchase flow. Bundle size is 410 KB gzipped.\n\nPerformance: the recipes and settings routes are lazy loaded and the date library is replaced by Intl; the bundle is 212 KB gzipped and LCP is 1.6 s on a mid-range phone over 4G.\n\nPrivacy: settings has \"Export my data\" and \"Delete my account\", with the 14-day grace period explained and a banner to cancel deletion during it. Only essential cookies are set, so there is no cookie banner.\n\nAlso in this version: the grocery list uses two columns split by aisle on screens wider than 1024 px, and the app is translated into German, Dutch and French; long German labels wrap to two lines in the planner chips."
+            "content": "Web app, version 3.\n\nBuilt with React 19 and Vite; routes /plan, /recipes, /list and /settings; the API client is generated from the OpenAPI document. Errors show the server message and retry when Retry-After is set (CONTRACT-ERROR-ENVELOPE).\n\nHousehold settings list the members with roles and create invite links; the subscription panel shows the household plan and \"Manage it in the App Store\" or \"in Google Play\", with no purchase flow. Bundle size is 410 KB gzipped.\n\nPerformance: the recipes and settings routes are lazy loaded and the date library is replaced by Intl; the bundle is 212 KB gzipped and LCP is 1.6 s on a mid-range phone over 4G.\n\nPrivacy: settings has \"Export my data\" and \"Delete my account\", with the 14-day grace period explained and a banner to cancel deletion during it. Only essential cookies are set, so there is no cookie banner.\n\nAlso in this version: the grocery list uses two columns split by aisle on screens wider than 1024 px, and the app is translated into German, Dutch and French; long German labels wrap to two lines in the planner chips."
           }
         }
       ]
@@ -3132,14 +3132,14 @@
       "kind": "work",
       "botId": "mobile",
       "workstreamId": "mobile",
-      "reply": "Mobile changes for the EU launch.",
+      "reply": "Mobile changes for the EU launch (CHANGE-EU-FIRST).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "mobile",
             "summary": "In-app account deletion, data export, four languages, euro prices",
-            "content": "iOS and Android apps, version 3.\n\nReact Native 0.80 app for iOS 17+ and Android 10+; planner, recipe import from the share sheet and the grocery list; the API client is shared with the web app.\n\nHouseholds: invites open through universal links and app links; list items show who added or ticked them. Store billing uses StoreKit 2 and Play Billing 7; the raw receipt goes to POST /v1/billing/receipts with an Idempotency-Key.\n\nRestore: settings has Restore purchases on both platforms; on Android it re-queries Play purchases and posts them. Every member reads Plus from GET /v1/billing/entitlement, so a reinstall shows Plus right away without the subscriber opening the app.\n\nEU launch: account deletion is available inside the app (App Store guideline 5.1.1(v)) with the 14-day grace period, and data export is requested from settings. The app is translated into German, Dutch and French; prices come from the store in EUR including VAT."
+            "content": "iOS and Android apps, version 3.\n\nReact Native 0.80 app for iOS 17+ and Android 10+; planner, recipe import from the share sheet and the grocery list; the API client is shared with the web app.\n\nHouseholds: invites open through universal links and app links; list items show who added or ticked them. Store billing uses StoreKit 2 and Play Billing 7; the raw receipt goes to POST /v1/billing/receipts with an Idempotency-Key (CONV-IDEMPOTENCY-KEY, CONTRACT-RECEIPT-POST).\n\nRestore: settings has Restore purchases on both platforms; on Android it re-queries Play purchases and posts them. Every member reads Plus from GET /v1/billing/entitlement, so a reinstall shows Plus right away without the subscriber opening the app (CONV-RESTORE-PATH).\n\nEU launch: account deletion is available inside the app (App Store guideline 5.1.1(v)) with the 14-day grace period, and data export is requested from settings. The app is translated into German, Dutch and French; prices come from the store in EUR including VAT (CHANGE-EU-FIRST)."
           }
         }
       ]
@@ -3243,12 +3243,12 @@
       "kind": "work",
       "botId": "qa",
       "workstreamId": "testing",
-      "reply": "@analyst Two minor ones so far: recipe import misses ingredient groups on some French sites, and the Android widget does not show household avatars. Both are logged with story ids.",
+      "reply": "@analyst Two minor ones so far: recipe import misses ingredient groups on some French sites, and the Android widget does not show household avatars. Both are logged with story ids (CONV-STORY-AND-BUILD-IN-REPORTS).",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "Two minor ones so far: recipe import misses ingredient groups on some French sites, and the Android widget does not show household avatars. Both are logged with story ids.",
+            "text": "Two minor ones so far: recipe import misses ingredient groups on some French sites, and the Android widget does not show household avatars. Both are logged with story ids (CONV-STORY-AND-BUILD-IN-REPORTS).",
             "act": "inform",
             "mentions": [
               "analyst"
@@ -3268,7 +3268,7 @@
           "args": {
             "workstreamId": "testing",
             "summary": "Device matrix, sandbox billing, offline and EU cases; release pass",
-            "content": "Test plan and test runs, version 2.\n\nPlan: every story LR-01 to LR-10 traces to at least one case; 64 automated cases (Playwright for the web, Detox for mobile) and 18 manual ones for billing and invites.\n\nFirst run on build 412: 61 of 64 automated cases pass; the three failures are flaky waits in the planner drag and drop, now fixed.\n\nDevice matrix: iPhone SE (2nd gen) on iOS 17, iPhone 15 on iOS 18, Pixel 4a on Android 12, Samsung Galaxy A14 on Android 13 and a Redmi 9 on Android 10; web on current Chrome, Safari and Firefox.\n\nNew cases: sandbox purchases and restores on both stores, household invites, the offline queue (Detox with setNetworkMode), export and deletion, and euro prices in all four launch countries.\n\nRelease pass on build 498: 97 of 98 automated cases pass; the remaining one is LR-02 on two French recipe sites, logged as LR-02 / build 498 and accepted as a known issue."
+            "content": "Test plan and test runs, version 2.\n\nPlan: every story LR-01 to LR-10 traces to at least one case; 64 automated cases (Playwright for the web, Detox for mobile) and 18 manual ones for billing and invites.\n\nFirst run on build 412: 61 of 64 automated cases pass; the three failures are flaky waits in the planner drag and drop, now fixed.\n\nDevice matrix: iPhone SE (2nd gen) on iOS 17, iPhone 15 on iOS 18, Pixel 4a on Android 12, Samsung Galaxy A14 on Android 13 and a Redmi 9 on Android 10; web on current Chrome, Safari and Firefox.\n\nNew cases: sandbox purchases and restores on both stores, household invites, the offline queue (Detox with setNetworkMode), export and deletion, and euro prices in all four launch countries (CONV-RESTORE-PATH).\n\nRelease pass on build 498: 97 of 98 automated cases pass; the remaining one is LR-02 on two French recipe sites, logged as LR-02 / build 498 and accepted as a known issue (CONV-STORY-AND-BUILD-IN-REPORTS)."
           }
         }
       ]
@@ -3290,7 +3290,7 @@
           "args": {
             "workstreamId": "launch",
             "summary": "Store listings in four languages, help centre, release notes",
-            "content": "Launch kit, version 1.\n\nStore listings in English, German, Dutch and French with screenshots of the planner, the shared list and the offline banner; Larder Plus at EUR 4.99 a month including VAT.\n\nHelp centre: 12 articles (households and invites, offline shopping, restoring purchases, exporting and deleting data). Release notes list the two known issues: recipe import on some French sites (LR-02) and missing avatars in the Android widget."
+            "content": "Launch kit, version 1.\n\nStore listings in English, German, Dutch and French with screenshots of the planner, the shared list and the offline banner; Larder Plus at EUR 4.99 a month including VAT.\n\nHelp centre: 12 articles (households and invites, offline shopping, restoring purchases, exporting and deleting data). Release notes list the two known issues: recipe import on some French sites (LR-02) and missing avatars in the Android widget (CONV-RESTORE-PATH)."
           }
         }
       ]

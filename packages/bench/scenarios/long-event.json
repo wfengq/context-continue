@@ -578,7 +578,7 @@
           "args": {
             "workstreamId": "registration",
             "summary": "Prices including VAT, shorter form, 4 tickets per order",
-            "content": "Ticketing and registration, version 2.\n\nTicket types: early bird EUR 249, regular EUR 349, late EUR 399 and student EUR 99 (student card checked at the door). Prices are shown without VAT. 45 tickets are held back for sponsors and 25 for speakers; 530 go on public sale.\n\nRegistration form: name, email, company, job title, date of birth, home address, phone number, T-shirt size, dietary needs and access needs. Up to 10 tickets per order, paid by card or iDEAL.\n\nSales calendar: early bird from 1 March until 300 are sold or 31 March, regular until 31 July, late until the event.\n\nRevision after review: all prices include 21% VAT: early bird EUR 299, regular EUR 419, late EUR 479, student EUR 119. The form asks only for name, email, company, ticket type, dietary needs and access needs; date of birth, address, phone and T-shirt size are gone. Orders are limited to 4 tickets."
+            "content": "Ticketing and registration, version 2.\n\nTicket types: early bird EUR 249, regular EUR 349, late EUR 399 and student EUR 99 (student card checked at the door). Prices are shown without VAT. 45 tickets are held back for sponsors and 25 for speakers; 530 go on public sale.\n\nRegistration form: name, email, company, job title, date of birth, home address, phone number, T-shirt size, dietary needs and access needs. Up to 10 tickets per order, paid by card or iDEAL.\n\nSales calendar: early bird from 1 March until 300 are sold or 31 March, regular until 31 July, late until the event.\n\nRevision after review: all prices include 21% VAT: early bird EUR 299, regular EUR 419, late EUR 479, student EUR 119. The form asks only for name, email, company, ticket type, dietary needs and access needs; date of birth, address, phone and T-shirt size are gone. Orders are limited to 4 tickets (CONV-PRICES-INCL-VAT)."
           }
         }
       ]
@@ -613,14 +613,14 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "venue",
-      "reply": "Revised the venue plan: a step-free ground-floor room and a quiet room.",
+      "reply": "Revised the venue plan: a step-free ground-floor room and a quiet room (CONV-STEP-FREE-ACCESS).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "venue",
-            "summary": "Step-free second room on the ground floor; quiet room",
-            "content": "Venue and floor plan, version 2.\n\nRecommendation: Kraanhal in Katendrecht, a former harbour crane hall, free from 8 to 11 September 2027 for EUR 68,000 including build-up. The main hall seats 650 theatre style, the mezzanine room seats 160, and the ground floor has 900 m2 for the expo and catering.\n\nFloor plan: entrance and registration desks at the east door, expo booths along both long walls, catering in the middle, the main hall at the north end and the mezzanine room one flight of stairs above the entrance. Cloakroom for 600 coats next to registration.\n\nAlso checked: Lloyd Congress Centre (EUR 92,000, expo on another floor) and Fenixloods (only free on 16 and 17 September).\n\nRevision after review: the second talk room moves to the ground floor, split from the expo by an acoustic wall (EUR 6,500); it seats 180 and is step-free. The mezzanine is no longer used. The quiet room is the old crane office next to the cloakroom, step-free, with dimmed light and 12 seats. All toilets are on the ground floor, two of them accessible."
+            "summary": "Step-free second room on the ground floor; quiet room (CONV-STEP-FREE-ACCESS)",
+            "content": "Venue and floor plan, version 2.\n\nRecommendation: Kraanhal in Katendrecht, a former harbour crane hall, free from 8 to 11 September 2027 for EUR 68,000 including build-up. The main hall seats 650 theatre style, the mezzanine room seats 160, and the ground floor has 900 m2 for the expo and catering.\n\nFloor plan: entrance and registration desks at the east door, expo booths along both long walls, catering in the middle, the main hall at the north end and the mezzanine room one flight of stairs above the entrance. Cloakroom for 600 coats next to registration.\n\nAlso checked: Lloyd Congress Centre (EUR 92,000, expo on another floor) and Fenixloods (only free on 16 and 17 September).\n\nRevision after review: the second talk room moves to the ground floor, split from the expo by an acoustic wall (EUR 6,500); it seats 180 and is step-free. The mezzanine is no longer used. The quiet room is the old crane office next to the cloakroom, step-free, with dimmed light and 12 seats. All toilets are on the ground floor, two of them accessible (CONV-STEP-FREE-ACCESS)."
           }
         }
       ]
@@ -641,7 +641,7 @@
           "name": "proposeDecision",
           "args": {
             "text": "Book Kraanhal from 8 to 11 September 2027 (build-up on the 8th, teardown on the 11th) with the acoustic wall.",
-            "rationale": "It is the only shortlisted venue with the expo, catering and two step-free talk rooms on one floor, and it costs EUR 17,500 less than the alternative.",
+            "rationale": "It is the only shortlisted venue with the expo, catering and two step-free talk rooms on one floor, and it costs EUR 17,500 less than the alternative (CONV-STEP-FREE-ACCESS).",
             "rejected": [
               "Lloyd Congress Centre"
             ],
@@ -743,21 +743,21 @@
           {
             "id": "venue",
             "title": "Venue and floor plan",
-            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027: three step-free talk rooms, the expo area and the floor plan.",
+            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027: three step-free talk rooms, the expo area and the floor plan (CONV-STEP-FREE-ACCESS, CHANGE-CAPACITY-1000).",
             "owner": "venue",
             "dependsOn": []
           },
           {
             "id": "speakers",
             "title": "Call for papers and speakers",
-            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel and hotels.",
+            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel and hotels (CHANGE-CAPACITY-1000).",
             "owner": "program",
             "dependsOn": []
           },
           {
             "id": "agenda",
             "title": "Conference agenda",
-            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments.",
+            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments (CHANGE-CAPACITY-1000).",
             "owner": "program",
             "dependsOn": [
               "speakers",
@@ -776,7 +776,7 @@
           {
             "id": "registration",
             "title": "Ticketing and registration",
-            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and keep the attendee list for badges and catering.",
+            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and keep the attendee list for badges and catering (CHANGE-CAPACITY-1000).",
             "owner": "marketing",
             "dependsOn": []
           },
@@ -839,7 +839,7 @@
             "id": "c-venue-livestream",
             "from": "venue",
             "to": "livestream",
-            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES)."
+            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES) (CONV-STEP-FREE-ACCESS)."
           }
         ]
       }
@@ -848,7 +848,7 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "venue",
-      "reply": "@mira Kraanhal can take 1,000 (CHANGE-CAPACITY-1000): the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds the Quay room with 150 seats; with the Harbour room at 180 that matches CONTRACT-ROOM-CAPACITIES. I am getting the revised quote.",
+      "reply": "@mira Kraanhal can take 1,000 (CHANGE-CAPACITY-1000): the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds the Quay room with 150 seats; with the Harbour room at 180 that matches CONTRACT-ROOM-CAPACITIES. I am getting the revised quote (CONV-STEP-FREE-ACCESS).",
       "ops": [
         {
           "name": "updateNotes",
@@ -887,14 +887,14 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "venue",
-      "reply": "The venue plan now holds 1,000 attendees in three step-free rooms.",
+      "reply": "The venue plan now holds 1,000 attendees in three step-free rooms (CONV-STEP-FREE-ACCESS, CHANGE-CAPACITY-1000).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "venue",
-            "summary": "Three step-free talk rooms for 1,000 attendees",
-            "content": "Venue and floor plan, version 3.\n\nRecommendation: Kraanhal in Katendrecht, a former harbour crane hall, free from 8 to 11 September 2027 for EUR 68,000 including build-up. The main hall seats 650 theatre style, the mezzanine room seats 160, and the ground floor has 900 m2 for the expo and catering.\n\nFloor plan: entrance and registration desks at the east door, expo booths along both long walls, catering in the middle, the main hall at the north end and the mezzanine room one flight of stairs above the entrance. Cloakroom for 600 coats next to registration.\n\nAlso checked: Lloyd Congress Centre (EUR 92,000, expo on another floor) and Fenixloods (only free on 16 and 17 September).\n\nRevision after review: the second talk room moves to the ground floor, split from the expo by an acoustic wall (EUR 6,500); it seats 180 and is step-free. The mezzanine is no longer used. The quiet room is the old crane office next to the cloakroom, step-free, with dimmed light and 12 seats. All toilets are on the ground floor, two of them accessible.\n\nCapacity for 1,000 attendees (CHANGE-CAPACITY-1000): the main hall seats 720 once the expo moves to the south end, the Harbour room on the ground floor seats 180, and the new Quay room is a heated pavilion on the quay with 150 seats, reached by a level ramp. Each room has a wired 1 Gbit uplink at the stage and its own AV power circuit, as CONTRACT-ROOM-CAPACITIES says. The venue now costs EUR 81,000 plus EUR 14,000 for the pavilion."
+            "summary": "Three step-free talk rooms for 1,000 attendees (CONV-STEP-FREE-ACCESS, CHANGE-CAPACITY-1000)",
+            "content": "Venue and floor plan, version 3.\n\nRecommendation: Kraanhal in Katendrecht, a former harbour crane hall, free from 8 to 11 September 2027 for EUR 68,000 including build-up. The main hall seats 650 theatre style, the mezzanine room seats 160, and the ground floor has 900 m2 for the expo and catering.\n\nFloor plan: entrance and registration desks at the east door, expo booths along both long walls, catering in the middle, the main hall at the north end and the mezzanine room one flight of stairs above the entrance. Cloakroom for 600 coats next to registration.\n\nAlso checked: Lloyd Congress Centre (EUR 92,000, expo on another floor) and Fenixloods (only free on 16 and 17 September).\n\nRevision after review: the second talk room moves to the ground floor, split from the expo by an acoustic wall (EUR 6,500); it seats 180 and is step-free. The mezzanine is no longer used. The quiet room is the old crane office next to the cloakroom, step-free, with dimmed light and 12 seats. All toilets are on the ground floor, two of them accessible (CONV-STEP-FREE-ACCESS).\n\nCapacity for 1,000 attendees (CHANGE-CAPACITY-1000): the main hall seats 720 once the expo moves to the south end, the Harbour room on the ground floor seats 180, and the new Quay room is a heated pavilion on the quay with 150 seats, reached by a level ramp. Each room has a wired 1 Gbit uplink at the stage and its own AV power circuit, as CONTRACT-ROOM-CAPACITIES says. The venue now costs EUR 81,000 plus EUR 14,000 for the pavilion."
           }
         }
       ]
@@ -909,7 +909,7 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "speakers",
-      "reply": "Update: a second committee round to fill three tracks instead of two is done and confirmed in writing. Next is the acceptance emails.",
+      "reply": "Update: a second committee round to fill three tracks instead of two is done and confirmed in writing. Next is the acceptance emails (CHANGE-CAPACITY-1000).",
       "ops": [
         {
           "name": "updateNotes",
@@ -965,8 +965,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "speakers",
-            "summary": "CFP results: 45 talks for three tracks, keynotes, travel",
-            "content": "Call for papers and speakers, version 1.\n\nCall for papers: 412 proposals from 31 countries, reviewed blind by five committee members. Selected 38 talks and 7 lightning talks for three tracks; 15 talks are on the waiting list.\n\nSpeakers: 33 have signed the speaker agreement and 12 have accepted by email but not signed yet. Keynotes: Amira Haddad on browser engines on day 1 and Tomasz Wrona on platform engineering on day 2, both signed.\n\nHand-over: the full list of 45 speakers goes to marketing today so the line-up can be published next week.\n\nTravel: speakers from abroad get economy travel and two nights at Hotel New York, booked by us."
+            "summary": "CFP results: 45 talks for three tracks, keynotes, travel (CHANGE-CAPACITY-1000)",
+            "content": "Call for papers and speakers, version 1.\n\nCall for papers: 412 proposals from 31 countries, reviewed blind by five committee members. Selected 38 talks and 7 lightning talks for three tracks; 15 talks are on the waiting list (CHANGE-CAPACITY-1000).\n\nSpeakers: 33 have signed the speaker agreement and 12 have accepted by email but not signed yet. Keynotes: Amira Haddad on browser engines on day 1 and Tomasz Wrona on platform engineering on day 2, both signed.\n\nHand-over: the full list of 45 speakers goes to marketing today so the line-up can be published next week.\n\nTravel: speakers from abroad get economy travel and two nights at Hotel New York, booked by us."
           }
         }
       ]
@@ -1010,14 +1010,14 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "speakers",
-      "reply": "Marketing now gets only the signed speakers.",
+      "reply": "Marketing now gets only the signed speakers (CONV-SIGNED-CONFIRMATION).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "speakers",
-            "summary": "Only signed speakers handed over; two replacements",
-            "content": "Call for papers and speakers, version 2.\n\nCall for papers: 412 proposals from 31 countries, reviewed blind by five committee members. Selected 38 talks and 7 lightning talks for three tracks; 15 talks are on the waiting list.\n\nSpeakers: 33 have signed the speaker agreement and 12 have accepted by email but not signed yet. Keynotes: Amira Haddad on browser engines on day 1 and Tomasz Wrona on platform engineering on day 2, both signed.\n\nHand-over: the full list of 45 speakers goes to marketing today so the line-up can be published next week.\n\nTravel: speakers from abroad get economy travel and two nights at Hotel New York, booked by us.\n\nRevision after review (CONV-SIGNED-CONFIRMATION): marketing gets the 36 signed speakers now; the other 9 are handed over one by one as their agreements are signed. Two unsigned speakers have since withdrawn and were replaced from the waiting list."
+            "summary": "Only signed speakers handed over; two replacements (CONV-SIGNED-CONFIRMATION)",
+            "content": "Call for papers and speakers, version 2.\n\nCall for papers: 412 proposals from 31 countries, reviewed blind by five committee members. Selected 38 talks and 7 lightning talks for three tracks; 15 talks are on the waiting list (CHANGE-CAPACITY-1000).\n\nSpeakers: 33 have signed the speaker agreement and 12 have accepted by email but not signed yet. Keynotes: Amira Haddad on browser engines on day 1 and Tomasz Wrona on platform engineering on day 2, both signed.\n\nHand-over: the full list of 45 speakers goes to marketing today so the line-up can be published next week.\n\nTravel: speakers from abroad get economy travel and two nights at Hotel New York, booked by us.\n\nRevision after review (CONV-SIGNED-CONFIRMATION): marketing gets the 36 signed speakers now; the other 9 are handed over one by one as their agreements are signed. Two unsigned speakers have since withdrawn and were replaced from the waiting list."
           }
         }
       ]
@@ -1089,7 +1089,7 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "sponsors",
-            "summary": "Sponsor session instead of talks; opt-in data only",
+            "summary": "Sponsor session instead of talks; opt-in data only (CONV-NO-PAID-TALKS, CONV-SPONSOR-OPT-IN-ONLY)",
             "content": "Sponsorship, version 2.\n\nPackages, prices including VAT: Gold EUR 30,250 (4 available): 18 m2 booth, logo on the stage screens, a 30-minute talk in the main hall, the full attendee list after the event and 6 tickets. Silver EUR 14,520 (10): 9 m2 booth, a 10-minute lightning talk and 3 tickets. Bronze EUR 6,050 (14): logo on the website and the lanyards, 2 tickets.\n\nExpo: 28 booths on the south side of the ground floor, numbered E-01 to E-28 on the venue floor plan, with power at every booth.\n\nPipeline: 3 Gold and 4 Silver sponsors have said yes in principle.\n\nRevision after review: no package contains a talk (CONV-NO-PAID-TALKS). Gold gets a 20-minute slot in the sponsor session in the Quay room at lunch, marked as sponsored in the agenda, and a 24 m2 booth, for EUR 27,830 including VAT. Attendee data only comes from the opt-in checkbox at checkout and from badge scans at the booth (CONV-SPONSOR-OPT-IN-ONLY)."
           }
         }
@@ -1182,7 +1182,7 @@
           "args": {
             "workstreamId": "agenda",
             "summary": "Three tracks on both days, keynotes, breaks and rooms",
-            "content": "Conference agenda, version 1.\n\nDay 1, 9 September: doors at 8am, keynote at 9:15 in the main hall, three tracks from 10:30 to 5:45 PM, lightning talks 4pm-4:45pm in the Harbour room, party from 7 pm on the quay.\n\nDay 2, 10 September: keynote at 9.15, tracks until 17.00, closing panel at 17.15 in the main hall.\n\nTracks: Web in the main hall, Cloud and Ops in the Harbour room, Data and AI in the Quay room; 30-minute talks with 10-minute changeovers, 30-minute breaks and a 75-minute lunch; the sponsor session is in the Quay room at 12:45."
+            "content": "Conference agenda, version 1.\n\nDay 1, 9 September: doors at 8am, keynote at 9:15 in the main hall, three tracks from 10:30 to 5:45 PM, lightning talks 4pm-4:45pm in the Harbour room, party from 7 pm on the quay (CHANGE-CAPACITY-1000).\n\nDay 2, 10 September: keynote at 9.15, tracks until 17.00, closing panel at 17.15 in the main hall.\n\nTracks: Web in the main hall, Cloud and Ops in the Harbour room, Data and AI in the Quay room; 30-minute talks with 10-minute changeovers, 30-minute breaks and a 75-minute lunch; the sponsor session is in the Quay room at 12:45."
           }
         }
       ]
@@ -1200,7 +1200,7 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "promotion",
-      "reply": "Building the speakers page from the signed speakers.",
+      "reply": "Building the speakers page from the signed speakers (CONV-SIGNED-CONFIRMATION).",
       "ops": [
         {
           "name": "getBoardItem",
@@ -1220,14 +1220,14 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "agenda",
-      "reply": "Rewrote the agenda in 24-hour time with session ids.",
+      "reply": "Rewrote the agenda in 24-hour time with session ids (CONV-TIMES-24H).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "agenda",
-            "summary": "24-hour times and session ids S-01 to S-52",
-            "content": "Conference agenda, version 2.\n\nDay 1, 9 September: doors at 8am, keynote at 9:15 in the main hall, three tracks from 10:30 to 5:45 PM, lightning talks 4pm-4:45pm in the Harbour room, party from 7 pm on the quay.\n\nDay 2, 10 September: keynote at 9.15, tracks until 17.00, closing panel at 17.15 in the main hall.\n\nTracks: Web in the main hall, Cloud and Ops in the Harbour room, Data and AI in the Quay room; 30-minute talks with 10-minute changeovers, 30-minute breaks and a 75-minute lunch; the sponsor session is in the Quay room at 12:45.\n\nRevision after review (CONV-TIMES-24H): all times are 24-hour local time and every session has an id. Day 1: doors 08:00, S-01 keynote 09:15-10:00 in the main hall, talks S-02 to S-25 from 10:30 to 17:45, lightning talks S-26 16:00-16:45 in the Harbour room, party from 19:00. Day 2: S-27 keynote 09:15, talks S-28 to S-50 until 17:00, S-51 closing panel 17:15-18:00 in the main hall. Sponsor session S-52 in the Quay room at 12:45 on both days, marked as sponsored."
+            "summary": "24-hour times and session ids S-01 to S-52 (CONV-TIMES-24H)",
+            "content": "Conference agenda, version 2.\n\nDay 1, 9 September: doors at 8am, keynote at 9:15 in the main hall, three tracks from 10:30 to 5:45 PM, lightning talks 4pm-4:45pm in the Harbour room, party from 7 pm on the quay (CHANGE-CAPACITY-1000).\n\nDay 2, 10 September: keynote at 9.15, tracks until 17.00, closing panel at 17.15 in the main hall.\n\nTracks: Web in the main hall, Cloud and Ops in the Harbour room, Data and AI in the Quay room; 30-minute talks with 10-minute changeovers, 30-minute breaks and a 75-minute lunch; the sponsor session is in the Quay room at 12:45.\n\nRevision after review (CONV-TIMES-24H): all times are 24-hour local time and every session has an id. Day 1: doors 08:00, S-01 keynote 09:15-10:00 in the main hall, talks S-02 to S-25 from 10:30 to 17:45, lightning talks S-26 16:00-16:45 in the Harbour room, party from 19:00. Day 2: S-27 keynote 09:15, talks S-28 to S-50 until 17:00, S-51 closing panel 17:15-18:00 in the main hall. Sponsor session S-52 in the Quay room at 12:45 on both days, marked as sponsored."
           }
         }
       ]
@@ -1360,7 +1360,7 @@
           "args": {
             "workstreamId": "promotion",
             "summary": "Website, announcement calendar, newsletter and social",
-            "content": "Promotion, version 1.\n\nWebsite: harbourdev.nl with the speakers page (signed speakers only), the agenda by day and track, tickets, travel and accessibility pages. Announcements: keynotes on 10 April, full line-up on 15 May, agenda on 1 June, last-ticket push in August.\n\nNewsletter every two weeks to 9,400 subscribers; social posts three times a week on LinkedIn, Mastodon and Bluesky with speaker cards.\n\nDraft of the 15 May newsletter, \"Meet the 45 speakers of Harbour.dev 2027\", which includes the nine speakers still in contract talks so the line-up looks complete."
+            "content": "Promotion, version 1.\n\nWebsite: harbourdev.nl with the speakers page (signed speakers only), the agenda by day and track, tickets, travel and accessibility pages. Announcements: keynotes on 10 April, full line-up on 15 May, agenda on 1 June, last-ticket push in August (CONV-SIGNED-CONFIRMATION).\n\nNewsletter every two weeks to 9,400 subscribers; social posts three times a week on LinkedIn, Mastodon and Bluesky with speaker cards.\n\nDraft of the 15 May newsletter, \"Meet the 45 speakers of Harbour.dev 2027\", which includes the nine speakers still in contract talks so the line-up looks complete."
           }
         }
       ]
@@ -1375,14 +1375,14 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "promotion",
-      "reply": "Took the unsigned speakers out of the newsletter.",
+      "reply": "Took the unsigned speakers out of the newsletter (CONV-SIGNED-CONFIRMATION).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "promotion",
-            "summary": "Only signed speakers; follow button for announcements",
-            "content": "Promotion, version 2.\n\nWebsite: harbourdev.nl with the speakers page (signed speakers only), the agenda by day and track, tickets, travel and accessibility pages. Announcements: keynotes on 10 April, full line-up on 15 May, agenda on 1 June, last-ticket push in August.\n\nNewsletter every two weeks to 9,400 subscribers; social posts three times a week on LinkedIn, Mastodon and Bluesky with speaker cards.\n\nDraft of the 15 May newsletter, \"Meet the 45 speakers of Harbour.dev 2027\", which includes the nine speakers still in contract talks so the line-up looks complete.\n\nRevision after review: the 15 May newsletter names only the 39 speakers who have signed (CONV-SIGNED-CONFIRMATION), says \"more speakers to be announced\" and links a follow button; every new signature becomes its own speaker card on social."
+            "summary": "Only signed speakers; follow button for announcements (CONV-SIGNED-CONFIRMATION)",
+            "content": "Promotion, version 2.\n\nWebsite: harbourdev.nl with the speakers page (signed speakers only), the agenda by day and track, tickets, travel and accessibility pages. Announcements: keynotes on 10 April, full line-up on 15 May, agenda on 1 June, last-ticket push in August (CONV-SIGNED-CONFIRMATION).\n\nNewsletter every two weeks to 9,400 subscribers; social posts three times a week on LinkedIn, Mastodon and Bluesky with speaker cards.\n\nDraft of the 15 May newsletter, \"Meet the 45 speakers of Harbour.dev 2027\", which includes the nine speakers still in contract talks so the line-up looks complete.\n\nRevision after review: the 15 May newsletter names only the 39 speakers who have signed (CONV-SIGNED-CONFIRMATION), says \"more speakers to be announced\" and links a follow button; every new signature becomes its own speaker card on social."
           }
         }
       ]
@@ -1507,7 +1507,7 @@
         {
           "name": "sendMessage",
           "args": {
-            "text": "Result (FAIL-AUTO-CAPTIONS): automatic captions got 14% of the words wrong on last year's talks and lagged 6 seconds. We book human captioners.",
+            "text": "Result (FAIL-AUTO-CAPTIONS): automatic captions got 14% of the words wrong on last year's talks and lagged 6 seconds. We book human captioners (CONV-HUMAN-CAPTIONS).",
             "act": "inform"
           }
         }
@@ -1584,21 +1584,21 @@
           {
             "id": "venue",
             "title": "Venue and floor plan",
-            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027 (three step-free talk rooms, the expo area and the floor plan) and find eight step-free workshop rooms for 40 people on 8 September.",
+            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027 (three step-free talk rooms, the expo area and the floor plan) and find eight step-free workshop rooms for 40 people on 8 September (CONV-STEP-FREE-ACCESS, CHANGE-CAPACITY-1000, CHANGE-WORKSHOP-DAY).",
             "owner": "venue",
             "dependsOn": []
           },
           {
             "id": "speakers",
             "title": "Call for papers and speakers",
-            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel and hotels.",
+            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel and hotels (CHANGE-CAPACITY-1000).",
             "owner": "program",
             "dependsOn": []
           },
           {
             "id": "agenda",
             "title": "Conference agenda",
-            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments.",
+            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments (CHANGE-CAPACITY-1000).",
             "owner": "program",
             "dependsOn": [
               "speakers",
@@ -1617,7 +1617,7 @@
           {
             "id": "registration",
             "title": "Ticketing and registration",
-            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and the workshop add-on, and keep the attendee list for badges and catering.",
+            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and the workshop add-on, and keep the attendee list for badges and catering (CHANGE-CAPACITY-1000, CHANGE-WORKSHOP-DAY).",
             "owner": "marketing",
             "dependsOn": []
           },
@@ -1653,7 +1653,7 @@
           {
             "id": "workshops",
             "title": "Workshop day",
-            "brief": "Run eight hands-on workshops of 40 seats on 8 September: choose the trainers and topics, assign the rooms and publish the setup guides.",
+            "brief": "Run eight hands-on workshops of 40 seats on 8 September: choose the trainers and topics, assign the rooms and publish the setup guides (CHANGE-WORKSHOP-DAY).",
             "owner": "program",
             "dependsOn": [
               "venue",
@@ -1690,7 +1690,7 @@
             "id": "c-venue-livestream",
             "from": "venue",
             "to": "livestream",
-            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES)."
+            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES) (CONV-STEP-FREE-ACCESS)."
           },
           {
             "id": "c-workshops-registration",
@@ -1705,7 +1705,7 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "workshops",
-      "reply": "Starting the workshop day: topics first, then trainers.",
+      "reply": "Starting the workshop day: topics first, then trainers (CHANGE-WORKSHOP-DAY).",
       "ops": [
         {
           "name": "getBoardItem",
@@ -1768,8 +1768,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "venue",
-            "summary": "Eight step-free workshop rooms for the workshop day",
-            "content": "Venue and floor plan, version 4.\n\nRecommendation: Kraanhal in Katendrecht, a former harbour crane hall, free from 8 to 11 September 2027 for EUR 68,000 including build-up. The main hall seats 650 theatre style, the mezzanine room seats 160, and the ground floor has 900 m2 for the expo and catering.\n\nFloor plan: entrance and registration desks at the east door, expo booths along both long walls, catering in the middle, the main hall at the north end and the mezzanine room one flight of stairs above the entrance. Cloakroom for 600 coats next to registration.\n\nAlso checked: Lloyd Congress Centre (EUR 92,000, expo on another floor) and Fenixloods (only free on 16 and 17 September).\n\nRevision after review: the second talk room moves to the ground floor, split from the expo by an acoustic wall (EUR 6,500); it seats 180 and is step-free. The mezzanine is no longer used. The quiet room is the old crane office next to the cloakroom, step-free, with dimmed light and 12 seats. All toilets are on the ground floor, two of them accessible.\n\nCapacity for 1,000 attendees (CHANGE-CAPACITY-1000): the main hall seats 720 once the expo moves to the south end, the Harbour room on the ground floor seats 180, and the new Quay room is a heated pavilion on the quay with 150 seats, reached by a level ramp. Each room has a wired 1 Gbit uplink at the stage and its own AV power circuit, as CONTRACT-ROOM-CAPACITIES says. The venue now costs EUR 81,000 plus EUR 14,000 for the pavilion.\n\nWorkshop rooms (CHANGE-WORKSHOP-DAY): Hotel New York across the street has six meeting rooms for 40 with projectors, power at every table and step-free access by lift; the Harbour room and the Quay room at Kraanhal take the other two workshops, because build-up on the 8th only uses the main hall and the expo. The rooms cost EUR 9,600."
+            "summary": "Eight step-free workshop rooms for the workshop day (CONV-STEP-FREE-ACCESS, CHANGE-WORKSHOP-DAY)",
+            "content": "Venue and floor plan, version 4.\n\nRecommendation: Kraanhal in Katendrecht, a former harbour crane hall, free from 8 to 11 September 2027 for EUR 68,000 including build-up. The main hall seats 650 theatre style, the mezzanine room seats 160, and the ground floor has 900 m2 for the expo and catering.\n\nFloor plan: entrance and registration desks at the east door, expo booths along both long walls, catering in the middle, the main hall at the north end and the mezzanine room one flight of stairs above the entrance. Cloakroom for 600 coats next to registration.\n\nAlso checked: Lloyd Congress Centre (EUR 92,000, expo on another floor) and Fenixloods (only free on 16 and 17 September).\n\nRevision after review: the second talk room moves to the ground floor, split from the expo by an acoustic wall (EUR 6,500); it seats 180 and is step-free. The mezzanine is no longer used. The quiet room is the old crane office next to the cloakroom, step-free, with dimmed light and 12 seats. All toilets are on the ground floor, two of them accessible (CONV-STEP-FREE-ACCESS).\n\nCapacity for 1,000 attendees (CHANGE-CAPACITY-1000): the main hall seats 720 once the expo moves to the south end, the Harbour room on the ground floor seats 180, and the new Quay room is a heated pavilion on the quay with 150 seats, reached by a level ramp. Each room has a wired 1 Gbit uplink at the stage and its own AV power circuit, as CONTRACT-ROOM-CAPACITIES says. The venue now costs EUR 81,000 plus EUR 14,000 for the pavilion.\n\nWorkshop rooms (CHANGE-WORKSHOP-DAY): Hotel New York across the street has six meeting rooms for 40 with projectors, power at every table and step-free access by lift; the Harbour room and the Quay room at Kraanhal take the other two workshops, because build-up on the 8th only uses the main hall and the expo. The rooms cost EUR 9,600 (CONV-STEP-FREE-ACCESS)."
           }
         }
       ]
@@ -1784,14 +1784,14 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "registration",
-      "reply": "Added the workshop add-on and named tickets to the ticket shop.",
+      "reply": "Added the workshop add-on and named tickets to the ticket shop (FAIL-OPEN-TICKET-LINK, CHANGE-WORKSHOP-DAY).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "registration",
-            "summary": "Workshop add-on, named tickets, invitation sales",
-            "content": "Ticketing and registration, version 3.\n\nTicket types: early bird EUR 249, regular EUR 349, late EUR 399 and student EUR 99 (student card checked at the door). Prices are shown without VAT. 45 tickets are held back for sponsors and 25 for speakers; 530 go on public sale.\n\nRegistration form: name, email, company, job title, date of birth, home address, phone number, T-shirt size, dietary needs and access needs. Up to 10 tickets per order, paid by card or iDEAL.\n\nSales calendar: early bird from 1 March until 300 are sold or 31 March, regular until 31 July, late until the event.\n\nRevision after review: all prices include 21% VAT: early bird EUR 299, regular EUR 419, late EUR 479, student EUR 119. The form asks only for name, email, company, ticket type, dietary needs and access needs; date of birth, address, phone and T-shirt size are gone. Orders are limited to 4 tickets.\n\nWorkshop add-on (CHANGE-WORKSHOP-DAY): EUR 145 including VAT, sold only with a conference ticket; each of W-1 to W-8 stops at 40 seats and has a waiting list, as CONTRACT-WORKSHOP-SEATS-40 says. Tickets are named and sold by invitation from the waiting list since the resale bots (FAIL-OPEN-TICKET-LINK); a name change is free until 1 September."
+            "summary": "Workshop add-on, named tickets, invitation sales (FAIL-OPEN-TICKET-LINK)",
+            "content": "Ticketing and registration, version 3.\n\nTicket types: early bird EUR 249, regular EUR 349, late EUR 399 and student EUR 99 (student card checked at the door). Prices are shown without VAT. 45 tickets are held back for sponsors and 25 for speakers; 530 go on public sale.\n\nRegistration form: name, email, company, job title, date of birth, home address, phone number, T-shirt size, dietary needs and access needs. Up to 10 tickets per order, paid by card or iDEAL.\n\nSales calendar: early bird from 1 March until 300 are sold or 31 March, regular until 31 July, late until the event.\n\nRevision after review: all prices include 21% VAT: early bird EUR 299, regular EUR 419, late EUR 479, student EUR 119. The form asks only for name, email, company, ticket type, dietary needs and access needs; date of birth, address, phone and T-shirt size are gone. Orders are limited to 4 tickets (CONV-PRICES-INCL-VAT).\n\nWorkshop add-on (CHANGE-WORKSHOP-DAY): EUR 145 including VAT, sold only with a conference ticket; each of W-1 to W-8 stops at 40 seats and has a waiting list, as CONTRACT-WORKSHOP-SEATS-40 says. Tickets are named and sold by invitation from the waiting list since the resale bots (FAIL-OPEN-TICKET-LINK); a name change is free until 1 September."
           }
         }
       ]
@@ -1842,14 +1842,14 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "workshops",
-      "reply": "First version of the workshop day.",
+      "reply": "First version of the workshop day (CHANGE-WORKSHOP-DAY).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "workshops",
             "summary": "Eight workshops, trainers, rooms and lunch",
-            "content": "Workshop day, version 1.\n\nWorkshops on 8 September, 09:30-16:30, 40 seats each: W-1 Kubernetes operators, W-2 Web performance budgets, W-3 Rust for backend services, W-4 Evaluating LLM features, W-5 Accessibility testing with screen readers, W-6 Terraform at scale, W-7 Postgres query tuning, W-8 Design systems in practice. Trainers come from the call for papers and are paid EUR 1,200 each.\n\nRooms: W-1 to W-6 at Hotel New York, W-7 and W-8 in the Harbour room and the Quay room. Lunch is served in both buildings at 12:30."
+            "content": "Workshop day, version 1.\n\nWorkshops on 8 September, 09:30-16:30, 40 seats each: W-1 Kubernetes operators, W-2 Web performance budgets, W-3 Rust for backend services, W-4 Evaluating LLM features, W-5 Accessibility testing with screen readers, W-6 Terraform at scale, W-7 Postgres query tuning, W-8 Design systems in practice. Trainers come from the call for papers and are paid EUR 1,200 each (CHANGE-WORKSHOP-DAY, CONTRACT-WORKSHOP-SEATS-40).\n\nRooms: W-1 to W-6 at Hotel New York, W-7 and W-8 in the Harbour room and the Quay room. Lunch is served in both buildings at 12:30."
           }
         }
       ]
@@ -1867,12 +1867,12 @@
       "kind": "work",
       "botId": "partners",
       "workstreamId": "sponsors",
-      "reply": "Following up with the Gold sponsors. @program two Gold sponsors want to run a workshop; can they take a slot on the workshop day?",
+      "reply": "Following up with the Gold sponsors. @program two Gold sponsors want to run a workshop; can they take a slot on the workshop day (CHANGE-WORKSHOP-DAY)?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@program two Gold sponsors want to run a workshop; can they take a slot on the workshop day?",
+            "text": "@program two Gold sponsors want to run a workshop; can they take a slot on the workshop day (CHANGE-WORKSHOP-DAY)?",
             "act": "query",
             "mentions": [
               "program"
@@ -1903,14 +1903,14 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "workshops",
-      "reply": "Added levels, prerequisites and setup guides.",
+      "reply": "Added levels, prerequisites and setup guides (CONV-SETUP-GUIDE-7D).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "workshops",
             "summary": "Setup guides published 7 days ahead; cloud sandboxes",
-            "content": "Workshop day, version 2.\n\nWorkshops on 8 September, 09:30-16:30, 40 seats each: W-1 Kubernetes operators, W-2 Web performance budgets, W-3 Rust for backend services, W-4 Evaluating LLM features, W-5 Accessibility testing with screen readers, W-6 Terraform at scale, W-7 Postgres query tuning, W-8 Design systems in practice. Trainers come from the call for papers and are paid EUR 1,200 each.\n\nRooms: W-1 to W-6 at Hotel New York, W-7 and W-8 in the Harbour room and the Quay room. Lunch is served in both buildings at 12:30.\n\nRevision after review (CONV-SETUP-GUIDE-7D): each workshop page lists the level, the prerequisites and a setup guide the trainer tested on macOS, Windows and Linux; guides are published by 1 September and trainers answer questions in a shared channel until the day. W-1 and W-6 provide cloud sandboxes, so nothing heavy has to be installed."
+            "content": "Workshop day, version 2.\n\nWorkshops on 8 September, 09:30-16:30, 40 seats each: W-1 Kubernetes operators, W-2 Web performance budgets, W-3 Rust for backend services, W-4 Evaluating LLM features, W-5 Accessibility testing with screen readers, W-6 Terraform at scale, W-7 Postgres query tuning, W-8 Design systems in practice. Trainers come from the call for papers and are paid EUR 1,200 each (CHANGE-WORKSHOP-DAY, CONTRACT-WORKSHOP-SEATS-40).\n\nRooms: W-1 to W-6 at Hotel New York, W-7 and W-8 in the Harbour room and the Quay room. Lunch is served in both buildings at 12:30.\n\nRevision after review (CONV-SETUP-GUIDE-7D): each workshop page lists the level, the prerequisites and a setup guide the trainer tested on macOS, Windows and Linux; guides are published by 1 September and trainers answer questions in a shared channel until the day. W-1 and W-6 provide cloud sandboxes, so nothing heavy has to be installed."
           }
         }
       ]
@@ -1925,12 +1925,12 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "registration",
-      "reply": "Opened the workshop add-on sale for ticket holders.",
+      "reply": "Opened the workshop add-on sale for ticket holders (CHANGE-WORKSHOP-DAY).",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "The workshop add-on is on sale for ticket holders: EUR 145 including VAT, 40 seats per workshop with a waiting list (CONTRACT-WORKSHOP-SEATS-40); setup guides are linked from each workshop page.",
+            "text": "The workshop add-on is on sale for ticket holders: EUR 145 including VAT, 40 seats per workshop with a waiting list (CONTRACT-WORKSHOP-SEATS-40); setup guides are linked from each workshop page (CHANGE-WORKSHOP-DAY, CONV-SETUP-GUIDE-7D).",
             "act": "inform"
           }
         }
@@ -1940,7 +1940,7 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "promotion",
-      "reply": "Update: the workshop pages with level, prerequisites and setup guide links is done and confirmed in writing. Next is the August last-ticket push.",
+      "reply": "Update: the workshop pages with level, prerequisites and setup guide links is done and confirmed in writing. Next is the August last-ticket push (CONV-SETUP-GUIDE-7D).",
       "ops": [
         {
           "name": "updateNotes",
@@ -1954,7 +1954,7 @@
       "kind": "work",
       "botId": "production",
       "workstreamId": "livestream",
-      "reply": "Replaced automatic captions with human captioners.",
+      "reply": "Replaced automatic captions with human captioners (CONV-HUMAN-CAPTIONS, FAIL-AUTO-CAPTIONS).",
       "ops": [
         {
           "name": "submitDeliverable",
@@ -1983,7 +1983,7 @@
           "args": {
             "workstreamId": "logistics",
             "summary": "Catering, badges, cloakroom, volunteers and run sheet",
-            "content": "On-site logistics, version 1.\n\nCatering: Fair Food Rotterdam serves breakfast, two coffee breaks, lunch and the party buffet for 1,000 on both days at EUR 68 per person per day; the menus cover the dietary needs from registration.\n\nBadges: printed on 7 September from the final export (CONTRACT-BADGE-CSV); 10 check-in desks open at 07:30. Cloakroom for 900 coats. 40 volunteers in two shifts.\n\nRun sheet: build-up on 8 September from 07:00, doors on the 9th at 08:00, teardown on the 11th until 14:00; tasks listed by time."
+            "content": "On-site logistics, version 1.\n\nCatering: Fair Food Rotterdam serves breakfast, two coffee breaks, lunch and the party buffet for 1,000 on both days at EUR 68 per person per day; the menus cover the dietary needs from registration.\n\nBadges: printed on 7 September from the final export (CONTRACT-BADGE-CSV); 10 check-in desks open at 07:30. Cloakroom for 900 coats. 40 volunteers in two shifts.\n\nRun sheet: build-up on 8 September from 07:00, doors on the 9th at 08:00, teardown on the 11th until 14:00; tasks listed by time (CHANGE-WORKSHOP-DAY)."
           }
         }
       ]
@@ -2058,21 +2058,21 @@
           {
             "id": "venue",
             "title": "Venue and floor plan",
-            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027 (three step-free talk rooms, the expo area and the floor plan) and find eight step-free workshop rooms for 40 people on 8 September.",
+            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027 (three step-free talk rooms, the expo area and the floor plan) and find eight step-free workshop rooms for 40 people on 8 September (CONV-STEP-FREE-ACCESS, CHANGE-CAPACITY-1000, CHANGE-WORKSHOP-DAY).",
             "owner": "venue",
             "dependsOn": []
           },
           {
             "id": "speakers",
             "title": "Call for papers and speakers",
-            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel and hotels.",
+            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel and hotels (CHANGE-CAPACITY-1000).",
             "owner": "program",
             "dependsOn": []
           },
           {
             "id": "agenda",
             "title": "Conference agenda",
-            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments.",
+            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments (CHANGE-CAPACITY-1000).",
             "owner": "program",
             "dependsOn": [
               "speakers",
@@ -2091,7 +2091,7 @@
           {
             "id": "registration",
             "title": "Ticketing and registration",
-            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and the workshop add-on, and keep the attendee list for badges and catering.",
+            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and the workshop add-on, and keep the attendee list for badges and catering (CHANGE-CAPACITY-1000, CHANGE-WORKSHOP-DAY).",
             "owner": "marketing",
             "dependsOn": []
           },
@@ -2117,7 +2117,7 @@
           {
             "id": "workshops",
             "title": "Workshop day",
-            "brief": "Run eight hands-on workshops of 40 seats on 8 September: choose the trainers and topics, assign the rooms and publish the setup guides.",
+            "brief": "Run eight hands-on workshops of 40 seats on 8 September: choose the trainers and topics, assign the rooms and publish the setup guides (CHANGE-WORKSHOP-DAY).",
             "owner": "program",
             "dependsOn": [
               "venue",
@@ -2127,7 +2127,7 @@
           {
             "id": "recordings",
             "title": "Stage AV and recordings",
-            "brief": "Provide stage sound, projection, lighting and live captions in all three talk rooms, record every talk and publish the edited videos within 7 days.",
+            "brief": "Provide stage sound, projection, lighting and live captions in all three talk rooms, record every talk and publish the edited videos within 7 days (CHANGE-NO-LIVESTREAM).",
             "owner": "production",
             "dependsOn": [
               "venue",
@@ -2170,7 +2170,7 @@
             "id": "c-venue-recordings",
             "from": "venue",
             "to": "recordings",
-            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES)."
+            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES) (CONV-STEP-FREE-ACCESS)."
           },
           {
             "id": "c-recordings-promotion",
@@ -2297,7 +2297,7 @@
           "args": {
             "workstreamId": "recordings",
             "summary": "Stage AV, live captions, two-camera recordings, 7-day publishing",
-            "content": "Stage AV and recordings, version 1.\n\nStage AV in all three rooms: a lectern with HDMI and USB-C, two wireless microphones, projection, a confidence monitor and live captions by human captioners on a screen beside each stage (CONV-HUMAN-CAPTIONS).\n\nRecordings: two cameras and the slide feed per room, recorded locally; editors on site cut each talk overnight with the corrected captions, titled \"S-nn Speaker: Title\", and publish on YouTube within 7 days (CONTRACT-VIDEO-7D), uploading over the wired stage uplink.\n\nCost: EUR 46,500 for AV, recording and editing, plus EUR 11,200 for captioning."
+            "content": "Stage AV and recordings, version 1.\n\nStage AV in all three rooms: a lectern with HDMI and USB-C, two wireless microphones, projection, a confidence monitor and live captions by human captioners on a screen beside each stage (CONV-HUMAN-CAPTIONS).\n\nRecordings: two cameras and the slide feed per room, recorded locally; editors on site cut each talk overnight with the corrected captions, titled \"S-nn Speaker: Title\", and publish on YouTube within 7 days (CONTRACT-VIDEO-7D), uploading over the wired stage uplink (FAIL-VENUE-WIFI-STREAM).\n\nCost: EUR 46,500 for AV, recording and editing, plus EUR 11,200 for captioning."
           }
         }
       ]
@@ -2372,14 +2372,14 @@
       "kind": "work",
       "botId": "production",
       "workstreamId": "recordings",
-      "reply": "Added the recording release check.",
+      "reply": "Added the recording release check (CONV-RECORDING-RELEASE).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "recordings",
             "summary": "Release check before every talk",
-            "content": "Stage AV and recordings, version 2.\n\nStage AV in all three rooms: a lectern with HDMI and USB-C, two wireless microphones, projection, a confidence monitor and live captions by human captioners on a screen beside each stage (CONV-HUMAN-CAPTIONS).\n\nRecordings: two cameras and the slide feed per room, recorded locally; editors on site cut each talk overnight with the corrected captions, titled \"S-nn Speaker: Title\", and publish on YouTube within 7 days (CONTRACT-VIDEO-7D), uploading over the wired stage uplink.\n\nCost: EUR 46,500 for AV, recording and editing, plus EUR 11,200 for captioning.\n\nRevision after review (CONV-RECORDING-RELEASE): the stage manager checks the signed-release list before each talk; if a speaker has not signed, the cameras stay off and only the live captions run. Today 43 of 45 speakers have signed; the other two will not be recorded."
+            "content": "Stage AV and recordings, version 2.\n\nStage AV in all three rooms: a lectern with HDMI and USB-C, two wireless microphones, projection, a confidence monitor and live captions by human captioners on a screen beside each stage (CONV-HUMAN-CAPTIONS).\n\nRecordings: two cameras and the slide feed per room, recorded locally; editors on site cut each talk overnight with the corrected captions, titled \"S-nn Speaker: Title\", and publish on YouTube within 7 days (CONTRACT-VIDEO-7D), uploading over the wired stage uplink (FAIL-VENUE-WIFI-STREAM).\n\nCost: EUR 46,500 for AV, recording and editing, plus EUR 11,200 for captioning.\n\nRevision after review (CONV-RECORDING-RELEASE): the stage manager checks the signed-release list before each talk; if a speaker has not signed, the cameras stay off and only the live captions run. Today 43 of 45 speakers have signed; the other two will not be recorded."
           }
         }
       ]
@@ -2408,14 +2408,14 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "logistics",
-      "reply": "Added owners and fallbacks to the run sheet.",
+      "reply": "Added owners and fallbacks to the run sheet (CONV-RUN-SHEET-OWNER).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "logistics",
-            "summary": "Run sheet with an owner and a fallback on every line",
-            "content": "On-site logistics, version 2.\n\nCatering: Fair Food Rotterdam serves breakfast, two coffee breaks, lunch and the party buffet for 1,000 on both days at EUR 68 per person per day; the menus cover the dietary needs from registration.\n\nBadges: printed on 7 September from the final export (CONTRACT-BADGE-CSV); 10 check-in desks open at 07:30. Cloakroom for 900 coats. 40 volunteers in two shifts.\n\nRun sheet: build-up on 8 September from 07:00, doors on the 9th at 08:00, teardown on the 11th until 14:00; tasks listed by time.\n\nRevision after review (CONV-RUN-SHEET-OWNER): every run-sheet line names an owner and a fallback with a phone number, in 24-hour time. For example: 07:00 venue doors, owner Ruud (fallback Ilse); 07:30 check-in desks, owner Ilse (fallback Kees); 08:45 captioners at the stages, owner Sanne (fallback Joris). The stream crew is off the sheet since the livestream was dropped (CHANGE-NO-LIVESTREAM), and the recording crew is on it."
+            "summary": "Run sheet with an owner and a fallback on every line (CONV-RUN-SHEET-OWNER)",
+            "content": "On-site logistics, version 2.\n\nCatering: Fair Food Rotterdam serves breakfast, two coffee breaks, lunch and the party buffet for 1,000 on both days at EUR 68 per person per day; the menus cover the dietary needs from registration.\n\nBadges: printed on 7 September from the final export (CONTRACT-BADGE-CSV); 10 check-in desks open at 07:30. Cloakroom for 900 coats. 40 volunteers in two shifts.\n\nRun sheet: build-up on 8 September from 07:00, doors on the 9th at 08:00, teardown on the 11th until 14:00; tasks listed by time (CHANGE-WORKSHOP-DAY).\n\nRevision after review (CONV-RUN-SHEET-OWNER): every run-sheet line names an owner and a fallback with a phone number, in 24-hour time. For example: 07:00 venue doors, owner Ruud (fallback Ilse); 07:30 check-in desks, owner Ilse (fallback Kees); 08:45 captioners at the stages, owner Sanne (fallback Joris). The stream crew is off the sheet since the livestream was dropped (CHANGE-NO-LIVESTREAM), and the recording crew is on it (CONV-TIMES-24H)."
           }
         }
       ]
@@ -2434,7 +2434,7 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "registration",
-      "reply": "Update: the third waiting-list invitation round (120 named tickets) is done and confirmed in writing. Next is the switch to the late price on 1 August.",
+      "reply": "Update: the third waiting-list invitation round (120 named tickets) is done and confirmed in writing. Next is the switch to the late price on 1 August (FAIL-OPEN-TICKET-LINK).",
       "ops": [
         {
           "name": "updateNotes",
@@ -2503,12 +2503,12 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "workshops",
-      "reply": "Status: the agenda is final with 52 sessions; the workshops are published with setup guides; 43 of 45 recording releases are signed and travel is half booked.",
+      "reply": "Status: the agenda is final with 52 sessions; the workshops are published with setup guides; 43 of 45 recording releases are signed and travel is half booked (CONV-SETUP-GUIDE-7D, CONV-RECORDING-RELEASE).",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "Status for the week: the agenda is final with 52 sessions; the workshops are published with setup guides; 43 of 45 recording releases are signed and travel is half booked.",
+            "text": "Status for the week: the agenda is final with 52 sessions; the workshops are published with setup guides; 43 of 45 recording releases are signed and travel is half booked (CONV-SETUP-GUIDE-7D, CONV-RECORDING-RELEASE).",
             "act": "inform"
           }
         }
@@ -2573,21 +2573,21 @@
           {
             "id": "venue",
             "title": "Venue and floor plan",
-            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027 (three step-free talk rooms, the expo area and the floor plan) and find eight step-free workshop rooms for 40 people on 8 September.",
+            "brief": "Host 1,000 attendees at Kraanhal on 9 and 10 September 2027 (three step-free talk rooms, the expo area and the floor plan) and find eight step-free workshop rooms for 40 people on 8 September (CONV-STEP-FREE-ACCESS, CHANGE-CAPACITY-1000, CHANGE-WORKSHOP-DAY).",
             "owner": "venue",
             "dependsOn": []
           },
           {
             "id": "speakers",
             "title": "Call for papers and speakers",
-            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel (by train for trips under 700 km) and hotels.",
+            "brief": "Run the call for papers, select about 45 talks for three tracks with the programme committee, confirm the speakers and book their travel (by train for trips under 700 km) and hotels (CHANGE-CAPACITY-1000, CHANGE-GREEN-EVENT).",
             "owner": "program",
             "dependsOn": []
           },
           {
             "id": "agenda",
             "title": "Conference agenda",
-            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments.",
+            "brief": "Turn the selected talks into a three-track agenda for both days, with keynotes, breaks and room assignments (CHANGE-CAPACITY-1000).",
             "owner": "program",
             "dependsOn": [
               "speakers",
@@ -2606,7 +2606,7 @@
           {
             "id": "registration",
             "title": "Ticketing and registration",
-            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and the workshop add-on, and keep the attendee list for badges and catering.",
+            "brief": "Set up the ticket types, prices and registration form, run the ticket sales for 1,000 attendees and the workshop add-on, and keep the attendee list for badges and catering (CHANGE-CAPACITY-1000, CHANGE-WORKSHOP-DAY).",
             "owner": "marketing",
             "dependsOn": []
           },
@@ -2622,7 +2622,7 @@
           {
             "id": "logistics",
             "title": "On-site logistics",
-            "brief": "Arrange vegetarian-by-default catering, reusable badges, signage, the cloakroom, volunteers and the run sheet for all three days, with no printed programme or plastic swag.",
+            "brief": "Arrange vegetarian-by-default catering, reusable badges, signage, the cloakroom, volunteers and the run sheet for all three days, with no printed programme or plastic swag (CHANGE-GREEN-EVENT).",
             "owner": "venue",
             "dependsOn": [
               "venue",
@@ -2632,7 +2632,7 @@
           {
             "id": "workshops",
             "title": "Workshop day",
-            "brief": "Run eight hands-on workshops of 40 seats on 8 September: choose the trainers and topics, assign the rooms and publish the setup guides.",
+            "brief": "Run eight hands-on workshops of 40 seats on 8 September: choose the trainers and topics, assign the rooms and publish the setup guides (CHANGE-WORKSHOP-DAY).",
             "owner": "program",
             "dependsOn": [
               "venue",
@@ -2642,7 +2642,7 @@
           {
             "id": "recordings",
             "title": "Stage AV and recordings",
-            "brief": "Provide stage sound, projection, lighting and live captions in all three talk rooms, record every talk and publish the edited videos within 7 days.",
+            "brief": "Provide stage sound, projection, lighting and live captions in all three talk rooms, record every talk and publish the edited videos within 7 days (CHANGE-NO-LIVESTREAM).",
             "owner": "production",
             "dependsOn": [
               "venue",
@@ -2652,7 +2652,7 @@
           {
             "id": "sustainability",
             "title": "Green event report",
-            "brief": "Meet the city of Rotterdam green event rules and write the report for the grant: travel, catering, waste and energy, with numbers against a usual event of this size.",
+            "brief": "Meet the city of Rotterdam green event rules and write the report for the grant: travel, catering, waste and energy, with numbers against a usual event of this size (CHANGE-GREEN-EVENT).",
             "owner": "venue",
             "dependsOn": [
               "logistics"
@@ -2694,7 +2694,7 @@
             "id": "c-venue-recordings",
             "from": "venue",
             "to": "recordings",
-            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES)."
+            "spec": "Three talk rooms: Main hall 720 seats, Harbour room 180 seats, Quay room 150 seats, all step-free; each has a wired 1 Gbit uplink at the stage and its own power circuit for AV (CONTRACT-ROOM-CAPACITIES) (CONV-STEP-FREE-ACCESS)."
           },
           {
             "id": "c-recordings-promotion",
@@ -2706,7 +2706,7 @@
             "id": "c-speakers-sustainability",
             "from": "speakers",
             "to": "sustainability",
-            "spec": "Per speaker and trainer: origin city, travel mode, distance in km and the booking reference; trips under 700 km are by train unless the speaker has a documented reason (CONTRACT-TRAVEL-LOG)."
+            "spec": "Per speaker and trainer: origin city, travel mode, distance in km and the booking reference; trips under 700 km are by train unless the speaker has a documented reason (CONTRACT-TRAVEL-LOG) (CHANGE-GREEN-EVENT)."
           }
         ]
       }
@@ -2751,14 +2751,14 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "speakers",
-      "reply": "Rebooked speaker travel under the green event rules.",
+      "reply": "Rebooked speaker travel under the green event rules (CHANGE-GREEN-EVENT).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "speakers",
-            "summary": "Trains for trips under 700 km; travel log for the report",
-            "content": "Call for papers and speakers, version 3.\n\nCall for papers: 412 proposals from 31 countries, reviewed blind by five committee members. Selected 38 talks and 7 lightning talks for three tracks; 15 talks are on the waiting list.\n\nSpeakers: 33 have signed the speaker agreement and 12 have accepted by email but not signed yet. Keynotes: Amira Haddad on browser engines on day 1 and Tomasz Wrona on platform engineering on day 2, both signed.\n\nHand-over: the full list of 45 speakers goes to marketing today so the line-up can be published next week.\n\nTravel: speakers from abroad get economy travel and two nights at Hotel New York, booked by us.\n\nRevision after review (CONV-SIGNED-CONFIRMATION): marketing gets the 36 signed speakers now; the other 9 are handed over one by one as their agreements are signed. Two unsigned speakers have since withdrawn and were replaced from the waiting list.\n\nTravel (CHANGE-GREEN-EVENT): 19 speakers and trainers with trips under 700 km (London, Paris, Berlin, Brussels, Copenhagen, Zurich and others) are rebooked from flights to trains; two keep a flight for documented reasons (a wheelchair transfer that rail could not guarantee, and a connection from Singapore). The travel log per speaker follows CONTRACT-TRAVEL-LOG: origin, mode, km and booking reference, both directions."
+            "summary": "Trains for trips under 700 km; travel log for the report (CHANGE-GREEN-EVENT, CONTRACT-TRAVEL-LOG)",
+            "content": "Call for papers and speakers, version 3.\n\nCall for papers: 412 proposals from 31 countries, reviewed blind by five committee members. Selected 38 talks and 7 lightning talks for three tracks; 15 talks are on the waiting list (CHANGE-CAPACITY-1000).\n\nSpeakers: 33 have signed the speaker agreement and 12 have accepted by email but not signed yet. Keynotes: Amira Haddad on browser engines on day 1 and Tomasz Wrona on platform engineering on day 2, both signed.\n\nHand-over: the full list of 45 speakers goes to marketing today so the line-up can be published next week.\n\nTravel: speakers from abroad get economy travel and two nights at Hotel New York, booked by us.\n\nRevision after review (CONV-SIGNED-CONFIRMATION): marketing gets the 36 signed speakers now; the other 9 are handed over one by one as their agreements are signed. Two unsigned speakers have since withdrawn and were replaced from the waiting list.\n\nTravel (CHANGE-GREEN-EVENT): 19 speakers and trainers with trips under 700 km (London, Paris, Berlin, Brussels, Copenhagen, Zurich and others) are rebooked from flights to trains; two keep a flight for documented reasons (a wheelchair transfer that rail could not guarantee, and a connection from Singapore). The travel log per speaker follows CONTRACT-TRAVEL-LOG: origin, mode, km and booking reference, both directions."
           }
         }
       ]
@@ -2773,7 +2773,7 @@
       "kind": "work",
       "botId": "partners",
       "workstreamId": "sponsors",
-      "reply": "Told the sponsors about the green event rules.",
+      "reply": "Told the sponsors about the green event rules (CHANGE-GREEN-EVENT).",
       "ops": [
         {
           "name": "sendMessage",
@@ -2830,14 +2830,14 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "logistics",
-      "reply": "Logistics changed for the green event rules.",
+      "reply": "Logistics changed for the green event rules (CHANGE-GREEN-EVENT).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "logistics",
-            "summary": "Vegetarian by default, reusable badges, no print",
-            "content": "On-site logistics, version 3.\n\nCatering: Fair Food Rotterdam serves breakfast, two coffee breaks, lunch and the party buffet for 1,000 on both days at EUR 68 per person per day; the menus cover the dietary needs from registration.\n\nBadges: printed on 7 September from the final export (CONTRACT-BADGE-CSV); 10 check-in desks open at 07:30. Cloakroom for 900 coats. 40 volunteers in two shifts.\n\nRun sheet: build-up on 8 September from 07:00, doors on the 9th at 08:00, teardown on the 11th until 14:00; tasks listed by time.\n\nRevision after review (CONV-RUN-SHEET-OWNER): every run-sheet line names an owner and a fallback with a phone number, in 24-hour time. For example: 07:00 venue doors, owner Ruud (fallback Ilse); 07:30 check-in desks, owner Ilse (fallback Kees); 08:45 captioners at the stages, owner Sanne (fallback Joris). The stream crew is off the sheet since the livestream was dropped (CHANGE-NO-LIVESTREAM), and the recording crew is on it.\n\nGreen event rules (CHANGE-GREEN-EVENT): catering is vegetarian by default; meat only for the 96 attendees who asked for it. Badges are reusable sleeves with a printed insert, collected at the exit in return for a coffee voucher; lanyards are reused from last year. There is no printed programme: the agenda is on the website and on screens at every room. Water stations replace bottles."
+            "summary": "Vegetarian by default, reusable badges, no print (CHANGE-GREEN-EVENT)",
+            "content": "On-site logistics, version 3.\n\nCatering: Fair Food Rotterdam serves breakfast, two coffee breaks, lunch and the party buffet for 1,000 on both days at EUR 68 per person per day; the menus cover the dietary needs from registration.\n\nBadges: printed on 7 September from the final export (CONTRACT-BADGE-CSV); 10 check-in desks open at 07:30. Cloakroom for 900 coats. 40 volunteers in two shifts.\n\nRun sheet: build-up on 8 September from 07:00, doors on the 9th at 08:00, teardown on the 11th until 14:00; tasks listed by time (CHANGE-WORKSHOP-DAY).\n\nRevision after review (CONV-RUN-SHEET-OWNER): every run-sheet line names an owner and a fallback with a phone number, in 24-hour time. For example: 07:00 venue doors, owner Ruud (fallback Ilse); 07:30 check-in desks, owner Ilse (fallback Kees); 08:45 captioners at the stages, owner Sanne (fallback Joris). The stream crew is off the sheet since the livestream was dropped (CHANGE-NO-LIVESTREAM), and the recording crew is on it (CONV-TIMES-24H).\n\nGreen event rules (CHANGE-GREEN-EVENT): catering is vegetarian by default; meat only for the 96 attendees who asked for it. Badges are reusable sleeves with a printed insert, collected at the exit in return for a coffee voucher; lanyards are reused from last year. There is no printed programme: the agenda is on the website and on screens at every room. Water stations replace bottles."
           }
         }
       ]
@@ -2852,14 +2852,14 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "promotion",
-      "reply": "Updated the website for the green event and the recordings.",
+      "reply": "Updated the website for the green event and the recordings (CHANGE-GREEN-EVENT).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "promotion",
-            "summary": "Travel by train page, no printed programme, video page",
-            "content": "Promotion, version 3.\n\nWebsite: harbourdev.nl with the speakers page (signed speakers only), the agenda by day and track, tickets, travel and accessibility pages. Announcements: keynotes on 10 April, full line-up on 15 May, agenda on 1 June, last-ticket push in August.\n\nNewsletter every two weeks to 9,400 subscribers; social posts three times a week on LinkedIn, Mastodon and Bluesky with speaker cards.\n\nDraft of the 15 May newsletter, \"Meet the 45 speakers of Harbour.dev 2027\", which includes the nine speakers still in contract talks so the line-up looks complete.\n\nRevision after review: the 15 May newsletter names only the 39 speakers who have signed (CONV-SIGNED-CONFIRMATION), says \"more speakers to be announced\" and links a follow button; every new signature becomes its own speaker card on social.\n\nGreen event (CHANGE-GREEN-EVENT): a travel page with train connections from 12 cities and the NS international discount code; the programme is online only, with a printable PDF for those who need one. Videos: a page per talk links its YouTube video once production sends the links, within 7 days of the talk as CONTRACT-VIDEO-7D says."
+            "summary": "Travel by train page, no printed programme, video page (CHANGE-GREEN-EVENT)",
+            "content": "Promotion, version 3.\n\nWebsite: harbourdev.nl with the speakers page (signed speakers only), the agenda by day and track, tickets, travel and accessibility pages. Announcements: keynotes on 10 April, full line-up on 15 May, agenda on 1 June, last-ticket push in August (CONV-SIGNED-CONFIRMATION).\n\nNewsletter every two weeks to 9,400 subscribers; social posts three times a week on LinkedIn, Mastodon and Bluesky with speaker cards.\n\nDraft of the 15 May newsletter, \"Meet the 45 speakers of Harbour.dev 2027\", which includes the nine speakers still in contract talks so the line-up looks complete.\n\nRevision after review: the 15 May newsletter names only the 39 speakers who have signed (CONV-SIGNED-CONFIRMATION), says \"more speakers to be announced\" and links a follow button; every new signature becomes its own speaker card on social.\n\nGreen event (CHANGE-GREEN-EVENT): a travel page with train connections from 12 cities and the NS international discount code; the programme is online only, with a printable PDF for those who need one. Videos: a page per talk links its YouTube video once production sends the links, within 7 days of the talk as CONTRACT-VIDEO-7D says."
           }
         }
       ]
@@ -2888,7 +2888,7 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "sustainability",
-      "reply": "Starting the green event report from the travel log and the catering numbers.",
+      "reply": "Starting the green event report from the travel log and the catering numbers (CHANGE-GREEN-EVENT, CONTRACT-TRAVEL-LOG).",
       "ops": [
         {
           "name": "getBoardItem",
@@ -2909,14 +2909,14 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "sustainability",
-      "reply": "First version of the green event report.",
+      "reply": "First version of the green event report (CHANGE-GREEN-EVENT).",
       "ops": [
         {
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "sustainability",
             "summary": "Travel, catering, waste and energy totals",
-            "content": "Green event report, version 1.\n\nTravel: speakers and trainers travel 61,400 km, 71% by train; 2 flights within Europe. Attendees: 58% from the Netherlands, survey on travel mode after the event.\n\nCatering: 5,900 meals, 94% vegetarian. Waste: water stations instead of bottles, reusable badges and lanyards, no printed programme. Energy: Kraanhal runs on green power; the Quay room pavilion uses a battery unit instead of a diesel generator."
+            "content": "Green event report, version 1.\n\nTravel: speakers and trainers travel 61,400 km, 71% by train; 2 flights within Europe. Attendees: 58% from the Netherlands, survey on travel mode after the event.\n\nCatering: 5,900 meals, 94% vegetarian. Waste: water stations instead of bottles, reusable badges and lanyards, no printed programme. Energy: Kraanhal runs on green power; the Quay room pavilion uses a battery unit instead of a diesel generator (CHANGE-GREEN-EVENT)."
           }
         }
       ]
@@ -2974,7 +2974,7 @@
           "args": {
             "workstreamId": "sustainability",
             "summary": "Savings against a usual event of 1,000 people",
-            "content": "Green event report, version 2.\n\nTravel: speakers and trainers travel 61,400 km, 71% by train; 2 flights within Europe. Attendees: 58% from the Netherlands, survey on travel mode after the event.\n\nCatering: 5,900 meals, 94% vegetarian. Waste: water stations instead of bottles, reusable badges and lanyards, no printed programme. Energy: Kraanhal runs on green power; the Quay room pavilion uses a battery unit instead of a diesel generator.\n\nBaseline: the same event run the usual way (all speakers flying, mixed menu, printed programme, bottled water, diesel generator). Savings: speaker travel 18.4 t CO2e lower, catering 9.1 t lower, 1,000 printed programmes and about 6,000 bottles avoided, and 1,300 litres of diesel avoided. AV draws about 2,900 kWh, 700 kWh less than with the stream. Numbers are checked again with the final travel log (CONTRACT-TRAVEL-LOG) after the event."
+            "content": "Green event report, version 2.\n\nTravel: speakers and trainers travel 61,400 km, 71% by train; 2 flights within Europe. Attendees: 58% from the Netherlands, survey on travel mode after the event.\n\nCatering: 5,900 meals, 94% vegetarian. Waste: water stations instead of bottles, reusable badges and lanyards, no printed programme. Energy: Kraanhal runs on green power; the Quay room pavilion uses a battery unit instead of a diesel generator (CHANGE-GREEN-EVENT).\n\nBaseline: the same event run the usual way (all speakers flying, mixed menu, printed programme, bottled water, diesel generator). Savings: speaker travel 18.4 t CO2e lower, catering 9.1 t lower, 1,000 printed programmes and about 6,000 bottles avoided, and 1,300 litres of diesel avoided. AV draws about 2,900 kWh, 700 kWh less than with the stream. Numbers are checked again with the final travel log (CONTRACT-TRAVEL-LOG) after the event (CHANGE-GREEN-EVENT)."
           }
         }
       ]
@@ -2989,7 +2989,7 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "workshops",
-      "reply": "Closed out the trainer briefing for the workshop day today; the room signs for Hotel New York comes next.",
+      "reply": "Closed out the trainer briefing for the workshop day today; the room signs for Hotel New York comes next (CHANGE-WORKSHOP-DAY).",
       "ops": [
         {
           "name": "updateNotes",
@@ -3067,8 +3067,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "agenda",
-            "summary": "S-19 replaced, S-33 and S-34 swapped, workshop day added",
-            "content": "Conference agenda, version 3.\n\nDay 1, 9 September: doors at 8am, keynote at 9:15 in the main hall, three tracks from 10:30 to 5:45 PM, lightning talks 4pm-4:45pm in the Harbour room, party from 7 pm on the quay.\n\nDay 2, 10 September: keynote at 9.15, tracks until 17.00, closing panel at 17.15 in the main hall.\n\nTracks: Web in the main hall, Cloud and Ops in the Harbour room, Data and AI in the Quay room; 30-minute talks with 10-minute changeovers, 30-minute breaks and a 75-minute lunch; the sponsor session is in the Quay room at 12:45.\n\nRevision after review (CONV-TIMES-24H): all times are 24-hour local time and every session has an id. Day 1: doors 08:00, S-01 keynote 09:15-10:00 in the main hall, talks S-02 to S-25 from 10:30 to 17:45, lightning talks S-26 16:00-16:45 in the Harbour room, party from 19:00. Day 2: S-27 keynote 09:15, talks S-28 to S-50 until 17:00, S-51 closing panel 17:15-18:00 in the main hall. Sponsor session S-52 in the Quay room at 12:45 on both days, marked as sponsored.\n\nFinal changes: S-19 is now \"WebGPU in production\" from the waiting list, 14:10-14:40 in the main hall; S-33 moves to the Harbour room and S-34 to the main hall on day 2. The workshop day W-1 to W-8 on 8 September is listed before day 1, 09:30-16:30. Every talk shows a captions icon; the two talks without a recording release show \"not recorded\"."
+            "summary": "S-19 replaced, S-33 and S-34 swapped, workshop day added (CHANGE-WORKSHOP-DAY)",
+            "content": "Conference agenda, version 3.\n\nDay 1, 9 September: doors at 8am, keynote at 9:15 in the main hall, three tracks from 10:30 to 5:45 PM, lightning talks 4pm-4:45pm in the Harbour room, party from 7 pm on the quay (CHANGE-CAPACITY-1000).\n\nDay 2, 10 September: keynote at 9.15, tracks until 17.00, closing panel at 17.15 in the main hall.\n\nTracks: Web in the main hall, Cloud and Ops in the Harbour room, Data and AI in the Quay room; 30-minute talks with 10-minute changeovers, 30-minute breaks and a 75-minute lunch; the sponsor session is in the Quay room at 12:45.\n\nRevision after review (CONV-TIMES-24H): all times are 24-hour local time and every session has an id. Day 1: doors 08:00, S-01 keynote 09:15-10:00 in the main hall, talks S-02 to S-25 from 10:30 to 17:45, lightning talks S-26 16:00-16:45 in the Harbour room, party from 19:00. Day 2: S-27 keynote 09:15, talks S-28 to S-50 until 17:00, S-51 closing panel 17:15-18:00 in the main hall. Sponsor session S-52 in the Quay room at 12:45 on both days, marked as sponsored.\n\nFinal changes: S-19 is now \"WebGPU in production\" from the waiting list, 14:10-14:40 in the main hall; S-33 moves to the Harbour room and S-34 to the main hall on day 2. The workshop day W-1 to W-8 on 8 September is listed before day 1, 09:30-16:30. Every talk shows a captions icon; the two talks without a recording release show \"not recorded\" (CHANGE-WORKSHOP-DAY, CONV-RECORDING-RELEASE)."
           }
         }
       ]
@@ -3090,7 +3090,7 @@
           "args": {
             "workstreamId": "recordings",
             "summary": "Crew per room, captions glossary, publishing schedule",
-            "content": "Stage AV and recordings, version 3.\n\nStage AV in all three rooms: a lectern with HDMI and USB-C, two wireless microphones, projection, a confidence monitor and live captions by human captioners on a screen beside each stage (CONV-HUMAN-CAPTIONS).\n\nRecordings: two cameras and the slide feed per room, recorded locally; editors on site cut each talk overnight with the corrected captions, titled \"S-nn Speaker: Title\", and publish on YouTube within 7 days (CONTRACT-VIDEO-7D), uploading over the wired stage uplink.\n\nCost: EUR 46,500 for AV, recording and editing, plus EUR 11,200 for captioning.\n\nRevision after review (CONV-RECORDING-RELEASE): the stage manager checks the signed-release list before each talk; if a speaker has not signed, the cameras stay off and only the live captions run. Today 43 of 45 speakers have signed; the other two will not be recorded.\n\nFinal plan: each room has a stage manager who owns the release check, a camera operator and a captioner, as the run sheet names them. Glossaries from 41 of 45 speakers are loaded for the captioners. Publishing: day 1 talks go online by 14 September and day 2 talks by 15 September, with the links sent to marketing in a CSV the same day (CONTRACT-VIDEO-7D). The pavilion runs on a battery unit, 2,900 kWh in total."
+            "content": "Stage AV and recordings, version 3.\n\nStage AV in all three rooms: a lectern with HDMI and USB-C, two wireless microphones, projection, a confidence monitor and live captions by human captioners on a screen beside each stage (CONV-HUMAN-CAPTIONS).\n\nRecordings: two cameras and the slide feed per room, recorded locally; editors on site cut each talk overnight with the corrected captions, titled \"S-nn Speaker: Title\", and publish on YouTube within 7 days (CONTRACT-VIDEO-7D), uploading over the wired stage uplink (FAIL-VENUE-WIFI-STREAM).\n\nCost: EUR 46,500 for AV, recording and editing, plus EUR 11,200 for captioning.\n\nRevision after review (CONV-RECORDING-RELEASE): the stage manager checks the signed-release list before each talk; if a speaker has not signed, the cameras stay off and only the live captions run. Today 43 of 45 speakers have signed; the other two will not be recorded.\n\nFinal plan: each room has a stage manager who owns the release check, a camera operator and a captioner, as the run sheet names them. Glossaries from 41 of 45 speakers are loaded for the captioners. Publishing: day 1 talks go online by 14 September and day 2 talks by 15 September, with the links sent to marketing in a CSV the same day (CONTRACT-VIDEO-7D). The pavilion runs on a battery unit, 2,900 kWh in total (CONV-RECORDING-RELEASE)."
           }
         }
       ]
@@ -3111,8 +3111,8 @@
           "name": "submitDeliverable",
           "args": {
             "workstreamId": "registration",
-            "summary": "Sold out: 1,000 tickets, 320 workshop seats, final export",
-            "content": "Ticketing and registration, version 4.\n\nTicket types: early bird EUR 249, regular EUR 349, late EUR 399 and student EUR 99 (student card checked at the door). Prices are shown without VAT. 45 tickets are held back for sponsors and 25 for speakers; 530 go on public sale.\n\nRegistration form: name, email, company, job title, date of birth, home address, phone number, T-shirt size, dietary needs and access needs. Up to 10 tickets per order, paid by card or iDEAL.\n\nSales calendar: early bird from 1 March until 300 are sold or 31 March, regular until 31 July, late until the event.\n\nRevision after review: all prices include 21% VAT: early bird EUR 299, regular EUR 419, late EUR 479, student EUR 119. The form asks only for name, email, company, ticket type, dietary needs and access needs; date of birth, address, phone and T-shirt size are gone. Orders are limited to 4 tickets.\n\nWorkshop add-on (CHANGE-WORKSHOP-DAY): EUR 145 including VAT, sold only with a conference ticket; each of W-1 to W-8 stops at 40 seats and has a waiting list, as CONTRACT-WORKSHOP-SEATS-40 says. Tickets are named and sold by invitation from the waiting list since the resale bots (FAIL-OPEN-TICKET-LINK); a name change is free until 1 September.\n\nSold out: 1,000 conference tickets (930 paid, 45 sponsor, 25 speaker) and all 320 workshop seats, with 214 on the workshop waiting lists. 312 attendees opted in to share their details with the Gold sponsors. The final badge export goes to venue on 6 September at 12:00 in the agreed format (CONTRACT-BADGE-CSV), including the meat-option answers."
+            "summary": "Sold out: 1,000 tickets, 320 workshop seats, final export (CONTRACT-BADGE-CSV)",
+            "content": "Ticketing and registration, version 4.\n\nTicket types: early bird EUR 249, regular EUR 349, late EUR 399 and student EUR 99 (student card checked at the door). Prices are shown without VAT. 45 tickets are held back for sponsors and 25 for speakers; 530 go on public sale.\n\nRegistration form: name, email, company, job title, date of birth, home address, phone number, T-shirt size, dietary needs and access needs. Up to 10 tickets per order, paid by card or iDEAL.\n\nSales calendar: early bird from 1 March until 300 are sold or 31 March, regular until 31 July, late until the event.\n\nRevision after review: all prices include 21% VAT: early bird EUR 299, regular EUR 419, late EUR 479, student EUR 119. The form asks only for name, email, company, ticket type, dietary needs and access needs; date of birth, address, phone and T-shirt size are gone. Orders are limited to 4 tickets (CONV-PRICES-INCL-VAT).\n\nWorkshop add-on (CHANGE-WORKSHOP-DAY): EUR 145 including VAT, sold only with a conference ticket; each of W-1 to W-8 stops at 40 seats and has a waiting list, as CONTRACT-WORKSHOP-SEATS-40 says. Tickets are named and sold by invitation from the waiting list since the resale bots (FAIL-OPEN-TICKET-LINK); a name change is free until 1 September.\n\nSold out: 1,000 conference tickets (930 paid, 45 sponsor, 25 speaker) and all 320 workshop seats, with 214 on the workshop waiting lists. 312 attendees opted in to share their details with the Gold sponsors. The final badge export goes to venue on 6 September at 12:00 in the agreed format (CONTRACT-BADGE-CSV), including the meat-option answers (CONV-SPONSOR-OPT-IN-ONLY)."
           }
         }
       ]
@@ -3127,12 +3127,12 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "logistics",
-      "reply": "Briefed the volunteers on the run sheet and the reusable badges.",
+      "reply": "Briefed the volunteers on the run sheet and the reusable badges (CHANGE-GREEN-EVENT).",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "Volunteer briefing done: 40 volunteers, two shifts, every run-sheet line has an owner and a fallback (CONV-RUN-SHEET-OWNER); badge sleeves are collected at the exit for the green event report.",
+            "text": "Volunteer briefing done: 40 volunteers, two shifts, every run-sheet line has an owner and a fallback (CONV-RUN-SHEET-OWNER); badge sleeves are collected at the exit for the green event report (CHANGE-GREEN-EVENT).",
             "act": "inform"
           }
         }

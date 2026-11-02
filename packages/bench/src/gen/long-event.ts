@@ -7,7 +7,7 @@
 // keeps the earlier text and adds what changed.
 import type { PlanInput } from '@context-continue/core';
 import type { Scenario } from '../types.js';
-import { LongScenarioBuilder, op, rotate } from './long.js';
+import { LongScenarioBuilder, op, rotate, type Restatements } from './long.js';
 
 type Ws = PlanInput['workstreams'][number];
 type Contract = PlanInput['contracts'][number];
@@ -111,6 +111,32 @@ const EMPLOYEES: Scenario['employees'] = [
   { botId: 'production', persona: 'AV and broadcast producer who runs stage sound, projection, captions, streaming and recordings.', skills: ['stage AV', 'streaming', 'video editing', 'captioning'] },
 ];
 
+/** R-L11: phrases that restate each fact; the builder cites the fact's marker wherever they appear later. */
+const RESTATEMENTS: Restatements = {
+  'conv-prices-incl-vat': ['21% VAT', '21% Dutch VAT'],
+  'conv-step-free-access': ['step-free', 'quiet room'],
+  'change-capacity-1000': ['1,000 attendees', 'three tracks', 'three-track', 'three step-free'],
+  'contract-room-capacities': ['720 seats', '1 Gbit'],
+  'fail-open-ticket-link': ['resale bot', 'named tickets', 'invitation round', 'invitation from the waiting list'],
+  'contract-badge-csv': ['UTF-8 CSV', 'final export', 'badge export'],
+  'conv-signed-confirmation': ['who have signed', 'signed speakers'],
+  'conv-no-paid-talks': ['buy a talk', 'contains a talk', 'selected like talks', 'instead of talks'],
+  'conv-sponsor-opt-in-only': ['opt-in', 'opted in'],
+  'conv-times-24h': ['24-hour'],
+  'fail-venue-wifi-stream': ['Wi-Fi', 'wired stage uplink'],
+  'conv-human-captions': ['human captioner'],
+  'fail-auto-captions': ['utomatic captions', 'automatic speech'],
+  'change-workshop-day': ['workshop day', 'workshop add-on', 'on 8 September'],
+  'contract-workshop-seats-40': ['40 seats', 'stops at 40'],
+  'conv-setup-guide-7d': ['setup guide'],
+  'conv-run-sheet-owner': ['owner and a fallback', 'owners and fallbacks'],
+  'change-no-livestream': ['livestream', 'record every talk', 'publish every talk'],
+  'contract-video-7d': ['within 7 days', 'S-nn Speaker'],
+  'conv-recording-release': ['recording release', 'release check', 'signed-release'],
+  'change-green-event': ['700 km', 'egetarian by default', 'egetarian-by-default', 'green event', 'plastic swag', 'printed programme', 'reusable'],
+  'contract-travel-log': ['travel log', 'booking reference'],
+};
+
 /** Routine progress replies, rotated so consecutive updates do not read the same. */
 const PROGRESS: ((done: string, next: string) => string)[] = [
   (d, n) => `Finished ${d}. Moving on to ${n}.`,
@@ -131,6 +157,7 @@ export function generateLongEvent(): Scenario {
     owner: 'mira',
     lead: 'producer',
     employees: EMPLOYEES,
+    restatements: RESTATEMENTS,
     plan: {
       workstreams: [W.venue, W.speakers, W.agenda, W.sponsors, W.registration, W.promotion, W.logistics, W.livestream],
       contracts: [C.speakersPromotion!, C.agendaStream!, C.registrationLogistics!, C.venueSponsors!],

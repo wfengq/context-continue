@@ -31,6 +31,36 @@ export const op = {
   failure: (text: string, reason: string, affects: string[]): ToolCall => ({ name: 'recordFailure', args: { text, reason, affects } }),
 };
 
+// ---------------------------------------------------------------------------
+// restatements (R-L11)
+// ---------------------------------------------------------------------------
+
+/** Fact id → phrases that restate the fact's content. */
+export type Restatements = Record<string, string[]>;
+
+/**
+ * R-L11: `text` with the marker of every fact in `facts` whose content it restates (it contains one
+ * of the fact's phrases) but whose marker it lacks, cited per paragraph as `(MARKER, ...)` before the
+ * paragraph's closing punctuation. Texts that restate nothing come back unchanged.
+ */
+export function cite(text: string, facts: readonly { marker: string; phrases: readonly string[] }[]): string {
+  return text
+    .split('\n\n')
+    .map(p => {
+      const need = facts.filter(f => !p.includes(f.marker) && f.phrases.some(x => p.includes(x))).map(f => f.marker);
+      if (need.length === 0) return p;
+      const tag = `(${need.join(', ')})`;
+      const end = /[.?!]$/.test(p) ? p.length - 1 : p.length;
+      return `${p.slice(0, end)} ${tag}${p.slice(end)}`;
+    })
+    .join('\n\n');
+}
+
+/** Arguments that are ids or enum values, not prose: never cited. */
+const NOT_PROSE = new Set(['workstreamId', 'act', 'mentions', 'affects', 'id', 'query']);
+/** Calls whose arguments only the author sees, or that only look something up: never cited. */
+const PRIVATE_OR_LOOKUP = new Set(['updateNotes', 'getBoardItem', 'searchLedger']);
+
 /** Lengths the spec allows for a long scenario's deliverables (spec §3): a first version 300–1500, later versions up to 3000. */
 export const DELIVERABLE_MIN = 300;
 export const FIRST_VERSION_MAX = 1500;
@@ -52,6 +82,13 @@ export interface Head {
   employees: Scenario['employees'];
   plan: PlanInput;
   idleReply?: string;
+  /**
+   * R-L11: phrases per fact id. After a fact is introduced, every team-facing text that contains one
+   * of its phrases (replies, messages, deliverables and their summaries, decisions, failures,
+   * review notes and conventions, replanned briefs and contract specs, human messages) gets the
+   * fact's marker (`cite`). Private notes and lookups are left as they are.
+   */
+  restatements?: Restatements;
 }
 
 /**
@@ -72,6 +109,23 @@ export class LongScenarioBuilder {
     this.plan = head.plan;
   }
 
+  /** Cites the markers of the facts introduced so far whose content `text` restates (R-L11). */
+  private mark(text: string): string {
+    const table = this.head.restatements ?? {};
+    return cite(text, this.facts.map(f => ({ marker: f.marker, phrases: table[f.id] ?? [] })));
+  }
+
+  private markOp(o: ToolCall): ToolCall {
+    if (PRIVATE_OR_LOOKUP.has(o.name) || typeof o.args !== 'object' || o.args === null) return o;
+    const args = Object.fromEntries(
+      Object.entries(o.args as Record<string, unknown>).map(([k, v]) => [
+        k,
+        NOT_PROSE.has(k) ? v : typeof v === 'string' ? this.mark(v) : Array.isArray(v) ? v.map(x => (typeof x === 'string' ? this.mark(x) : x)) : v,
+      ]),
+    );
+    return { name: o.name, args };
+  }
+
   /** Number of steps so far (the index the next step gets). */
   get length(): number {
     return this.steps.length;
@@ -83,11 +137,14 @@ export class LongScenarioBuilder {
   }
 
   human(text: string, mentions?: string[]): this {
+    text = this.mark(text);
     this.steps.push(mentions && mentions.length > 0 ? { kind: 'human', text, mentions } : { kind: 'human', text });
     return this;
   }
 
   work(botId: string, ws: string, reply: string, ops: ToolCall[] = []): this {
+    reply = this.mark(reply);
+    ops = ops.map(o => this.markOp(o));
     const w = this.plan.workstreams.find(x => x.id === ws);
     if (!w) throw new Error(`step ${this.length}: workstream "${ws}" is not in the current plan`);
     if (w.owner !== botId) throw new Error(`step ${this.length}: "${botId}" does not own "${ws}"`);
@@ -119,7 +176,7 @@ export class LongScenarioBuilder {
     if (!w) throw new Error(`step ${this.length}: workstream "${ws}" is not in the current plan`);
     if (a.add.length === 0) throw new Error(`step ${this.length}: a new version of "${ws}" must add something`);
     const doc = this.docs.get(ws) ?? { title: w.title, paragraphs: [], version: 0 };
-    doc.paragraphs = [...doc.paragraphs, ...a.add];
+    doc.paragraphs = [...doc.paragraphs, ...a.add.map(p => this.mark(p))];
     doc.version += 1;
     this.docs.set(ws, doc);
     const content = [`${doc.title}, version ${doc.version}.`, ...doc.paragraphs].join('\n\n');
@@ -136,6 +193,8 @@ export class LongScenarioBuilder {
   review(ws: string, passed: boolean, notes: string, conventions?: string[]): this {
     if (!this.plan.workstreams.some(x => x.id === ws)) throw new Error(`step ${this.length}: review of "${ws}", not in the current plan`);
     if (this.version(ws) === 0) throw new Error(`step ${this.length}: review of "${ws}" before any deliverable`);
+    notes = this.mark(notes);
+    conventions = conventions?.map(c => this.mark(c));
     this.steps.push(
       conventions && conventions.length > 0 ? { kind: 'review', deliverableOf: ws, passed, notes, conventions } : { kind: 'review', deliverableOf: ws, passed, notes },
     );
@@ -143,6 +202,14 @@ export class LongScenarioBuilder {
   }
 
   replan(plan: PlanInput): this {
+    // A brief or spec carried over unchanged is not a new restatement; new or changed ones are cited.
+    const briefs = new Map(this.plan.workstreams.map(w => [w.id, w.brief]));
+    const specs = new Map(this.plan.contracts.map(c => [c.id, c.spec]));
+    plan = {
+      ...plan,
+      workstreams: plan.workstreams.map(w => (briefs.get(w.id) === w.brief ? w : { ...w, brief: this.mark(w.brief) })),
+      contracts: plan.contracts.map(c => (specs.get(c.id) === c.spec ? c : { ...c, spec: this.mark(c.spec) })),
+    };
     checkPlan(plan, new Set(this.head.employees.map(e => e.botId)));
     for (const w of plan.workstreams) {
       const old = this.plan.workstreams.find(x => x.id === w.id);

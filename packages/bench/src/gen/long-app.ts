@@ -4,7 +4,7 @@
 // Deliverables grow version by version: each new version keeps the earlier text and adds what changed.
 import type { PlanInput } from '@context-continue/core';
 import type { Scenario } from '../types.js';
-import { LongScenarioBuilder, op, rotate } from './long.js';
+import { LongScenarioBuilder, op, rotate, type Restatements } from './long.js';
 
 type Ws = PlanInput['workstreams'][number];
 type Contract = PlanInput['contracts'][number];
@@ -126,6 +126,32 @@ const EMPLOYEES: Scenario['employees'] = [
   { botId: 'ops', persona: 'Platform and security engineer who runs infrastructure, CI/CD, security reviews and privacy compliance.', skills: ['AWS', 'Terraform', 'security', 'privacy'] },
 ];
 
+/** R-L11: phrases that restate each fact; the builder cites the fact's marker wherever they appear later. */
+const RESTATEMENTS: Restatements = {
+  'conv-given-when-then': ['Given/When/Then'],
+  'conv-cursor-pagination': ['ursor pagination', 'cursor-based'],
+  'conv-iso8601-utc': ['ISO 8601', 'UTC timestamps'],
+  'conv-wcag-aa-contrast': ['WCAG'],
+  'conv-no-pii-in-events': ['salted hash', 'personal data from the event'],
+  'contract-error-envelope': ['requestId', 'server message and retry'],
+  'conv-rate-limits-documented': ['rate limits', 'per minute per IP'],
+  'conv-idempotency-key': ['Idempotency-Key', 'dempotency keys'],
+  'change-household-6': ['up to 6 members'],
+  'contract-invite-link-72h': ['72 hours'],
+  'fail-websocket-fanout': ['ebsocket'],
+  'fail-stripe-in-webview': ['webview'],
+  'change-store-billing': ['App Store or Google Play', 'App Store and Google Play', 'sells nothing', 'Stripe checkout'],
+  'contract-receipt-post': ['/v1/billing/receipts'],
+  'conv-restore-path': ['estore purchases', 'restores on both stores', 'restoring purchases'],
+  'change-offline-list': ['fully offline', 'works offline', 'dashboards are out of scope', 'dashboards dropped'],
+  'contract-sync-cursor': ['stored cursor'],
+  'fail-full-list-resync': ['ull list download'],
+  'conv-delete-wins': ['delete-versus-edit', 'another member deleted'],
+  'conv-story-and-build-in-reports': ['story ids', ' / build '],
+  'change-eu-first': ['eu-west-1', 'EU launch'],
+  'contract-export-zip-30d': ['ZIP of JSON'],
+};
+
 /** Routine progress replies, rotated so consecutive updates do not read the same. */
 const PROGRESS: ((done: string, next: string) => string)[] = [
   (d, n) => `Done with ${d}. Next I am on ${n}.`,
@@ -146,6 +172,7 @@ export function generateLongApp(): Scenario {
     owner: 'dana',
     lead: 'pm',
     employees: EMPLOYEES,
+    restatements: RESTATEMENTS,
     plan: {
       workstreams: [W.requirements, W.ux, W.api, W.backend, W.web, W.mobile, W.analytics, W.security, W.infra, W.testing],
       contracts: [C.reqTesting!, C.apiWeb!, C.apiMobile!, C.uxWeb!, C.uxMobile!],
