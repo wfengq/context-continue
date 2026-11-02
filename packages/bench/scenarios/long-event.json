@@ -529,12 +529,12 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "speakers",
-      "reply": "Halfway through the call for papers with 212 proposals. @venue can the second talk room move to the ground floor so it is step-free, and would it still seat 150? It decides how many talks I accept.",
+      "reply": "Halfway through the call for papers with 212 proposals. @venue can the second talk room move to the ground floor so it is step-free (CONV-STEP-FREE-ACCESS), and would it still seat 150? It decides how many talks I accept.",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@venue can the second talk room move to the ground floor so it is step-free, and would it still seat 150? It decides how many talks I accept.",
+            "text": "@venue can the second talk room move to the ground floor so it is step-free (CONV-STEP-FREE-ACCESS), and would it still seat 150? It decides how many talks I accept.",
             "act": "query",
             "mentions": [
               "venue"
@@ -547,12 +547,12 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "venue",
-      "reply": "@program Yes: Kraanhal can split the ground floor with an acoustic wall; the east part seats 180 step-free and the expo keeps 650 m2. I am getting the quote for the wall.",
+      "reply": "@program Yes: Kraanhal can split the ground floor with an acoustic wall; the east part seats 180 step-free (CONV-STEP-FREE-ACCESS) and the expo keeps 650 m2. I am getting the quote for the wall.",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "Yes: Kraanhal can split the ground floor with an acoustic wall; the east part seats 180 step-free and the expo keeps 650 m2. I am getting the quote for the wall.",
+            "text": "Yes: Kraanhal can split the ground floor with an acoustic wall; the east part seats 180 step-free (CONV-STEP-FREE-ACCESS) and the expo keeps 650 m2. I am getting the quote for the wall.",
             "act": "inform",
             "mentions": [
               "program"
@@ -848,7 +848,7 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "venue",
-      "reply": "@mira Kraanhal can take 1,000: the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds a third room. I am getting the revised quote.",
+      "reply": "@mira Kraanhal can take 1,000 (CHANGE-CAPACITY-1000): the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds the Quay room with 150 seats; with the Harbour room at 180 that matches CONTRACT-ROOM-CAPACITIES. I am getting the revised quote.",
       "ops": [
         {
           "name": "updateNotes",
@@ -923,12 +923,12 @@
       "kind": "work",
       "botId": "marketing",
       "workstreamId": "registration",
-      "reply": "Moving to named tickets after the resale bots (FAIL-OPEN-TICKET-LINK). @venue what exactly do you need in the attendee export to print badges and check names at the door?",
+      "reply": "Moving to named tickets after the resale bots (FAIL-OPEN-TICKET-LINK). @venue tickets are named now because of the resale bots (FAIL-OPEN-TICKET-LINK); what exactly do you need in the attendee export to print badges and check names at the door?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@venue what exactly do you need in the attendee export to print badges and check names at the door?",
+            "text": "@venue tickets are named now because of the resale bots (FAIL-OPEN-TICKET-LINK); what exactly do you need in the attendee export to print badges and check names at the door?",
             "act": "query",
             "mentions": [
               "venue"
@@ -1047,12 +1047,12 @@
       "kind": "work",
       "botId": "partners",
       "workstreamId": "sponsors",
-      "reply": "Reworking the sponsor packages without the attendee list. @marketing can the checkout get an opt-in checkbox for Gold sponsors, and can you send me the opt-in counts every week?",
+      "reply": "Reworking the sponsor packages without the attendee list (CONV-SPONSOR-OPT-IN-ONLY). @marketing can the checkout get the opt-in checkbox for Gold sponsors that CONV-SPONSOR-OPT-IN-ONLY needs, and can you send me the opt-in counts every week?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@marketing can the checkout get an opt-in checkbox for Gold sponsors, and can you send me the opt-in counts every week?",
+            "text": "@marketing can the checkout get the opt-in checkbox for Gold sponsors that CONV-SPONSOR-OPT-IN-ONLY needs, and can you send me the opt-in counts every week?",
             "act": "query",
             "mentions": [
               "marketing"
@@ -1517,12 +1517,12 @@
       "kind": "work",
       "botId": "production",
       "workstreamId": "livestream",
-      "reply": "Booking two captioners per day. @program can speakers send a list of the terms and names in their talks two weeks ahead? The captioners need it to prepare.",
+      "reply": "Booking two human captioners per day (CONV-HUMAN-CAPTIONS). @program can speakers send a list of the terms and names in their talks two weeks ahead? The human captioners (CONV-HUMAN-CAPTIONS) need it to prepare.",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@program can speakers send a list of the terms and names in their talks two weeks ahead? The captioners need it to prepare.",
+            "text": "@program can speakers send a list of the terms and names in their talks two weeks ahead? The human captioners (CONV-HUMAN-CAPTIONS) need it to prepare.",
             "act": "query",
             "mentions": [
               "program"
@@ -1535,12 +1535,12 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "speakers",
-      "reply": "@production Yes: I am adding a glossary field to the speaker portal, due 26 August, and will send you the export by session id.",
+      "reply": "@production Yes: I am adding a glossary field to the speaker portal, due 26 August, and will send you the export by session id for the captioners (CONV-HUMAN-CAPTIONS).",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "Yes: I am adding a glossary field to the speaker portal, due 26 August, and will send you the export by session id.",
+            "text": "Yes: I am adding a glossary field to the speaker portal, due 26 August, and will send you the export by session id for the captioners (CONV-HUMAN-CAPTIONS).",
             "act": "inform",
             "mentions": [
               "production"
@@ -1726,12 +1726,12 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "venue",
-      "reply": "Looking for workshop rooms for 8 September. @program do the workshops need power at every seat and a projector, and can they run in hotel meeting rooms?",
+      "reply": "Looking for rooms for the workshop day on 8 September (CHANGE-WORKSHOP-DAY). @program do the workshops on the new workshop day (CHANGE-WORKSHOP-DAY) need power at every seat and a projector, and can they run in hotel meeting rooms?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@program do the workshops need power at every seat and a projector, and can they run in hotel meeting rooms?",
+            "text": "@program do the workshops on the new workshop day (CHANGE-WORKSHOP-DAY) need power at every seat and a projector, and can they run in hotel meeting rooms?",
             "act": "query",
             "mentions": [
               "program"
@@ -2015,12 +2015,12 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "logistics",
-      "reply": "Adding owners to the run sheet. @production who in your crew owns the stage changeovers in each room, and who is the fallback?",
+      "reply": "Adding owners to the run sheet (CONV-RUN-SHEET-OWNER). @production for the run sheet (CONV-RUN-SHEET-OWNER), who in your crew owns the stage changeovers in each room, and who is the fallback?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@production who in your crew owns the stage changeovers in each room, and who is the fallback?",
+            "text": "@production for the run sheet (CONV-RUN-SHEET-OWNER), who in your crew owns the stage changeovers in each room, and who is the fallback?",
             "act": "query",
             "mentions": [
               "production"
@@ -2033,12 +2033,12 @@
       "kind": "work",
       "botId": "production",
       "workstreamId": "livestream",
-      "reply": "@venue Main hall: Sanne, fallback Joris. Harbour room: Pieter, fallback Anouk. Quay room: Malik, fallback Sanne. Their phone numbers are in the crew sheet.",
+      "reply": "@venue For the run sheet (CONV-RUN-SHEET-OWNER): main hall Sanne, fallback Joris; Harbour room Pieter, fallback Anouk; Quay room Malik, fallback Sanne. Their phone numbers are in the crew sheet.",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "Main hall: Sanne, fallback Joris. Harbour room: Pieter, fallback Anouk. Quay room: Malik, fallback Sanne. Their phone numbers are in the crew sheet.",
+            "text": "For the run sheet (CONV-RUN-SHEET-OWNER): main hall Sanne, fallback Joris; Harbour room Pieter, fallback Anouk; Quay room Malik, fallback Sanne. Their phone numbers are in the crew sheet.",
             "act": "inform",
             "mentions": [
               "venue"
@@ -2315,12 +2315,12 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "speakers",
-      "reply": "Preparing the recording release for the speakers. @production what should the release cover: recording, editing and YouTube only, or also clips for social?",
+      "reply": "Preparing the recording release for the speakers (CONV-RECORDING-RELEASE). @production what should the recording release (CONV-RECORDING-RELEASE) cover: recording, editing and YouTube only, or also clips for social?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@production what should the release cover: recording, editing and YouTube only, or also clips for social?",
+            "text": "@production what should the recording release (CONV-RECORDING-RELEASE) cover: recording, editing and YouTube only, or also clips for social?",
             "act": "query",
             "mentions": [
               "production"
@@ -2333,12 +2333,12 @@
       "kind": "work",
       "botId": "production",
       "workstreamId": "recordings",
-      "reply": "@program Recording, editing, publishing the full talk on YouTube under CC BY 4.0 and clips of up to 60 seconds for social. Speakers may ask for a video to be taken down later.",
+      "reply": "@program The release (CONV-RECORDING-RELEASE) should cover recording, editing, publishing the full talk on YouTube under CC BY 4.0 and clips of up to 60 seconds for social. Speakers may ask for a video to be taken down later.",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "Recording, editing, publishing the full talk on YouTube under CC BY 4.0 and clips of up to 60 seconds for social. Speakers may ask for a video to be taken down later.",
+            "text": "The release (CONV-RECORDING-RELEASE) should cover recording, editing, publishing the full talk on YouTube under CC BY 4.0 and clips of up to 60 seconds for social. Speakers may ask for a video to be taken down later.",
             "act": "inform",
             "mentions": [
               "program"
@@ -2715,12 +2715,12 @@
       "kind": "work",
       "botId": "program",
       "workstreamId": "speakers",
-      "reply": "Rebooking speaker travel for the green event rules. @venue does the city report need the return trips as well, and how do I log a speaker who combines the trip with other work in Europe?",
+      "reply": "Rebooking speaker travel for the green event rules (CHANGE-GREEN-EVENT). @venue does the travel log for the city report (CONTRACT-TRAVEL-LOG) need the return trips as well, and how do I log a speaker who combines the trip with other work in Europe?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@venue does the city report need the return trips as well, and how do I log a speaker who combines the trip with other work in Europe?",
+            "text": "@venue does the travel log for the city report (CONTRACT-TRAVEL-LOG) need the return trips as well, and how do I log a speaker who combines the trip with other work in Europe?",
             "act": "query",
             "mentions": [
               "venue"
@@ -2794,12 +2794,12 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "logistics",
-      "reply": "Re-ordering catering for vegetarian by default. @marketing can the registration form ask who wants meat, so the caterer can plan the on-request portions?",
+      "reply": "Re-ordering catering for vegetarian by default (CHANGE-GREEN-EVENT). @marketing catering is vegetarian by default under the green event rules (CHANGE-GREEN-EVENT); can the registration form ask who wants meat, so the caterer can plan the on-request portions?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@marketing can the registration form ask who wants meat, so the caterer can plan the on-request portions?",
+            "text": "@marketing catering is vegetarian by default under the green event rules (CHANGE-GREEN-EVENT); can the registration form ask who wants meat, so the caterer can plan the on-request portions?",
             "act": "query",
             "mentions": [
               "marketing"
@@ -2931,12 +2931,12 @@
       "kind": "work",
       "botId": "venue",
       "workstreamId": "sustainability",
-      "reply": "Adding energy numbers to the green event report. @production how many kWh will the AV draw over the three days, and how much did the dropped stream setup need?",
+      "reply": "Adding energy numbers to the green event report (CHANGE-GREEN-EVENT). @production how many kWh will the AV draw over the three days, and how much would the stream setup we dropped (CHANGE-NO-LIVESTREAM) have needed?",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "@production how many kWh will the AV draw over the three days, and how much did the dropped stream setup need?",
+            "text": "@production how many kWh will the AV draw over the three days, and how much would the stream setup we dropped (CHANGE-NO-LIVESTREAM) have needed?",
             "act": "query",
             "mentions": [
               "production"
@@ -2949,12 +2949,12 @@
       "kind": "work",
       "botId": "production",
       "workstreamId": "recordings",
-      "reply": "@venue About 2,900 kWh for AV, recording and captions over the three days; the stream setup with the vision mixer and the encoders would have added about 700 kWh.",
+      "reply": "@venue About 2,900 kWh for AV, recording and captions over the three days; the stream setup dropped under CHANGE-NO-LIVESTREAM, with the vision mixer and the encoders, would have added about 700 kWh.",
       "ops": [
         {
           "name": "sendMessage",
           "args": {
-            "text": "About 2,900 kWh for AV, recording and captions over the three days; the stream setup with the vision mixer and the encoders would have added about 700 kWh.",
+            "text": "About 2,900 kWh for AV, recording and captions over the three days; the stream setup dropped under CHANGE-NO-LIVESTREAM, with the vision mixer and the encoders, would have added about 700 kWh.",
             "act": "inform",
             "mentions": [
               "venue"

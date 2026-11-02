@@ -170,7 +170,7 @@ export function renderReport(
     '- Fact visibility is literal text matching of a marker: a group that paraphrases a fact counts as missing it.',
     "- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).",
     "- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.",
-    "- In groups with chat history the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call.",
+    "- In groups A, B, D, E and F the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call (in A, the single agent's history).",
     '- In groups D and E reviewers get deliverable references, so facts written inside a deliverable reach them less often.',
     '',
   );

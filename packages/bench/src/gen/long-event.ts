@@ -195,9 +195,9 @@ export function generateLongEvent(): Scenario {
   b.fact('conv-step-free-access', 'CONV-STEP-FREE-ACCESS', ['venue', 'program', 'production']);
   b.ask('program', 'speakers', 'venue', {
     reply: 'Halfway through the call for papers with 212 proposals.',
-    question: 'can the second talk room move to the ground floor so it is step-free, and would it still seat 150? It decides how many talks I accept.',
+    question: 'can the second talk room move to the ground floor so it is step-free (CONV-STEP-FREE-ACCESS), and would it still seat 150? It decides how many talks I accept.',
   });
-  b.answer('venue', 'venue', 'program', 'Yes: Kraanhal can split the ground floor with an acoustic wall; the east part seats 180 step-free and the expo keeps 650 m2. I am getting the quote for the wall.', [
+  b.answer('venue', 'venue', 'program', 'Yes: Kraanhal can split the ground floor with an acoustic wall; the east part seats 180 step-free (CONV-STEP-FREE-ACCESS) and the expo keeps 650 m2. I am getting the quote for the wall.', [
     op.notes('venue: ground-floor second room for 180 behind an acoustic wall; mezzanine dropped; quiet room in the old crane office next to the cloakroom.'),
   ]);
   b.deliver('marketing', 'registration', {
@@ -268,7 +268,7 @@ export function generateLongEvent(): Scenario {
     ],
   });
   b.fact('contract-room-capacities', 'CONTRACT-ROOM-CAPACITIES', ['production', 'program', 'venue']);
-  b.work('venue', 'venue', '@mira Kraanhal can take 1,000: the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds a third room. I am getting the revised quote.', [
+  b.work('venue', 'venue', '@mira Kraanhal can take 1,000 (CHANGE-CAPACITY-1000): the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds the Quay room with 150 seats; with the Harbour room at 180 that matches CONTRACT-ROOM-CAPACITIES. I am getting the revised quote.', [
     op.notes('venue: main hall 720; Harbour room 180 (ground floor); Quay room pavilion 150 with a level ramp; uplinks and AV power per room as in CONTRACT-ROOM-CAPACITIES.'),
   ]);
   b.work('marketing', 'registration', 'The second batch of tickets was hit by resale bots; recording what happened before the next release (FAIL-OPEN-TICKET-LINK).', [
@@ -291,7 +291,7 @@ export function generateLongEvent(): Scenario {
   progress('program', 'speakers', 'a second committee round to fill three tracks instead of two', 'the acceptance emails');
   b.ask('marketing', 'registration', 'venue', {
     reply: 'Moving to named tickets after the resale bots (FAIL-OPEN-TICKET-LINK).',
-    question: 'what exactly do you need in the attendee export to print badges and check names at the door?',
+    question: 'tickets are named now because of the resale bots (FAIL-OPEN-TICKET-LINK); what exactly do you need in the attendee export to print badges and check names at the door?',
   });
   b.answer('venue', 'logistics', 'marketing', 'A UTF-8 CSV with the columns ticket_id, first_name, last_name, company, ticket_type, dietary, access_needs, sorted by last name (CONTRACT-BADGE-CSV). Weekly from 1 July and a final export on 6 September at 12:00. Names must match the ticket because we check ID at the door.');
   b.fact('contract-badge-csv', 'CONTRACT-BADGE-CSV', ['venue', 'marketing']);
@@ -340,8 +340,8 @@ export function generateLongEvent(): Scenario {
     op.message('Keynotes announced today: Amira Haddad on browser engines and Tomasz Wrona on platform engineering, both signed (CONV-SIGNED-CONFIRMATION). The full line-up follows on 15 May.', 'inform'),
   ]);
   b.ask('partners', 'sponsors', 'marketing', {
-    reply: 'Reworking the sponsor packages without the attendee list.',
-    question: 'can the checkout get an opt-in checkbox for Gold sponsors, and can you send me the opt-in counts every week?',
+    reply: 'Reworking the sponsor packages without the attendee list (CONV-SPONSOR-OPT-IN-ONLY).',
+    question: 'can the checkout get the opt-in checkbox for Gold sponsors that CONV-SPONSOR-OPT-IN-ONLY needs, and can you send me the opt-in counts every week?',
   });
   b.answer('marketing', 'registration', 'partners', 'Yes: one unticked checkbox "Share my name, company and email with the Gold sponsors" (CONV-SPONSOR-OPT-IN-ONLY), and the weekly counts go in the sponsor report. Badge scans at the booth are the other route; the scanner app shows the attendee what is shared.');
   b.deliver('partners', 'sponsors', {
@@ -460,10 +460,10 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('fail-auto-captions', 'FAIL-AUTO-CAPTIONS', ['production', 'program']);
   b.ask('production', 'livestream', 'program', {
-    reply: 'Booking two captioners per day.',
-    question: 'can speakers send a list of the terms and names in their talks two weeks ahead? The captioners need it to prepare.',
+    reply: 'Booking two human captioners per day (CONV-HUMAN-CAPTIONS).',
+    question: 'can speakers send a list of the terms and names in their talks two weeks ahead? The human captioners (CONV-HUMAN-CAPTIONS) need it to prepare.',
   });
-  b.answer('program', 'speakers', 'production', 'Yes: I am adding a glossary field to the speaker portal, due 26 August, and will send you the export by session id.');
+  b.answer('program', 'speakers', 'production', 'Yes: I am adding a glossary field to the speaker portal, due 26 August, and will send you the export by session id for the captioners (CONV-HUMAN-CAPTIONS).');
   b.human('@marketing a friend who uses a screen reader could not get through the ticket checkout: the date picker and the iDEAL button have no labels. Please fix that before the next batch.', ['marketing']);
   progress('marketing', 'registration', 'labels on the checkout date picker and the iDEAL button, tested with VoiceOver and NVDA', 'the waiting-list invitations for the next batch');
 
@@ -505,8 +505,8 @@ export function generateLongEvent(): Scenario {
     op.notes('workshops: pick 8 topics from the workshop proposals in the call for papers; trainers paid EUR 1,200; 40 seats each (CONTRACT-WORKSHOP-SEATS-40).', true),
   ]);
   b.ask('venue', 'venue', 'program', {
-    reply: 'Looking for workshop rooms for 8 September.',
-    question: 'do the workshops need power at every seat and a projector, and can they run in hotel meeting rooms?',
+    reply: 'Looking for rooms for the workshop day on 8 September (CHANGE-WORKSHOP-DAY).',
+    question: 'do the workshops on the new workshop day (CHANGE-WORKSHOP-DAY) need power at every seat and a projector, and can they run in hotel meeting rooms?',
   });
   b.answer('program', 'workshops', 'venue', 'Yes to both: 40 laptops need a power strip per table and each room a projector; a wired network helps the two Kubernetes workshops. Hotel meeting rooms are fine if they are step-free (CONV-STEP-FREE-ACCESS).');
   b.deliver('venue', 'venue', {
@@ -582,10 +582,10 @@ export function generateLongEvent(): Scenario {
   b.fact('conv-run-sheet-owner', 'CONV-RUN-SHEET-OWNER', ['venue', 'production', 'program']);
   progress('venue', 'logistics', 'the badge printer rental (two printers, 600 badges an hour each)', 'the volunteer roster');
   b.ask('venue', 'logistics', 'production', {
-    reply: 'Adding owners to the run sheet.',
-    question: 'who in your crew owns the stage changeovers in each room, and who is the fallback?',
+    reply: 'Adding owners to the run sheet (CONV-RUN-SHEET-OWNER).',
+    question: 'for the run sheet (CONV-RUN-SHEET-OWNER), who in your crew owns the stage changeovers in each room, and who is the fallback?',
   });
-  b.answer('production', 'livestream', 'venue', 'Main hall: Sanne, fallback Joris. Harbour room: Pieter, fallback Anouk. Quay room: Malik, fallback Sanne. Their phone numbers are in the crew sheet.');
+  b.answer('production', 'livestream', 'venue', 'For the run sheet (CONV-RUN-SHEET-OWNER): main hall Sanne, fallback Joris; Harbour room Pieter, fallback Anouk; Quay room Malik, fallback Sanne. Their phone numbers are in the crew sheet.');
 
   // -------------------------------------------------------------------------
   // Change 3: no livestream, recordings instead
@@ -661,10 +661,10 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-recording-release', 'CONV-RECORDING-RELEASE', ['program', 'production']);
   b.ask('program', 'speakers', 'production', {
-    reply: 'Preparing the recording release for the speakers.',
-    question: 'what should the release cover: recording, editing and YouTube only, or also clips for social?',
+    reply: 'Preparing the recording release for the speakers (CONV-RECORDING-RELEASE).',
+    question: 'what should the recording release (CONV-RECORDING-RELEASE) cover: recording, editing and YouTube only, or also clips for social?',
   });
-  b.answer('production', 'recordings', 'program', 'Recording, editing, publishing the full talk on YouTube under CC BY 4.0 and clips of up to 60 seconds for social. Speakers may ask for a video to be taken down later.');
+  b.answer('production', 'recordings', 'program', 'The release (CONV-RECORDING-RELEASE) should cover recording, editing, publishing the full talk on YouTube under CC BY 4.0 and clips of up to 60 seconds for social. Speakers may ask for a video to be taken down later.');
   b.work('program', 'speakers', 'Sent the recording release (CONV-RECORDING-RELEASE) to every speaker and trainer through the speaker portal.', [
     op.message('Recording releases are out to all 45 speakers and 8 trainers (CONV-RECORDING-RELEASE); 31 signed on the first day. Production gets the list of session ids with a signed release every Friday.', 'inform'),
     op.notes('speakers: recording release sent; chase unsigned on Mondays; Friday list to production.'),
@@ -736,8 +736,8 @@ export function generateLongEvent(): Scenario {
   });
   b.fact('contract-travel-log', 'CONTRACT-TRAVEL-LOG', ['program', 'venue']);
   b.ask('program', 'speakers', 'venue', {
-    reply: 'Rebooking speaker travel for the green event rules.',
-    question: 'does the city report need the return trips as well, and how do I log a speaker who combines the trip with other work in Europe?',
+    reply: 'Rebooking speaker travel for the green event rules (CHANGE-GREEN-EVENT).',
+    question: 'does the travel log for the city report (CONTRACT-TRAVEL-LOG) need the return trips as well, and how do I log a speaker who combines the trip with other work in Europe?',
   });
   b.answer('venue', 'sustainability', 'program', 'Yes, log both directions. For a combined trip, log only the leg to and from Rotterdam from the previous and to the next city, with the booking reference, as CONTRACT-TRAVEL-LOG asks.');
   b.deliver('program', 'speakers', {
@@ -753,8 +753,8 @@ export function generateLongEvent(): Scenario {
     op.notes('sponsors: swag rule sent to all 25 sponsors; two asked about tote bags (organic cotton allowed if reusable and no plastic print).'),
   ]);
   b.ask('venue', 'logistics', 'marketing', {
-    reply: 'Re-ordering catering for vegetarian by default.',
-    question: 'can the registration form ask who wants meat, so the caterer can plan the on-request portions?',
+    reply: 'Re-ordering catering for vegetarian by default (CHANGE-GREEN-EVENT).',
+    question: 'catering is vegetarian by default under the green event rules (CHANGE-GREEN-EVENT); can the registration form ask who wants meat, so the caterer can plan the on-request portions?',
   });
   b.answer('marketing', 'registration', 'venue', 'Yes: a new optional question "I would like a meat option" goes into the form today and into the badge export as a dietary value, so CONTRACT-BADGE-CSV does not change. Existing ticket holders get an email asking the same.');
   b.deliver('venue', 'logistics', {
@@ -788,10 +788,10 @@ export function generateLongEvent(): Scenario {
   });
   b.review('sustainability', false, 'The city asks for savings against a usual event of this size, not only totals. Without a baseline the report does not show what the rules achieved.');
   b.ask('venue', 'sustainability', 'production', {
-    reply: 'Adding energy numbers to the green event report.',
-    question: 'how many kWh will the AV draw over the three days, and how much did the dropped stream setup need?',
+    reply: 'Adding energy numbers to the green event report (CHANGE-GREEN-EVENT).',
+    question: 'how many kWh will the AV draw over the three days, and how much would the stream setup we dropped (CHANGE-NO-LIVESTREAM) have needed?',
   });
-  b.answer('production', 'recordings', 'venue', 'About 2,900 kWh for AV, recording and captions over the three days; the stream setup with the vision mixer and the encoders would have added about 700 kWh.');
+  b.answer('production', 'recordings', 'venue', 'About 2,900 kWh for AV, recording and captions over the three days; the stream setup dropped under CHANGE-NO-LIVESTREAM, with the vision mixer and the encoders, would have added about 700 kWh.');
   b.deliver('venue', 'sustainability', {
     reply: 'Added the baseline and the savings to the report.',
     summary: 'Savings against a usual event of 1,000 people',

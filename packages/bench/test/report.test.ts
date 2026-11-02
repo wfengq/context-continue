@@ -138,7 +138,7 @@ describe('renderReport: facts, growth, tiers', () => {
 
   test('caveats name the doubled replan and conventions in the lead history and the D/E reviewer limit', () => {
     const lines = renderReport(mixed(), mixedMeta).split('\n');
-    expect(lines).toContain("- In groups with chat history the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call.");
+    expect(lines).toContain("- In groups A, B, D, E and F the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call (in A, the single agent's history).");
     expect(lines).toContain('- In groups D and E reviewers get deliverable references, so facts written inside a deliverable reach them less often.');
   });
 
