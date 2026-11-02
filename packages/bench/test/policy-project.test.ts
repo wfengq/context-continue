@@ -400,13 +400,16 @@ describe('group C review and replan requests use the core contexts', () => {
     const { records, seen, stats } = await runC([
       { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.' },
       { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+      // an unmentioned message wakes the lead: its next brief shows the error
+      { kind: 'human', text: 'How is it going?' },
     ]);
     expect(stats.coreErrors).toBe(1);
     const i = records.findIndex(r => r.step === 0 && r.kind === 'scripted');
     expect(records[i]!.segments).toHaveLength(7);
     expect(records.some(r => r.step === 1 && r.botId === 'art')).toBe(true);
     const pmNext = seen.slice(i + 1).find(r => r.botId === 'pm');
-    if (pmNext) expect(triggerOf(pmNext)).toContain('tool error');
+    expect(pmNext).toBeDefined();
+    expect(triggerOf(pmNext!)).toContain('tool error');
   });
 
   test('C a pending tool result reaches the lead in the trigger of its review request, once', async () => {

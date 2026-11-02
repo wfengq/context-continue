@@ -161,15 +161,18 @@ What reaches whom:
   planning context (every human message so far and the previous plan). The bench appends a trigger
   segment with what a brief's trigger would carry: the task line, wakes merged into the step and
   tool results not yet shown to the lead.
-- Group C's remaining misses are core behaviour, reported as results rather than patched in the
-  bench (see "Known gaps" in `packages/core/README.md`):
-  1. Seen-compression: once a bot has acted on a brief that showed a board item, later briefs show
-     it compactly as seen (a contract without its spec, other items cut short), so the marker can
-     drop out of a later scripted request.
-  2. Projection: a brief shows failures and contracts of the bot's own part of the plan only.
-  3. No extraction model: human messages do not become board items, so a member sees a requirement
-     change only when the message mentions or replies to it or matches its workstream (the lead sees
-     every human message).
+- Group C's misses come from three core behaviours, reported as results rather than patched in
+  the bench (see "Known gaps" in `packages/core/README.md`):
+  1. Relevance projection: a bot's brief shows board items (failures, contracts) of its own part of
+     the plan only, while many facts concern everyone.
+  2. Seen-compression: once a bot has acted on a brief that showed a board item, later briefs show
+     it compactly without its text (a contract without its spec, other items cut short), so the
+     marker can drop out of a later scripted request.
+  3. Chat shown once: a chat message reaches a bot once (in its delta, its trigger or the planning
+     context) and afterwards only where a board item restates it. The lead owns no workstream, so it
+     loses a change after that; a fact written only as bot chat never reaches the board. An
+     extraction model (`models.extract`, not used by the bench) would only turn human chat into
+     board items.
 - Scenario text follows one marker rule (R-L11): wherever a fact's content is restated later
   (replies, messages, deliverables, replanned briefs, contract specs, review notes), the text
   carries the fact's marker, so a group that only sees the restatement still counts a hit.

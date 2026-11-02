@@ -78,13 +78,20 @@ The state lives in the `Store`. A new `createProject` over the same store resume
 
 ## Known gaps
 
-Behaviours a multi-bot benchmark (`packages/bench`) shows as missed facts; candidates for follow-up work:
+Behaviours a multi-bot benchmark (`packages/bench`) shows as missed facts. The first two are design
+trade-offs that keep briefs small, not bugs; the third is a candidate for follow-up work.
 
-- **Human messages are not turned into board items without an extraction model.** Without
-  `models.extract`, a requirement change stays a chat message: the lead sees every human message in
-  its brief and in the planning context, but a member sees one only when it mentions or replies to
-  the member or matches the member's workstream, and the board (and so every projection) does not
-  carry it.
+- **Relevance projection (trade-off).** A bot's brief shows board items such as failures and
+  contracts for its own part of the plan only; facts that concern everyone reach a bot only when
+  they touch its part.
+- **Seen-compression (trade-off).** Once a bot has acted on a brief that showed a board item, later
+  briefs show the item compactly without its text (a contract without its spec, other items cut
+  short); the bot fetches the full item with a tool when it needs it.
+- **Chat is shown once.** A chat message reaches a bot once (in its brief's delta, the wake's trigger
+  or the planning context) and afterwards only where a board item restates it. The lead owns no
+  workstream, so it can lose a requirement change after that, and a fact written only as bot chat
+  never reaches the board. `models.extract` turns human chat into board operations; without it,
+  nothing is extracted, and even with it bot chat is not.
 
 ## Limits
 
