@@ -125,8 +125,8 @@ An invalid scenario, group or flag value prints a message on stderr and exits wi
   template). In group C a segment must also be flagged cacheable by the core; the report adds a
   per-scenario upper-bound line for a provider that caches the core's stable segments wherever
   they are.
-- Reviewers in C, D and E get a reference to a deliverable, not its text; F has shared pages but no
-  chat thread; C, E and F always carry the goal and constraints, A, B and D only through human
+- Reviewers in D and E get a reference to a deliverable, not its text; C's lead reviews with the
+  core's review context, which carries the text; F has shared pages but no chat thread; C, E and F always carry the goal and constraints, A, B and D only through human
   messages. The report's caveats list these and the other modelling choices.
 
 ## Fact visibility
@@ -156,15 +156,20 @@ What reaches whom:
   changes (a page in F, a board item in C, a deliverable) but not the arguments. A `sendMessage`
   text is a posted message that B, D and E share, posted once: not again when the same step's
   reply already contains it.
-- Group C's misses come from three core behaviours, reported as results rather than patched in
-  the bench (see "Known gaps" in `packages/core/README.md`):
-  1. Seen-compression: after a bot has viewed a board item, even in an idle (extra) request, later
-     briefs show it compactly as seen (a contract without its spec, other items cut short), so the
-     marker can drop out of the next scripted request.
-  2. Routing: a human message that mentions nobody is routed only to the owner of the workstream it
-     matches, so a requirement change that names a workstream can miss the lead.
-  3. Projection: a bot's brief shows failures and contracts of its own part of the plan only, so a
-     reviewer does not see failures recorded on the workstream it reviews.
+- Group C's lead reviews with the core's review context (the deliverable's text and the reviewed
+  workstream's contracts, conventions, decisions, facts and failures) and replans with the core's
+  planning context (every human message so far and the previous plan). The bench appends a trigger
+  segment with what a brief's trigger would carry: the task line, wakes merged into the step and
+  tool results not yet shown to the lead.
+- Group C's remaining misses are core behaviour, reported as results rather than patched in the
+  bench (see "Known gaps" in `packages/core/README.md`):
+  1. Seen-compression: once a bot has acted on a brief that showed a board item, later briefs show
+     it compactly as seen (a contract without its spec, other items cut short), so the marker can
+     drop out of a later scripted request.
+  2. Projection: a brief shows failures and contracts of the bot's own part of the plan only.
+  3. No extraction model: human messages do not become board items, so a member sees a requirement
+     change only when the message mentions or replies to it or matches its workstream (the lead sees
+     every human message).
 - Scenario text follows one marker rule (R-L11): wherever a fact's content is restated later
   (replies, messages, deliverables, replanned briefs, contract specs, review notes), the text
   carries the fact's marker, so a group that only sees the restatement still counts a hit.

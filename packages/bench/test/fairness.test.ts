@@ -44,7 +44,7 @@ const reviewer = (g: Group) => (g === 'A' ? 'solo' : 'pm');
 
 describe('cross-group fairness: the reviewer sees the deliverable and the requirement change', () => {
   for (const g of ['A', 'B', 'C', 'D', 'E', 'F'] as Group[]) {
-    test(`${g}: the review request carries the deliverable (C, D, E: a reference to it)`, async () => {
+    test(`${g}: the review request carries the deliverable (D, E: a reference to it)`, async () => {
       const { records, seen } = await run(g);
       const i = records.findIndex(r => r.step === REVIEW_STEP && r.kind === 'scripted');
       expect(records[i]!.botId).toBe(reviewer(g));
@@ -56,9 +56,8 @@ describe('cross-group fairness: the reviewer sees the deliverable and the requir
           expect(review).toContain(CONTENT);
           break;
         case 'C':
-          // the core's delta names the submitted deliverable by id; content is fetched with getDeliverable
-          expect(review).toMatch(/\[deliverableSubmitted\] \{"workstreamId":"sound","deliverableId":"dlv-[0-9a-f]{8}"\}/);
-          expect(review).not.toContain(CONTENT);
+          // the core's review context carries the deliverable's text
+          expect(seen[i]!.segments[2]!.text).toContain(CONTENT);
           break;
         case 'D':
           expect(review).toContain('[deliverable sound v1 ref]');

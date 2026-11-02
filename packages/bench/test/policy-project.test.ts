@@ -35,7 +35,8 @@ async function runC(steps: unknown[], plan?: Parameters<typeof scenario>[1]) {
   return { records, stats, seen, project: policy.project! };
 }
 const shape = (records: CallRecord[]) => records.map(r => [r.botId, r.kind, r.step]);
-const triggerOf = (r: ModelRequest) => r.segments[6]!.text;
+/** The trigger is the last segment: of a 7-segment brief, and of a review or planning request. */
+const triggerOf = (r: ModelRequest) => r.segments.at(-1)!.text;
 const sum = (segs: { tokens: number }[]) => segs.reduce((n, s) => n + s.tokens, 0);
 
 // human → work(art, delivers) → work(logic)
@@ -313,6 +314,113 @@ describe('group C (project board, real core library)', () => {
     const a = await runScenario(scenario(threeSteps()), createPolicy('C', defaults));
     const b = await runScenario(scenario(threeSteps()), createPolicy('C', defaults));
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+});
+
+describe('group C review and replan requests use the core contexts', () => {
+  const failure = { name: 'recordFailure', args: { text: 'Tried SVG sprites FAIL-SVG', reason: 'too slow on old phones', affects: ['art'] } };
+  const kinds = (r: CallRecord) => r.segments!.map(s => s.kind);
+
+  test('C review step sends the review context (deliverable text and its failures) as the lead request', async () => {
+    const { records, seen, stats } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Tried.', ops: [failure] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: [deliver('art', 'sprite sheet ART-CONTENT')] },
+      { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.' },
+    ]);
+    expect(stats.coreErrors).toBe(0);
+    const i = records.findIndex(r => r.step === 2 && r.kind === 'scripted');
+    expect(records[i]!.botId).toBe('pm');
+    // the core's review context (common, board, projection) and the host's trigger
+    expect(kinds(records[i]!)).toEqual(['common', 'board', 'projection', 'trigger']);
+    const body = seen[i]!.segments[2]!.text;
+    expect(body).toContain('sprite sheet ART-CONTENT');
+    expect(body).toContain('FAIL-SVG');
+    expect(body).toContain('too slow on old phones');
+    // the trigger carries the task line and the wake merged into this step (deliverable awaits review)
+    expect(triggerOf(seen[i]!)).toContain('[task pm] review');
+    expect(triggerOf(seen[i]!)).toContain('awaits review');
+    // the lead's other requests are still the 7-segment brief
+    for (const [j, r] of records.entries()) if (j !== i) expect(r.segments).toHaveLength(7);
+  });
+
+  test('C replan step sends the planning context, which includes every human message so far', async () => {
+    const { records, seen, stats } = await runC([
+      { kind: 'human', text: 'Please make the bird blue CHANGE-BLUE.', mentions: ['art'] },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+      { kind: 'human', text: 'Also add sound CHANGE-SOUND.' },
+      { kind: 'work', botId: 'logic', workstreamId: 'logic', reply: 'Coded.', ops: [{ name: 'updateNotes', args: { text: 'rules first' } }] },
+      { kind: 'replan', plan: { workstreams: [ws('art', 'art'), ws('logic', 'logic'), ws('sound', 'logic')], contracts: [] } },
+    ]);
+    expect(stats.coreErrors).toBe(0);
+    const i = records.findIndex(r => r.step === 4 && r.kind === 'scripted');
+    expect(records[i]!.botId).toBe('pm');
+    expect(kinds(records[i]!)).toEqual(['common', 'board', 'projection', 'trigger']);
+    const body = seen[i]!.segments[2]!.text;
+    // both human messages, including the one that mentioned only art, and the previous plan
+    expect(body).toContain('CHANGE-BLUE');
+    expect(body).toContain('CHANGE-SOUND');
+    expect(body).toContain('## Previous plan');
+    expect(triggerOf(seen[i]!)).toContain('[task pm] replan');
+  });
+
+  test('C review/replan records use the R-B19 prefix rule against the lead previous request', async () => {
+    const { records, seen } = await runC([
+      // the lead's brief for this message comes after the plan is approved, with the full team
+      { kind: 'human', text: 'Go.' },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: [deliver('art', 'sprites')] },
+      { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.' },
+      { kind: 'replan', plan: { workstreams: [ws('art', 'art'), ws('logic', 'logic')], contracts: [] } },
+      { kind: 'human', text: 'Thanks.' },
+    ]);
+    const pm = records.map((r, i) => ({ r, q: seen[i]! })).filter(x => x.r.botId === 'pm');
+    expect(pm.find(x => x.r.step === 0 && x.r.segments!.length === 7)).toBeDefined();
+    const review = pm.find(x => x.r.step === 2)!;
+    const replan = pm.find(x => x.r.step === 3)!;
+    const after = pm.find(x => x.r.step === 4)!;
+    // after a 7-segment brief only the shared common segment is identical
+    expect(review.r.segments!.map(s => s.cacheable)).toEqual([true, false, false, false]);
+    // review → replan: same common; the board changed (the review passed art)
+    expect(replan.r.segments!.map(s => s.cacheable)).toEqual([true, false, false, false]);
+    // back to a brief: only common again
+    expect(after.r.segments!.map(s => s.cacheable)).toEqual([true, false, false, false, false, false, false]);
+    // every lead request: cacheable iff core-flagged (common, board) and inside the identical leading run
+    let prev: string[] | null = null;
+    for (const { r, q } of pm) {
+      const texts = q.segments.map(g => g.text);
+      let run = 0;
+      if (prev) while (run < texts.length && texts[run] === prev[run]) run++;
+      else run = 1;
+      const flagged = r.segments!.map(s => ['common', 'memory', 'workspace', 'board'].includes(s.kind));
+      expect(r.segments!.map(s => s.cacheable)).toEqual(flagged.map((f, i) => f && i < run));
+      prev = texts;
+    }
+  });
+
+  test('C review of a workstream without a deliverable is a core error; the lead gets its brief and the run continues', async () => {
+    const { records, seen, stats } = await runC([
+      { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.' },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.' },
+    ]);
+    expect(stats.coreErrors).toBe(1);
+    const i = records.findIndex(r => r.step === 0 && r.kind === 'scripted');
+    expect(records[i]!.segments).toHaveLength(7);
+    expect(records.some(r => r.step === 1 && r.botId === 'art')).toBe(true);
+    const pmNext = seen.slice(i + 1).find(r => r.botId === 'pm');
+    if (pmNext) expect(triggerOf(pmNext)).toContain('tool error');
+  });
+
+  test('C a pending tool result reaches the lead in the trigger of its review request, once', async () => {
+    const { records, seen } = await runC([
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Drew.', ops: [deliver('art', 'sprites')] },
+      { kind: 'review', deliverableOf: 'art', passed: false, notes: 'Too light.' },
+      { kind: 'work', botId: 'art', workstreamId: 'art', reply: 'Again.', ops: [deliver('art', 'sprites v2')] },
+      { kind: 'review', deliverableOf: 'art', passed: true, notes: 'Good.' },
+    ]);
+    const reviews = records.map((r, i) => ({ r, q: seen[i]! })).filter(x => x.r.botId === 'pm' && x.r.kind === 'scripted');
+    expect(reviews).toHaveLength(2);
+    // the first submitReview's result is shown in the second review's trigger, not in the first
+    expect(triggerOf(reviews[0]!.q)).not.toContain('tool submitReview');
+    expect(triggerOf(reviews[1]!.q)).toContain('tool submitReview: ok');
   });
 });
 

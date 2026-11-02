@@ -94,7 +94,7 @@ describe('renderReport', () => {
     for (const l of [
       "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.",
       "- F's context is the shared pages (project, current plan, one per delivered workstream) plus the bot's own history: there is no chat thread.",
-      '- In C, D and E reviewers get a reference to the deliverable, not its text (in E only the author\'s chat message); a real reviewer would fetch the content with an extra tool call, which is not counted.',
+      "- In D and E reviewers get a reference to the deliverable, not its text (in E only the author's chat message); a real reviewer would fetch the content with an extra tool call, which is not counted.",
       '- C, E and F always carry the goal and constraints; A, B and D see them only through human messages.',
       "- C's host adds the routed message and any wake merged into a bot's own next step to that bot's trigger; the core's wake detail only says why the bot was woken.",
     ]) expect(lines).toContain(l);
@@ -196,10 +196,26 @@ describe('renderReport: facts, growth, tiers', () => {
     expect(md.split('\n')).toContain(EVENT_PLAN);
   });
 
-  test("caveats explain C's three miss mechanisms and that only sendMessage text is shared (R-L12, R-L4, R-L9)", () => {
+  test('report caveats describe C review and replan contexts and no longer list the fixed gaps', () => {
+    const md = renderReport(all(), meta);
+    const lines = md.split('\n');
+    for (const l of [
+      "- C's lead reviews with the core's review context (the deliverable's text and the reviewed workstream's contracts, conventions, decisions, facts and failures) and replans with its planning context (every human message so far and the previous plan); the host appends a trigger with the task line, merged wakes and pending tool results.",
+      "- C misses a fact in two ways, both core behaviour reported as results: once a bot has acted on a brief that showed a board item, later briefs show it compactly as seen (a contract without its spec, other items cut short), so they can lack its marker; and a brief shows failures and contracts of the bot's own part of the plan only. Without an extraction model no human message becomes a board item: a member sees one only when it mentions or replies to the member or matches its workstream (the lead sees every human message).",
+    ]) expect(lines).toContain(l);
+    // the gaps fixed in the core are no longer described
+    for (const gone of [
+      'In C, D and E reviewers',
+      'C misses a fact in three ways',
+      'after a bot has viewed a board item in an idle (extra) request',
+      'routed only to the owner of the matching workstream, which may not be the lead',
+      'a reviewer does not see failures recorded on the workstream it reviews',
+    ]) expect(md).not.toContain(gone);
+  });
+
+  test("caveats explain that only sendMessage text is shared (R-L4, R-L9)", () => {
     const lines = renderReport(all(), meta).split('\n');
     for (const l of [
-      "- C misses a fact in three ways, all core behaviour reported as results: after a bot has viewed a board item in an idle (extra) request the core shows it compactly as seen (a contract without its spec, other items cut short), so later briefs can lack its marker; a human message that mentions nobody is routed only to the owner of the matching workstream, which may not be the lead; a bot's brief shows failures and contracts of its own part of the plan only, so a reviewer does not see failures recorded on the workstream it reviews.",
       "- Tool-call arguments are rendered in the author's own history only (R-L4); other bots see a call's effect (a page, a board item, a deliverable) but not its arguments. A sendMessage text is a posted message, posted once: not again when the same step's reply already contains it.",
     ]) expect(lines).toContain(l);
   });

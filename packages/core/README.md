@@ -80,16 +80,11 @@ The state lives in the `Store`. A new `createProject` over the same store resume
 
 Behaviours a multi-bot benchmark (`packages/bench`) shows as missed facts; candidates for follow-up work:
 
-- **Unmentioned changes reach only the matched owner.** A human message that mentions nobody and
-  matches a workstream is routed to that workstream's owner only. A requirement change usually
-  concerns the plan as well, so it should also be routed to the lead.
-- **Seen-compression after a view in an idle request.** Once a bot has been shown a board item, later
-  briefs render it compactly as seen (a contract without its spec, other items cut short), even when
-  the view happened in a request where the bot did nothing (an idle wake). The item should stay in
-  full until the bot has acted on a brief that showed it.
-- **Reviewers do not see failures on the reviewed workstream.** A bot's projection shows failures and
-  contracts of its own part of the plan; a reviewer reviewing another workstream does not see the
-  failures recorded on that workstream, though they bear on the review.
+- **Human messages are not turned into board items without an extraction model.** Without
+  `models.extract`, a requirement change stays a chat message: the lead sees every human message in
+  its brief and in the planning context, but a member sees one only when it mentions or replies to
+  the member or matches the member's workstream, and the board (and so every projection) does not
+  carry it.
 
 ## Limits
 

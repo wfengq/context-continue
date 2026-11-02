@@ -5,6 +5,7 @@ import {
   type Clock,
   type ContextBundle,
   type Project,
+  type Segment,
   type Wake,
 } from '@context-continue/core';
 import type { Policy, RunContext } from '../runner.js';
@@ -94,11 +95,26 @@ function byBot(wakes: Wake[]): { botId: string; reason: Wake['reason']; detail: 
   return [...acc.values()].map(g => ({ botId: g.botId, reason: g.reason, detail: g.details.join('; ') }));
 }
 
+/** The id of the latest version among a workstream's deliverables, if it has any. */
+async function latestDeliverableId(p: Project, workstreamId: string): Promise<string | undefined> {
+  const w = (await p.board()).workstreams.find(x => x.id === workstreamId);
+  const latest = w?.deliverables.reduce<(typeof w.deliverables)[number] | undefined>(
+    (a, d) => (a === undefined || d.version > a.version ? d : a),
+    undefined,
+  );
+  return latest?.id;
+}
+
 /**
  * Group C (this project): drives the real core library. The scenario's employees and plan set up a
  * project (start → proposePlan → approvePlan); scripted steps map onto the facade and `callTool`.
  * Who is woken is decided by the core alone (returned wakes and `wake` events, counted once per bot
- * per step; a returned wake's echo in the event is dropped, R-L13); each request is exactly the seven `buildBrief` segments; cacheable per R-B19 (see `send`).
+ * per step; a returned wake's echo in the event is dropped, R-L13). A request is the seven `buildBrief`
+ * segments, except the lead's scripted review and replan steps, which use the contexts the core builds
+ * for them: `buildReviewContext(latest deliverable of deliverableOf)` and `buildPlanningContext()`
+ * (common, board, projection), followed by a trigger segment the host adds with what a brief's trigger
+ * would carry (task line, merged wakes, pending tool results), so nothing waits for a later brief.
+ * Cacheable per R-B19 (see `send`).
  * The core's optional models are not given, so it uses its fallback behaviour and makes no model calls.
  * Every tool result is shown to that bot in the trigger of its next request (R-B21): a success as
  * `tool <name>: ok <result>` (see `resultLine`), a core error (a throw from `callTool` or
@@ -128,6 +144,29 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
 
   const brief = (p: Project, botId: string, reason: Wake['reason'] | 'manual', detail: string): Promise<ContextBundle> =>
     p.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, trigger: { reason, detail: withResults(botId, detail) } });
+
+  /**
+   * A review or planning context with the host's trigger appended: the same text a brief's trigger
+   * segment has (the core's layout), carrying the task line, merged wakes and pending tool results.
+   */
+  const withTrigger = (b: ContextBundle, botId: string, detail: string): ContextBundle => {
+    const trigger: Segment = { kind: 'trigger', text: ['# Why you are awake', '', 'reason: manual', withResults(botId, detail)].join('\n'), cacheable: false };
+    return { ...b, segments: [...b.segments, trigger] };
+  };
+
+  /**
+   * The request of a scripted step: the core's review context for a review of an existing
+   * deliverable, its planning context for a replan, otherwise the brief. A review of a workstream
+   * without a deliverable gets the brief; its submitReview then fails as a core error.
+   */
+  async function stepRequest(p: Project, botId: string, step: Step, detail: string): Promise<ContextBundle> {
+    if (step.kind === 'review') {
+      const id = await latestDeliverableId(p, step.deliverableOf);
+      if (id !== undefined) return withTrigger(await p.buildReviewContext(id), botId, detail);
+    }
+    if (step.kind === 'replan') return withTrigger(await p.buildPlanningContext(), botId, detail);
+    return brief(p, botId, 'manual', detail);
+  }
 
   /**
    * Sends a brief. Cacheable (R-B19, the rule every group uses): a segment counts only if the core
@@ -210,13 +249,8 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
     if (op.name !== 'submitReview') return op;
     const { deliverableOf, ...rest } = op.args as { deliverableOf?: unknown };
     if (typeof deliverableOf !== 'string') return op;
-    const w = (await p.board()).workstreams.find(x => x.id === deliverableOf);
-    const latest = w?.deliverables.reduce<(typeof w.deliverables)[number] | undefined>(
-      (a, d) => (a === undefined || d.version > a.version ? d : a),
-      undefined,
-    );
     // Without a deliverable the core rejects the review, which counts as a core error.
-    return { name: op.name, args: { ...rest, deliverableId: latest?.id } };
+    return { name: op.name, args: { ...rest, deliverableId: await latestDeliverableId(p, deliverableOf) } };
   }
 
   return {
@@ -241,7 +275,7 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
         const merged = mergedWakes.get(botId) ?? [];
         mergedWakes.delete(botId);
         const detail = [fmtTask(botId, step), ...merged].join('; ');
-        const out = await send(ctx, botId, index, 'scripted', await brief(p, botId, 'manual', detail));
+        const out = await send(ctx, botId, index, 'scripted', await stepRequest(p, botId, step, detail));
         for (const op of out.ops) await runTool(p, ctx, botId, await coreOp(p, op));
       }
       await wakeRequests(p, ctx, index, index);
