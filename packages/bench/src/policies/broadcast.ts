@@ -11,6 +11,10 @@ import { historyReader, type LogLine } from './history.js';
  * Extra requests answer with `idleReply`. An idle reply is a pass (R-B10): it costs the request's
  * input tokens but is never posted to the transcript, so it wakes nobody and nobody reads it.
  * Task trigger lines are private to the requested bot and are not group messages.
+ *
+ * A bot's step adds its reply and tool lines (without arguments) to the transcript, then each
+ * sendMessage text the reply does not already contain, as a message of its own (R-L9). The
+ * arguments of every other tool call are transcript entries only their author reads (R-L4).
  */
 export function broadcastPolicy(): Policy {
   const transcript: LogLine[] = [];

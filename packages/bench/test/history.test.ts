@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { historyReader, historySegments, prefixCacheable } from '../src/policies/history.js';
+import { historyReader, historySegments, prefixCacheable, type LogLine } from '../src/policies/history.js';
 import { BASE_TEMPLATE } from '../src/runner.js';
 
 const flags = (segs: { cacheable: boolean }[]) => segs.map(s => s.cacheable);
@@ -26,6 +26,22 @@ describe('history helpers', () => {
     expect(flags(second)).toEqual([true, true, true, false, false]);
     // entries are never read twice
     expect(texts(r.segmentsFor('x', log, 't2'))).toEqual([BASE_TEMPLATE, 'h1', 't1', 'b1', 'b2', 't2']);
+  });
+
+  test('historyReader with private lines (R-L4): only the author reads them; cacheable = each bot\'s own previous request', () => {
+    const log: LogLine[] = ['h1', { text: 'args-x', only: 'x' }, 'b1'];
+    const r = historyReader();
+    const x1 = r.segmentsFor('x', log, 't1');
+    const y1 = r.segmentsFor('y', log, 't2');
+    expect(texts(x1)).toEqual([BASE_TEMPLATE, 'h1', 'args-x', 'b1', 't1']);
+    expect(texts(y1)).toEqual([BASE_TEMPLATE, 'h1', 'b1', 't2']);
+    log.push({ text: 'args-y', only: 'y' }, 'b2');
+    const x2 = r.segmentsFor('x', log, null);
+    const y2 = r.segmentsFor('y', log, null);
+    expect(texts(x2)).toEqual([BASE_TEMPLATE, 'h1', 'args-x', 'b1', 't1', 'b2']);
+    expect(flags(x2)).toEqual([true, true, true, true, true, false]);
+    expect(texts(y2)).toEqual([BASE_TEMPLATE, 'h1', 'b1', 't2', 'args-y', 'b2']);
+    expect(flags(y2)).toEqual([true, true, true, true, false, false]);
   });
 
   test('prefixCacheable: first request → the first `firstRequest` segments; later → longest identical leading run', () => {

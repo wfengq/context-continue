@@ -4,9 +4,10 @@ import { historyReader, type LogLine } from './history.js';
 
 /**
  * Group D (DeLM style): no lead and no routing. All activity goes into one shared log: human
- * messages, scripted bot replies, tool lines and deliverables in reference form
- * (`[deliverable <ws> v<n> ref]`). Each bot has a read cursor; whenever it makes a request, every
- * log entry after its cursor (no relevance filter) is appended to its own history and the cursor
+ * messages, scripted bot replies, tool lines, sendMessage texts not already in the reply (R-L9) and
+ * deliverables in reference form (`[deliverable <ws> v<n> ref]`). The arguments of every other tool
+ * call are log entries only their author reads (R-L4). Each bot has a read cursor; whenever it makes a request, every
+ * log entry after its cursor that it may read (no relevance filter) is appended to its own history and the cursor
  * moves to the end.
  *
  * The spec's "already-seen items shown compactly" applies to task-board items. In this text-log

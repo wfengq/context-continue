@@ -76,8 +76,10 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * its first wake. When woken, a member is shown the room lines it has not seen: the last 12 lines at
  * its first wake; later, the lines from others since its last wake, of which those before the latest
  * human message are cut to the newest 8 (R-B8), and then all to the newest 24 (its own lines are
- * already in its session). Its scripted reply goes to the room and its own history; tool lines and
- * deliverables stay in its own history. Extra requests are answered with `idleReply`, which is a
+ * already in its session). Its scripted reply goes to the room and its own history; tool lines with
+ * their arguments (R-L4) and deliverables stay in its own history. A sendMessage text is a posted
+ * message: it goes to the room too (waking nobody), unless the reply already contains it (R-L9), and
+ * the author's own tool line then omits the text. Extra requests are answered with `idleReply`, which is a
  * pass (R-B10): it costs the request but is posted nowhere (room or own history) and wakes nobody.
  *
  * Request = template + memory + history. Cacheable (R-B19): the leading run identical to the

@@ -18,12 +18,8 @@ export interface GroupMetrics {
   coreErrors: number;
   /** Group C: the project could not be finished (a workstream never delivered). */
   unfinished: boolean;
-  /**
-   * Group C only: what a provider that caches the core's flagged stable segments could cache, and
-   * the cost units that would give. Shown as a caveat line, never in the tables (R-B19).
-   */
-  /** Fact visibility: opportunities are scripted requests after a fact's step whose audience includes the bot. */
   tier: 'standard' | 'long';
+  /** Fact visibility: opportunities are scripted requests after a fact's step whose audience includes the bot. */
   factOpportunities: number;
   factHits: number;
   factMisses: number;
@@ -31,6 +27,10 @@ export interface GroupMetrics {
   perFact: { id: string; opportunities: number; hits: number }[];
   /** Average input tokens of all requests per 25-step bucket (fromStep 0, 25, ...); empty buckets omitted. */
   growth: { fromStep: number; avgInput: number }[];
+  /**
+   * Group C only: what a provider that caches the core's flagged stable segments could cache, and
+   * the cost units that would give. Shown as a caveat line, never in the tables (R-B19).
+   */
   upperBound?: { cacheableTokens: number; costUnits: number };
 }
 
