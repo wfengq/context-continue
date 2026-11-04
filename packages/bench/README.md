@@ -106,6 +106,23 @@ Each flag may be given once. `--stamp` must be a plain name (letters, digits, `_
 dots). Output is deterministic: two runs with the same inputs and `--stamp` produce byte-identical files.
 An invalid scenario, group or flag value prints a message on stderr and exits with a non-zero code (2 for usage errors such as a bad `--c-public`).
 
+### Comparing the public-board settings
+
+To compare group C with the core's optional public-board sections switched off and on, run all
+five scenarios once per setting, each into its own output directory:
+
+```sh
+for s in none directives contracts failures all; do
+  pnpm -C packages/bench bench run --scenario all --group all --c-public $s --out /tmp/pb/$s --stamp T
+done
+```
+
+Only group C depends on `--c-public`: groups A, B, D, E and F give identical results in every
+setting. Compare C's cost units and fact visibility across the five reports; for visibility by fact
+category, pool `perFact` in `results.json` by the id prefix (`change-`, `conv-`, `contract-`,
+`fail-`). The recorded comparison is in
+`docs/superpowers/specs/2026-11-04-project-wide-board.md`, section 6.
+
 ## Reading the results
 
 - Standard and long scenarios are summarised separately: the report has one summary table per tier
