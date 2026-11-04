@@ -692,7 +692,7 @@ describe('public board contracts and failures (spec 2026-11-04 sections 2.2-2.4)
   /** An approved project with two failures and one art deliverable; returns its review context too. */
   async function setup(publicBoard?: Switches) {
     let n = 0;
-    const f = await makeProject({ approved: true, publicBoard, newId: prefix => `${prefix}-${++n}` });
+    const f = await makeProject({ approved: true, publicBoard: { directives: false, ...publicBoard }, newId: prefix => `${prefix}-${++n}` });
     await f.p.submit('art', {
       type: 'proposal',
       ops: [failureOp(['art'], 'Tried SVG sprites', 'Renderer blurs them'), failureOp(['audio'], 'Tried WAV', 'Too large')],

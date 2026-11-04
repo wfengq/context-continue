@@ -30,7 +30,8 @@ async function runC(steps: unknown[], plan?: Parameters<typeof scenario>[1]) {
   const seen: ModelRequest[] = [];
   const inner = new ScriptedModel('Noted.');
   const model = { complete: async (r: ModelRequest) => (seen.push(r), inner.complete(r)) };
-  const policy = projectPolicy({ publicBoard: { directives: false, contracts: false, failures: false } }) // the plain board these tests were written for;
+  // the plain board these tests were written for
+  const policy = projectPolicy({ publicBoard: { directives: false, contracts: false, failures: false } });
   const { records, stats } = await runScenario(scenario(steps, plan), policy, { model });
   return { records, stats, seen, project: policy.project! };
 }
