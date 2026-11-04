@@ -58,3 +58,12 @@ test('publicBoard ignores unknown switches (R-P2), like unknown numeric options'
   await expect(makeProject({ publicBoard })).resolves.toBeDefined();
   await expect(makeProject({ publicBoard: { unknown: 'x' } as never })).resolves.toBeDefined();
 });
+
+test('resolvePublicBoard defaults: directives on, contracts and failures off', async () => {
+  const { resolvePublicBoard } = await import('../src/publicBoard.js');
+  const on = { directives: true, contracts: false, failures: false };
+  expect(resolvePublicBoard(undefined)).toEqual(on);
+  expect(resolvePublicBoard({})).toEqual(on);
+  expect(resolvePublicBoard({ contracts: true })).toEqual({ ...on, contracts: true });
+  expect(resolvePublicBoard({ directives: false })).toEqual({ ...on, directives: false });
+});

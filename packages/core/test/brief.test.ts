@@ -596,10 +596,31 @@ describe('public board directives (spec 2026-11-04 section 2.1)', () => {
       out.push(await f.p.exportMarkdown());
       return out;
     };
-    const base = await run();
-    expect(await run({})).toEqual(base);
-    expect(await run({ directives: false, contracts: false, failures: false })).toEqual(base);
+    const base = await run({ directives: false, contracts: false, failures: false });
+    expect(await run()).toEqual(base); // the helper's default is directives off
+    expect(await run({ directives: false })).toEqual(base);
+    expect((await run({})).join('\n')).toContain('## Directives'); // the core default is on
     expect(base.join('\n')).not.toContain('## Directives');
+  });
+
+  test('default (publicBoard omitted): the Directives section is present and human chat is not in deltas', async () => {
+    const f = await makeProject({ approved: true, coreDefaultBoard: true });
+    for (const id of ['pm', 'art']) await f.p.buildBrief(id, BUDGET);
+    const a = await say(f, 'Make it cute.');
+    const board = seg(await f.p.buildBrief('art', BUDGET), 'board');
+    expect(board).toContain(`## Directives\n- [#${a.seq} alice] Make it cute.`);
+    expect(board).not.toContain('## Contracts');
+    expect(board).not.toContain('## Failures');
+    expect(seg(await f.p.buildBrief('art', BUDGET), 'delta')).not.toContain('Make it cute.');
+  });
+
+  test('default: an empty publicBoard object and omitted directives key also mean directives on', async () => {
+    for (const publicBoard of [{}, { contracts: true }, { failures: true }]) {
+      const f = await makeProject({ approved: true, publicBoard });
+      expect(seg(await f.p.buildBrief('art', BUDGET), 'board'), JSON.stringify(publicBoard)).toContain('## Directives');
+    }
+    const f = await makeProject({ approved: true, publicBoard: { contracts: true, directives: false } });
+    expect(seg(await f.p.buildBrief('art', BUDGET), 'board')).not.toContain('## Directives');
   });
 
   test('directives on: every human chat message appears on the board in order', async () => {

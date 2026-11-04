@@ -112,7 +112,7 @@ describe('restart', () => {
   function reopen(file: string, clock: ReturnType<typeof fakeClock>, extract?: ProjectModels['extract']) {
     const store = sqliteStore(file);
     const employees = createEmployeeRegistry({ store });
-    const p = createProject({ projectId: 'p1', store, employees, clock, options: { extractEvery: 2 }, models: extract ? { extract } : undefined });
+    const p = createProject({ projectId: 'p1', store, employees, clock, publicBoard: { directives: false }, options: { extractEvery: 2 }, models: extract ? { extract } : undefined });
     return { p, store, employees };
   }
 

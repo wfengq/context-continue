@@ -275,6 +275,8 @@ export async function makeProject(
     models?: ProjectConfig['models'];
     countTokens?: (s: string) => number;
     publicBoard?: ProjectConfig['publicBoard'];
+    /** Pass no publicBoard at all, to exercise the core's own default (directives on). */
+    coreDefaultBoard?: boolean;
     newId?: ProjectConfig['newId'];
   } = {},
 ): Promise<FacadeProject> {
@@ -294,7 +296,8 @@ export async function makeProject(
     workstreams: opts.workstreams,
     models: opts.models,
     countTokens: opts.countTokens,
-    publicBoard: opts.publicBoard,
+    // Most tests rely on the plain board, so the helper turns directives off unless told otherwise.
+    ...(opts.coreDefaultBoard ? {} : { publicBoard: opts.publicBoard === undefined ? { directives: false } : opts.publicBoard }),
     newId: opts.newId,
   });
   const events: RecordedEvent[] = [];

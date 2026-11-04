@@ -4,7 +4,7 @@ import { ContextError } from './errors.js';
 import type { Store } from './store/store.js';
 import type { LedgerEntry } from './types.js';
 
-/** Which optional sections the public board shows. Every switch defaults to off. */
+/** Which optional sections the public board shows. `directives` defaults to on; `contracts` and `failures` default to off. */
 export type PublicBoardSwitches = { directives?: boolean; contracts?: boolean; failures?: boolean };
 
 /** What `renderBoardPublic` needs beyond the board: the switches and the directives to show. */
@@ -23,7 +23,7 @@ const SWITCHES = ['directives', 'contracts', 'failures'] as const;
  * booleans. Unknown keys are ignored (R-P2), like unknown numeric options.
  */
 export function resolvePublicBoard(p?: PublicBoardSwitches): Required<PublicBoardSwitches> {
-  const resolved = { directives: false, contracts: false, failures: false };
+  const resolved = { directives: true, contracts: false, failures: false };
   if (p === undefined) return resolved;
   if (typeof p !== 'object' || p === null || Array.isArray(p)) {
     throw new ContextError('INVALID_OP', `publicBoard must be an object of boolean switches, got ${String(p)}`);
