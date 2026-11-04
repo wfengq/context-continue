@@ -5,6 +5,7 @@ import {
   type Clock,
   type ContextBundle,
   type Project,
+  type PublicBoardSwitches,
   type Wake,
 } from '@context-continue/core';
 import type { Policy, RunContext } from '../runner.js';
@@ -119,7 +120,7 @@ async function latestDeliverableId(p: Project, workstreamId: string): Promise<st
  * `tool <name>: ok <result>` (see `resultLine`), a core error (a throw from `callTool` or
  * `approvePlan`) as `tool error: <message>`, also counted; the run continues.
  */
-export function projectPolicy(): Policy & { readonly project: Project | null } {
+export function projectPolicy(opts: { publicBoard?: PublicBoardSwitches } = {}): Policy & { readonly project: Project | null } {
   let project: Project | null = null;
   let coreErrors = 0;
   /** Wakes caught since the last time they were turned into requests. */
@@ -223,7 +224,7 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
     const store = memoryStore({ newId });
     const employees = createEmployeeRegistry({ store });
     for (const e of s.employees) await employees.upsert({ botId: e.botId, persona: e.persona, skills: [...e.skills] });
-    const p = createProject({ projectId: s.id, store, employees, clock: benchClock(), newId });
+    const p = createProject({ projectId: s.id, store, employees, clock: benchClock(), newId, ...(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard }) });
     p.on('wake', e => void woken.push(...e.wakes));
     woken.push(...(await p.start({ goal: s.goal, constraints: [...s.constraints], lead: s.lead, by: s.owner })));
     await wakeRequests(p, ctx, 0, -1);

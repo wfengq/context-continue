@@ -460,4 +460,30 @@ describe('group C unfinished flag (R-B16)', () => {
     expect((await project.board()).workstreams.map(w => w.id)).toEqual(['art']);
     expect(stats.unfinished).toBe(false);
   });
+
+  test('C: publicBoard switches reach the core: all three new sections show in the board segment; none leaves it unchanged', async () => {
+    const boardOf = (seen: ModelRequest[]) => seen.flatMap(r => r.segments.map(x => x.text)).filter(t => t.includes('## Workstreams'));
+    const run = async (opts?: Parameters<typeof projectPolicy>[0]) => {
+      const seen: ModelRequest[] = [];
+      const inner = new ScriptedModel('Noted.');
+      const model = { complete: async (r: ModelRequest) => (seen.push(r), inner.complete(r)) };
+      await runScenario(scenario(threeSteps()), projectPolicy(opts), { model });
+      return boardOf(seen);
+    };
+    const base = await run();
+    expect(await run({})).toEqual(base);
+    expect(await run({ publicBoard: {} })).toEqual(base);
+    const all = await run({ publicBoard: { directives: true, contracts: true, failures: true } });
+    expect(base.join('\n')).not.toMatch(/## (Directives|Contracts|Failures)/);
+    for (const h of ['## Directives', '## Contracts', '## Failures']) expect(all.join('\n')).toContain(h);
+    const some = (await run({ publicBoard: { contracts: true } })).join('\n');
+    expect(some).toContain('## Contracts');
+    expect(some).not.toMatch(/## (Directives|Failures)/);
+  });
+
+  test('createPolicy passes publicBoard to C only', () => {
+    const opts = { ...defaults, publicBoard: { directives: true } };
+    expect(createPolicy('C', opts).group).toBe('C');
+    expect(createPolicy('A', opts).group).toBe('A');
+  });
 });

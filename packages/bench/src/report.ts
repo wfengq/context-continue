@@ -68,7 +68,7 @@ function sumGroup(rows: GroupMetrics[], g: Group): GroupMetrics | undefined {
 
 export function renderReport(
   all: GroupMetrics[],
-  meta: { scenarios: string[]; params: Record<string, number>; dsbotRef: 'f823773'; tiers: Record<string, 'standard' | 'long'> },
+  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; dsbotRef: 'f823773'; tiers: Record<string, 'standard' | 'long'> },
 ): string {
   const out: string[] = [
     '> Results come from a scripted fake model: they measure context size only, not task quality.',
@@ -78,6 +78,7 @@ export function renderReport(
     'Parameters:',
     '',
     ...Object.keys(meta.params).sort().map(k => `- ${k}: ${meta.params[k]}`),
+    ...(meta.cPublic === undefined ? [] : [`- cPublic: ${meta.cPublic}`]),
     '',
     'Cost units = cacheable tokens x cache ratio + uncached tokens. Saved % = (reference cost - group cost) / reference cost x 100; n/a when the reference cost is 0.',
     '',
@@ -187,13 +188,13 @@ export function renderReport(
 
 export function writeResults(
   dir: string,
-  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number> },
+  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number>; cPublic?: string },
   report: string,
 ): void {
   mkdirSync(dir, { recursive: true });
   const params: Record<string, number> = {};
   for (const k of Object.keys(payload.params).sort()) params[k] = payload.params[k]!;
-  const json = JSON.stringify({ params, metrics: payload.metrics, records: payload.records }, null, 2) + '\n';
+  const json = JSON.stringify({ params, ...(payload.cPublic === undefined ? {} : { cPublic: payload.cPublic }), metrics: payload.metrics, records: payload.records }, null, 2) + '\n';
   writeFileSync(join(dir, 'results.json'), json);
   writeFileSync(join(dir, 'report.md'), report);
 }

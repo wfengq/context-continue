@@ -1,3 +1,4 @@
+import type { PublicBoardSwitches } from '@context-continue/core';
 import type { Policy } from '../runner.js';
 import type { Group } from '../types.js';
 import { broadcastPolicy } from './broadcast.js';
@@ -14,6 +15,8 @@ export interface PolicyOptions {
   compactRatio: number;
   /** Group E: size of the summary that replaces compacted history. */
   summaryTokens: number;
+  /** Group C: which optional public-board sections the core renders (default none). */
+  publicBoard?: PublicBoardSwitches;
 }
 
 export function createPolicy(group: Group, opts: PolicyOptions): Policy {
@@ -23,7 +26,7 @@ export function createPolicy(group: Group, opts: PolicyOptions): Policy {
     case 'B':
       return broadcastPolicy();
     case 'C':
-      return projectPolicy();
+      return projectPolicy(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard });
     case 'D':
       return delmPolicy();
     case 'E':

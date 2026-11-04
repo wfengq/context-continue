@@ -98,12 +98,13 @@ ignored by git.
 | `--compact-ratio <r>` | `0.8` | Group E: compact when history exceeds window x ratio |
 | `--summary-tokens <n>` | `1500` | Group E: size of the summary that replaces compacted history |
 | `--cache-ratio <r>` | `0.1` | Cost weight of cacheable tokens (uncached tokens weigh 1) |
+| `--c-public <none\|all\|list>` | `none` | Group C only: which optional public-board sections the core renders. `none`, `all`, or a comma-separated subset of `directives`, `contracts`, `failures` (no repeats). The setting is written to `results.json` as top-level `cPublic` (`none`, `all`, or the subset in name order) and listed in the report parameters |
 | `--out <dir>` | `results` | Output directory, relative to the current working directory |
 | `--stamp <s>` | UTC time `YYYYMMDDTHHmmssZ` | Name of the run's subdirectory |
 
 Each flag may be given once. `--stamp` must be a plain name (letters, digits, `_`, `.`, `-`, not only
 dots). Output is deterministic: two runs with the same inputs and `--stamp` produce byte-identical files.
-An invalid scenario, group or flag value prints a message on stderr and exits with a non-zero code.
+An invalid scenario, group or flag value prints a message on stderr and exits with a non-zero code (2 for usage errors such as a bad `--c-public`).
 
 ## Reading the results
 

@@ -154,4 +154,60 @@ describe('bench cli', () => {
     expect(r.err).toContain('--group');
     expect(readdirSync(out)).toEqual([]);
   });
+
+  describe('--c-public', () => {
+    const go = async (extra: string[], group = 'all', scenario = 'product-plan') => {
+      const out = tmp();
+      const r = await run(['run', '--scenario', scenario, '--group', group, '--out', out, '--stamp', 'T', ...extra]);
+      return { ...r, out };
+    };
+    const results = (out: string) => JSON.parse(readFileSync(join(out, 'T', 'results.json'), 'utf8'));
+
+    test('default is none: recorded as a top-level string and listed in the report parameters', async () => {
+      const r = await go([]);
+      expect(r.code).toBe(0);
+      const json = results(r.out);
+      expect(json.cPublic).toBe('none');
+      expect(json.params).toEqual({ cacheRatio: 0.1, compactRatio: 0.8, summaryTokens: 1500, window: 128000 });
+      expect(readFileSync(join(r.out, 'T', 'report.md'), 'utf8')).toContain('- cPublic: none\n');
+    });
+
+    test('explicit none equals the default, byte for byte', async () => {
+      const a = await go([]);
+      const b = await go(['--c-public', 'none']);
+      for (const f of ['results.json', 'report.md']) expect(readFileSync(join(a.out, 'T', f)).equals(readFileSync(join(b.out, 'T', f)))).toBe(true);
+    });
+
+    test('subsets are normalised to name order; the full set is "all"', async () => {
+      expect(results((await go(['--c-public', 'contracts,directives'], 'C')).out).cPublic).toBe('contracts,directives');
+      expect(results((await go(['--c-public', 'failures,directives'], 'C')).out).cPublic).toBe('directives,failures');
+      expect(results((await go(['--c-public', 'failures,contracts,directives'], 'C')).out).cPublic).toBe('all');
+      const all = await go(['--c-public', 'all'], 'C');
+      expect(results(all.out).cPublic).toBe('all');
+      expect(readFileSync(join(all.out, 'T', 'report.md'), 'utf8')).toContain('- cPublic: all\n');
+    });
+
+    test('only group C changes; the other groups record the same under any setting', async () => {
+      const none = results((await go([])).out);
+      const all = results((await go(['--c-public', 'all'])).out);
+      const notC = (x: { group?: string; botId?: string }) => x.group !== 'C';
+      expect(all.metrics.filter(notC)).toEqual(none.metrics.filter(notC));
+      const recs = (j: { records: { group?: string }[] }) => j.records.filter(notC);
+      expect(recs(all).length).toBeGreaterThan(0);
+      expect(recs(all)).toEqual(recs(none));
+      expect(all.metrics.find((m: { group: string }) => m.group === 'C')).not.toEqual(none.metrics.find((m: { group: string }) => m.group === 'C'));
+    });
+
+    test('unknown names, duplicates, empty values and "none" inside a list exit 2 without output', async () => {
+      const out = tmp();
+      for (const v of ['bogus', 'directives,bogus', 'directives,directives', '', ',', 'directives,', 'none,directives', 'all,directives', 'ALL', 'none,none']) {
+        const r = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, '--c-public', v]);
+        expect(r.code, `"${v}"`).toBe(2);
+        expect(r.err, `"${v}"`).toContain('--c-public');
+      }
+      const dup = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, '--c-public', 'all', '--c-public', 'none']);
+      expect(dup.code).toBe(2);
+      expect(readdirSync(out)).toEqual([]);
+    });
+  });
 });

@@ -226,6 +226,22 @@ describe('renderReport: facts, growth, tiers', () => {
   });
 });
 
+describe('C public-board setting', () => {
+  test('renderReport prints cPublic in the parameters section; omitted when not given', () => {
+    const md = renderReport(all(), { ...meta, cPublic: 'contracts,directives' });
+    expect(md).toContain('Parameters:\n\n- ratio: 0.1\n- cPublic: contracts,directives\n\n');
+    expect(renderReport(all(), meta)).not.toContain('cPublic');
+  });
+
+  test('writeResults puts cPublic as a top-level string between params and metrics', () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'bench-')), 'out', 'stamp');
+    const payload = { records: [], metrics: all(), params: { a: 1 }, cPublic: 'all' };
+    writeResults(dir, payload, 'R\n');
+    const json = readFileSync(join(dir, 'results.json'), 'utf8');
+    expect(json).toBe(JSON.stringify({ params: { a: 1 }, cPublic: 'all', metrics: payload.metrics, records: [] }, null, 2) + '\n');
+  });
+});
+
 describe('writeResults', () => {
   test('writes stable results.json and report.md', () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'bench-')), 'out', 'stamp');

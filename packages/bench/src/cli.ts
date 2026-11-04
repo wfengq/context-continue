@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { PublicBoardSwitches } from '@context-continue/core';
 import { computeMetrics, type GroupMetrics } from './metrics.js';
 import { createPolicy } from './policies/index.js';
 import { renderReport, writeResults } from './report.js';
@@ -24,7 +25,7 @@ const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 
 const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
-  '[--summary-tokens 1500] [--cache-ratio 0.1] [--out results] [--stamp <s>]';
+  '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public none|all|directives,contracts,failures] [--out results] [--stamp <s>]';
 
 interface Args {
   scenario: string;
@@ -33,11 +34,33 @@ interface Args {
   compactRatio: number;
   summaryTokens: number;
   cacheRatio: number;
+  cPublic: CPublic;
   out: string;
   stamp: string | undefined;
 }
 
 class UsageError extends Error {}
+
+const PUBLIC_SECTIONS = ['contracts', 'directives', 'failures'] as const;
+interface CPublic {
+  /** `none`, `all`, or the chosen section names in name order. */
+  canonical: string;
+  switches: PublicBoardSwitches | undefined;
+}
+
+/** `none`, `all`, or a comma list of distinct section names; anything else is a usage error. */
+function parseCPublic(raw: string): CPublic {
+  if (raw === 'none') return { canonical: 'none', switches: undefined };
+  const names = raw === 'all' ? [...PUBLIC_SECTIONS] : raw.split(',');
+  const bad = names.find(n => !(PUBLIC_SECTIONS as readonly string[]).includes(n));
+  if (bad !== undefined) throw new UsageError(`--c-public: unknown section "${bad}" in "${raw}" (use none, all, or a list of ${PUBLIC_SECTIONS.join(', ')})`);
+  if (new Set(names).size !== names.length) throw new UsageError(`--c-public: a section is repeated in "${raw}"`);
+  const sorted = [...names].sort();
+  return {
+    canonical: sorted.length === PUBLIC_SECTIONS.length ? 'all' : sorted.join(','),
+    switches: Object.fromEntries(sorted.map(n => [n, true])) as PublicBoardSwitches,
+  };
+}
 
 /** A scenario id names `scenarios/<id>.json`; anything ending in `.json` is a path (relative to cwd). */
 export function scenarioPath(idOrPath: string): string {
@@ -67,7 +90,7 @@ function parseArgs(argv: string[]): Args {
     if (seen.has(flag)) throw new UsageError(`${flag} is given more than once`);
     seen.set(flag, value);
   }
-  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--out', '--stamp'];
+  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--out', '--stamp'];
   for (const flag of seen.keys()) if (!known.includes(flag)) throw new UsageError(`unknown flag ${flag}`);
   const scenario = seen.get('--scenario');
   const group = seen.get('--group');
@@ -87,6 +110,7 @@ function parseArgs(argv: string[]): Args {
     compactRatio: number('--compact-ratio', seen.get('--compact-ratio') ?? '0.8', n => n > 0 && n <= 1, 'a number in (0, 1]'),
     summaryTokens: number('--summary-tokens', seen.get('--summary-tokens') ?? '1500', int, 'a positive integer'),
     cacheRatio: number('--cache-ratio', seen.get('--cache-ratio') ?? '0.1', n => n >= 0 && n <= 1, 'a number in [0, 1]'),
+    cPublic: parseCPublic(seen.get('--c-public') ?? 'none'),
     out: seen.get('--out') ?? 'results',
     stamp,
   };
@@ -116,7 +140,7 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const groups = args.group === 'all' ? GROUPS : [args.group as Group];
-  const opts = { window: args.window, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens };
+  const opts = { window: args.window, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, ...(args.cPublic.switches === undefined ? {} : { publicBoard: args.cPublic.switches }) };
   const records: CallRecord[] = [];
   const metrics: GroupMetrics[] = [];
   for (const s of scenarios) {
@@ -128,9 +152,9 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const params = { cacheRatio: args.cacheRatio, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, window: args.window };
-  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, dsbotRef: 'f823773', tiers: Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'])) });
+  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, dsbotRef: 'f823773', tiers: Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'])) });
   const dir = join(args.out, args.stamp ?? timestamp(new Date()));
-  writeResults(dir, { records, metrics, params }, report);
+  writeResults(dir, { records, metrics, params, cPublic: args.cPublic.canonical }, report);
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);
   return 0;
 }
