@@ -158,9 +158,10 @@ What reaches whom:
   reply already contains it.
 - Group C's lead reviews with the core's review context (the deliverable's text and the reviewed
   workstream's contracts, conventions, decisions, facts and failures) and replans with the core's
-  planning context (every human message so far and the previous plan). The bench appends a trigger
-  segment with what a brief's trigger would carry: the task line, wakes merged into the step and
-  tool results not yet shown to the lead.
+  planning context (every human message so far and the previous plan). Both carry the lead's
+  cacheable prefix (common, memory, workspace, board) and the bench passes them the trigger a brief
+  would carry (the task line, wakes merged into the step and tool results not yet shown to the
+  lead), which the core renders as the last segment.
 - Group C's misses come from three core behaviours, reported as results rather than patched in
   the bench (see "Known gaps" in `packages/core/README.md`):
   1. Relevance projection: a bot's brief shows board items (failures, contracts) of its own part of

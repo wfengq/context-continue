@@ -5,7 +5,6 @@ import {
   type Clock,
   type ContextBundle,
   type Project,
-  type Segment,
   type Wake,
 } from '@context-continue/core';
 import type { Policy, RunContext } from '../runner.js';
@@ -112,8 +111,8 @@ async function latestDeliverableId(p: Project, workstreamId: string): Promise<st
  * per step; a returned wake's echo in the event is dropped, R-L13). A request is the seven `buildBrief`
  * segments, except the lead's scripted review and replan steps, which use the contexts the core builds
  * for them: `buildReviewContext(latest deliverable of deliverableOf)` and `buildPlanningContext()`
- * (common, board, projection), followed by a trigger segment the host adds with what a brief's trigger
- * would carry (task line, merged wakes, pending tool results), so nothing waits for a later brief.
+ * (common, memory, workspace, board, projection), with the trigger (task line, merged wakes, pending tool
+ * results) passed to the core, which appends its trigger segment, so nothing waits for a later brief.
  * Cacheable per R-B19 (see `send`).
  * The core's optional models are not given, so it uses its fallback behaviour and makes no model calls.
  * Every tool result is shown to that bot in the trigger of its next request (R-B21): a success as
@@ -142,17 +141,11 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
     return [detail, ...lines].join('; ');
   };
 
+  /** The trigger of a scripted step: the task line, merged wakes and pending tool results. */
+  const manual = (botId: string, detail: string) => ({ reason: 'manual' as const, detail: withResults(botId, detail) });
+
   const brief = (p: Project, botId: string, reason: Wake['reason'] | 'manual', detail: string): Promise<ContextBundle> =>
     p.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, trigger: { reason, detail: withResults(botId, detail) } });
-
-  /**
-   * A review or planning context with the host's trigger appended: the same text a brief's trigger
-   * segment has (the core's layout), carrying the task line, merged wakes and pending tool results.
-   */
-  const withTrigger = (b: ContextBundle, botId: string, detail: string): ContextBundle => {
-    const trigger: Segment = { kind: 'trigger', text: ['# Why you are awake', '', 'reason: manual', withResults(botId, detail)].join('\n'), cacheable: false };
-    return { ...b, segments: [...b.segments, trigger] };
-  };
 
   /**
    * The request of a scripted step: the core's review context for a review of an existing
@@ -162,9 +155,9 @@ export function projectPolicy(): Policy & { readonly project: Project | null } {
   async function stepRequest(p: Project, botId: string, step: Step, detail: string): Promise<ContextBundle> {
     if (step.kind === 'review') {
       const id = await latestDeliverableId(p, step.deliverableOf);
-      if (id !== undefined) return withTrigger(await p.buildReviewContext(id), botId, detail);
+      if (id !== undefined) return p.buildReviewContext(id, { trigger: manual(botId, detail) });
     }
-    if (step.kind === 'replan') return withTrigger(await p.buildPlanningContext(), botId, detail);
+    if (step.kind === 'replan') return p.buildPlanningContext({ trigger: manual(botId, detail) });
     return brief(p, botId, 'manual', detail);
   }
 

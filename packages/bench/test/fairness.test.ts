@@ -56,8 +56,8 @@ describe('cross-group fairness: the reviewer sees the deliverable and the requir
           expect(review).toContain(CONTENT);
           break;
         case 'C':
-          // the core's review context carries the deliverable's text
-          expect(seen[i]!.segments[2]!.text).toContain(CONTENT);
+          // the core's review context carries the deliverable's text (projection segment, fifth)
+          expect(seen[i]!.segments[4]!.text).toContain(CONTENT);
           break;
         case 'D':
           expect(review).toContain('[deliverable sound v1 ref]');

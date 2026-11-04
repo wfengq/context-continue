@@ -330,9 +330,9 @@ describe('group C review and replan requests use the core contexts', () => {
     expect(stats.coreErrors).toBe(0);
     const i = records.findIndex(r => r.step === 2 && r.kind === 'scripted');
     expect(records[i]!.botId).toBe('pm');
-    // the core's review context (common, board, projection) and the host's trigger
-    expect(kinds(records[i]!)).toEqual(['common', 'board', 'projection', 'trigger']);
-    const body = seen[i]!.segments[2]!.text;
+    // the core's review context (the lead's prefix, then the projection) and the trigger it renders
+    expect(kinds(records[i]!)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'trigger']);
+    const body = seen[i]!.segments[4]!.text;
     expect(body).toContain('sprite sheet ART-CONTENT');
     expect(body).toContain('FAIL-SVG');
     expect(body).toContain('too slow on old phones');
@@ -354,8 +354,8 @@ describe('group C review and replan requests use the core contexts', () => {
     expect(stats.coreErrors).toBe(0);
     const i = records.findIndex(r => r.step === 4 && r.kind === 'scripted');
     expect(records[i]!.botId).toBe('pm');
-    expect(kinds(records[i]!)).toEqual(['common', 'board', 'projection', 'trigger']);
-    const body = seen[i]!.segments[2]!.text;
+    expect(kinds(records[i]!)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'trigger']);
+    const body = seen[i]!.segments[4]!.text;
     // both human messages, including the one that mentioned only art, and the previous plan
     expect(body).toContain('CHANGE-BLUE');
     expect(body).toContain('CHANGE-SOUND');
@@ -377,12 +377,12 @@ describe('group C review and replan requests use the core contexts', () => {
     const review = pm.find(x => x.r.step === 2)!;
     const replan = pm.find(x => x.r.step === 3)!;
     const after = pm.find(x => x.r.step === 4)!;
-    // after a 7-segment brief only the shared common segment is identical
-    expect(review.r.segments!.map(s => s.cacheable)).toEqual([true, false, false, false]);
-    // review → replan: same common; the board changed (the review passed art)
-    expect(replan.r.segments!.map(s => s.cacheable)).toEqual([true, false, false, false]);
-    // back to a brief: only common again
-    expect(after.r.segments!.map(s => s.cacheable)).toEqual([true, false, false, false, false, false, false]);
+    // the lead's previous request is its brief for the delivery wake: the whole prefix (common to board) is identical
+    expect(review.r.segments!.map(s => s.cacheable)).toEqual([true, true, true, true, false, false]);
+    // review → replan: the prefix up to the board is identical again, the board changed (the review passed art)
+    expect(replan.r.segments!.map(s => s.cacheable)).toEqual([true, true, true, false, false, false]);
+    // back to a brief: the board is unchanged since the replan request, so the prefix common to board is identical
+    expect(after.r.segments!.map(s => s.cacheable)).toEqual([true, true, true, true, false, false, false]);
     // every lead request: cacheable iff core-flagged (common, board) and inside the identical leading run
     let prev: string[] | null = null;
     for (const { r, q } of pm) {
