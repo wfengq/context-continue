@@ -234,4 +234,52 @@ describe('bench cli', () => {
       expect(readdirSync(out)).toEqual([]);
     });
   });
+
+  describe('--c-stream', () => {
+    const go = async (extra: string[], group = 'all', scenario = 'product-plan') => {
+      const out = tmp();
+      const r = await run(['run', '--scenario', scenario, '--group', group, '--out', out, '--stamp', 'T', ...extra]);
+      return { ...r, out };
+    };
+    const results = (out: string) => JSON.parse(readFileSync(join(out, 'T', 'results.json'), 'utf8'));
+    const report = (out: string) => readFileSync(join(out, 'T', 'report.md'), 'utf8');
+
+    test('default is off: recorded as a top-level field and one report parameter line; explicit off is the same, byte for byte', async () => {
+      const a = await go([]);
+      expect(a.code).toBe(0);
+      expect(results(a.out).cStream).toEqual({ mode: 'off' });
+      expect(report(a.out)).toContain('- cPublic: default\n- cStream: off\n');
+      expect(report(a.out)).not.toContain('--c-stream');
+      const b = await go(['--c-stream', 'off']);
+      for (const f of ['results.json', 'report.md']) expect(readFileSync(join(a.out, 'T', f)).equals(readFileSync(join(b.out, 'T', f)))).toBe(true);
+    });
+
+    test('on records restreamTokens (default 8000, or --restream-tokens) and adds one caveat; other groups record the same', async () => {
+      const off = results((await go([])).out);
+      const on = await go(['--c-stream', 'on']);
+      expect(on.code).toBe(0);
+      const json = results(on.out);
+      expect(json.cStream).toEqual({ mode: 'on', restreamTokens: 8000 });
+      expect(report(on.out)).toContain('- cStream: on (restreamTokens 8000)\n');
+      expect(report(on.out)).toContain('- C runs the --c-stream prototype');
+      const notC = (x: { group?: string }) => x.group !== 'C';
+      expect(json.metrics.filter(notC)).toEqual(off.metrics.filter(notC));
+      expect(json.records.filter(notC)).toEqual(off.records.filter(notC));
+      expect(json.metrics.find((m: { group: string }) => m.group === 'C')).not.toEqual(off.metrics.find((m: { group: string }) => m.group === 'C'));
+      const small = await go(['--c-stream', 'on', '--restream-tokens', '500'], 'C');
+      expect(results(small.out).cStream).toEqual({ mode: 'on', restreamTokens: 500 });
+      expect(results(small.out).metrics).not.toEqual(json.metrics.filter((m: { group: string }) => m.group === 'C'));
+    });
+
+    test('bad values exit 2 without output; --restream-tokens needs --c-stream on', async () => {
+      const out = tmp();
+      for (const extra of [['--c-stream', 'yes'], ['--c-stream', 'ON'], ['--c-stream', 'on', '--restream-tokens', '0'], ['--c-stream', 'on', '--restream-tokens', '1.5'],
+        ['--c-stream', 'on', '--restream-tokens', 'x'], ['--restream-tokens', '4000'], ['--c-stream', 'off', '--restream-tokens', '4000']]) {
+        const r = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, ...extra]);
+        expect(r.code, extra.join(' ')).toBe(2);
+        expect(r.err, extra.join(' ')).toMatch(/--c-stream|--restream-tokens/);
+      }
+      expect(readdirSync(out)).toEqual([]);
+    });
+  });
 });

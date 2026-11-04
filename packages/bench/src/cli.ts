@@ -5,6 +5,7 @@ import type { PublicBoardSwitches } from '@context-continue/core';
 import { computeMetrics, type GroupMetrics } from './metrics.js';
 import { createPolicy } from './policies/index.js';
 import { renderReport, writeResults } from './report.js';
+import { DEFAULT_RESTREAM_TOKENS } from './policies/stream.js';
 import { runScenario } from './runner.js';
 import { loadScenario } from './scenario.js';
 import type { CallRecord, Group, Scenario } from './types.js';
@@ -27,7 +28,8 @@ const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 
 const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
-  '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] [--out results] [--stamp <s>]';
+  '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
+  '[--c-stream off|on] [--restream-tokens 8000] [--out results] [--stamp <s>]';
 
 interface Args {
   scenario: string;
@@ -37,6 +39,7 @@ interface Args {
   summaryTokens: number;
   cacheRatio: number;
   cPublic: CPublic;
+  cStream: CStream;
   out: string;
   stamp: string | undefined;
 }
@@ -69,6 +72,11 @@ function parseCPublic(raw: string): CPublic {
   };
 }
 
+/** Group C's stream prototype: off (default), or on with its restream budget. */
+type CStream = { mode: 'off' } | { mode: 'on'; restreamTokens: number };
+
+const cStreamLine = (c: CStream): string => (c.mode === 'off' ? 'off' : `on (restreamTokens ${c.restreamTokens})`);
+
 /** A scenario id names `scenarios/<id>.json`; anything ending in `.json` is a path (relative to cwd). */
 export function scenarioPath(idOrPath: string): string {
   return idOrPath.endsWith('.json') ? resolve(idOrPath) : join(SCENARIO_DIR, `${idOrPath}.json`);
@@ -97,7 +105,7 @@ function parseArgs(argv: string[]): Args {
     if (seen.has(flag)) throw new UsageError(`${flag} is given more than once`);
     seen.set(flag, value);
   }
-  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--out', '--stamp'];
+  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--out', '--stamp'];
   for (const flag of seen.keys()) if (!known.includes(flag)) throw new UsageError(`unknown flag ${flag}`);
   const scenario = seen.get('--scenario');
   const group = seen.get('--group');
@@ -110,6 +118,14 @@ function parseArgs(argv: string[]): Args {
     throw new UsageError(`--stamp must be a plain directory name, got "${stamp}"`);
   }
   const int = (n: number) => Number.isInteger(n) && n > 0;
+  const streamMode = seen.get('--c-stream') ?? 'off';
+  if (streamMode !== 'off' && streamMode !== 'on') throw new UsageError(`--c-stream must be off or on, got "${streamMode}"`);
+  const restream = seen.get('--restream-tokens');
+  if (restream !== undefined && streamMode !== 'on') throw new UsageError('--restream-tokens needs --c-stream on');
+  const cStream: CStream =
+    streamMode === 'off'
+      ? { mode: 'off' }
+      : { mode: 'on', restreamTokens: number('--restream-tokens', restream ?? String(DEFAULT_RESTREAM_TOKENS), int, 'a positive integer') };
   return {
     scenario,
     group,
@@ -118,6 +134,7 @@ function parseArgs(argv: string[]): Args {
     summaryTokens: number('--summary-tokens', seen.get('--summary-tokens') ?? '1500', int, 'a positive integer'),
     cacheRatio: number('--cache-ratio', seen.get('--cache-ratio') ?? '0.1', n => n >= 0 && n <= 1, 'a number in [0, 1]'),
     cPublic: parseCPublic(seen.get('--c-public') ?? 'default'),
+    cStream,
     out: seen.get('--out') ?? 'results',
     stamp,
   };
@@ -152,7 +169,13 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const groups = args.group === 'all' ? GROUPS : [args.group as Group];
-  const opts = { window: args.window, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, ...(args.cPublic.switches === undefined ? {} : { publicBoard: args.cPublic.switches }) };
+  const opts = {
+    window: args.window,
+    compactRatio: args.compactRatio,
+    summaryTokens: args.summaryTokens,
+    ...(args.cPublic.switches === undefined ? {} : { publicBoard: args.cPublic.switches }),
+    ...(args.cStream.mode === 'on' ? { stream: { restreamTokens: args.cStream.restreamTokens } } : {}),
+  };
   const records: CallRecord[] = [];
   const metrics: GroupMetrics[] = [];
   for (const s of scenarios) {
@@ -164,9 +187,9 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const params = { cacheRatio: args.cacheRatio, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, window: args.window };
-  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, dsbotRef: 'f823773', tiers: Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'])) });
+  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, cStream: cStreamLine(args.cStream), dsbotRef: 'f823773', tiers: Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'])) });
   const dir = join(args.out, args.stamp ?? timestamp(new Date()));
-  writeResults(dir, { records, metrics, params, cPublic: args.cPublic.canonical }, report);
+  writeResults(dir, { records, metrics, params, cPublic: args.cPublic.canonical, cStream: args.cStream }, report);
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);
   return 0;
 }

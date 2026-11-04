@@ -17,6 +17,8 @@ export interface PolicyOptions {
   summaryTokens: number;
   /** Group C: which optional public-board sections the core renders (default none). */
   publicBoard?: PublicBoardSwitches;
+  /** Group C: the `--c-stream on` prototype (append-only, scope-routed request text); absent means off. */
+  stream?: { restreamTokens: number };
 }
 
 export function createPolicy(group: Group, opts: PolicyOptions): Policy {
@@ -26,7 +28,10 @@ export function createPolicy(group: Group, opts: PolicyOptions): Policy {
     case 'B':
       return broadcastPolicy();
     case 'C':
-      return projectPolicy(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard });
+      return projectPolicy({
+        ...(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard }),
+        ...(opts.stream === undefined ? {} : { stream: opts.stream }),
+      });
     case 'D':
       return delmPolicy();
     case 'E':

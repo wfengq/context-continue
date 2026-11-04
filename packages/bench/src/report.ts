@@ -69,7 +69,7 @@ function sumGroup(rows: GroupMetrics[], g: Group): GroupMetrics | undefined {
 
 export function renderReport(
   all: GroupMetrics[],
-  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; dsbotRef: 'f823773'; tiers: Record<string, Tier> },
+  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; cStream?: string; dsbotRef: 'f823773'; tiers: Record<string, Tier> },
 ): string {
   const out: string[] = [
     '> Results come from a scripted fake model: they measure context size only, not task quality.',
@@ -80,6 +80,7 @@ export function renderReport(
     '',
     ...Object.keys(meta.params).sort().map(k => `- ${k}: ${meta.params[k]}`),
     ...(meta.cPublic === undefined ? [] : [`- cPublic: ${meta.cPublic}`]),
+    ...(meta.cStream === undefined ? [] : [`- cStream: ${meta.cStream}`]),
     '',
     'Cost units = cacheable tokens x cache ratio + uncached tokens. Saved % = (reference cost - group cost) / reference cost x 100; n/a when the reference cost is 0.',
     '',
@@ -200,7 +201,17 @@ export function renderReport(
   }
   // C's board keeps human messages only when the directives section is on (default, all, or a list containing it).
   const directivesOn = meta.cPublic === undefined || meta.cPublic === 'default' || meta.cPublic === 'all' || meta.cPublic.split(',').includes('directives');
-  if (hasXlong && directivesOn) {
+  const streamOn = meta.cStream !== undefined && meta.cStream !== 'off';
+  if (streamOn) {
+    out.push(
+      "- C runs the --c-stream prototype: the core is driven as without it, but each bot's request is an append-only stream assembled by the bench. " +
+        'A snapshot (common, memory, workspace, a board with every convention, contract, decision, failure, workstream and human message in full, the projection) ' +
+        "is followed per request by new or changed project-wide items (to every bot), the core's delta and trigger, or the review/planning body; " +
+        'once more than restreamTokens were appended since the snapshot, the next request is a new snapshot. Every stream segment counts as flagged cacheable, ' +
+        'so no upper-bound line is printed, and the C miss causes (a)-(c) above apply only to what the stream does not restate.',
+    );
+  }
+  if (hasXlong && directivesOn && !streamOn) {
     out.push(`- C keeps only the newest ${DEFAULT_OPTIONS.directivesKeep} human messages on the board (the default); on xlong scenarios older human messages reach the lead mostly only through the planning context and later restatements.`);
   }
   if (eCompacted) {
@@ -212,13 +223,13 @@ export function renderReport(
 
 export function writeResults(
   dir: string,
-  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number>; cPublic?: string },
+  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number>; cPublic?: string; cStream?: unknown },
   report: string,
 ): void {
   mkdirSync(dir, { recursive: true });
   const params: Record<string, number> = {};
   for (const k of Object.keys(payload.params).sort()) params[k] = payload.params[k]!;
-  const json = JSON.stringify({ params, ...(payload.cPublic === undefined ? {} : { cPublic: payload.cPublic }), metrics: payload.metrics, records: payload.records }, null, 2) + '\n';
+  const json = JSON.stringify({ params, ...(payload.cPublic === undefined ? {} : { cPublic: payload.cPublic }), ...(payload.cStream === undefined ? {} : { cStream: payload.cStream }), metrics: payload.metrics, records: payload.records }, null, 2) + '\n';
   writeFileSync(join(dir, 'results.json'), json);
   writeFileSync(join(dir, 'report.md'), report);
 }

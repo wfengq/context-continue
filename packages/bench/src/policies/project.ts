@@ -4,6 +4,7 @@ import {
   memoryStore,
   type Clock,
   type ContextBundle,
+  type LedgerEntry,
   type Project,
   type PublicBoardSwitches,
   type Wake,
@@ -11,6 +12,7 @@ import {
 import type { Policy, RunContext } from '../runner.js';
 import { fmtBot, fmtHuman, fmtTask } from '../text.js';
 import { prefixCacheable } from './history.js';
+import { briefStream } from './stream.js';
 import type { Step, ToolCall } from '../types.js';
 
 /** Briefs are never trimmed: the bench measures the full brief the core assembles. */
@@ -119,9 +121,21 @@ async function latestDeliverableId(p: Project, workstreamId: string): Promise<st
  * Every tool result is shown to that bot in the trigger of its next request (R-B21): a success as
  * `tool <name>: ok <result>` (see `resultLine`), a core error (a throw from `callTool` or
  * `approvePlan`) as `tool error: <message>`, also counted; the run continues.
+ *
+ * With `stream` (`--c-stream on`, a prototype) the core is driven exactly the same, but the text
+ * sent is each bot's append-only stream (`briefStream`) built from the core's segments, the board
+ * and the human messages in the ledger; every stream segment is flagged cacheable, so R-B19 alone
+ * decides, and no core-flagged upper bound is reported.
  */
-export function projectPolicy(opts: { publicBoard?: PublicBoardSwitches } = {}): Policy & { readonly project: Project | null } {
+export function projectPolicy(
+  opts: { publicBoard?: PublicBoardSwitches; stream?: { restreamTokens: number } } = {},
+): Policy & { readonly project: Project | null } {
   let project: Project | null = null;
+  /** Stream mode: the per-bot streams, the run's store, and the human chat entries read from it so far. */
+  let streams: ReturnType<typeof briefStream> | null = null;
+  let ledger: { store: ReturnType<typeof memoryStore>; projectId: string } | null = null;
+  const humans: LedgerEntry[] = [];
+  let nextSeq = 1;
   let coreErrors = 0;
   /** Wakes caught since the last time they were turned into requests. */
   let woken: Wake[] = [];
@@ -153,13 +167,25 @@ export function projectPolicy(opts: { publicBoard?: PublicBoardSwitches } = {}):
    * deliverable, its planning context for a replan, otherwise the brief. A review of a workstream
    * without a deliverable gets the brief; its submitReview then fails as a core error.
    */
-  async function stepRequest(p: Project, botId: string, step: Step, detail: string): Promise<ContextBundle> {
+  async function stepRequest(p: Project, botId: string, step: Step, detail: string): Promise<{ b: ContextBundle; shape: 'brief' | 'context' }> {
     if (step.kind === 'review') {
       const id = await latestDeliverableId(p, step.deliverableOf);
-      if (id !== undefined) return p.buildReviewContext(id, { trigger: manual(botId, detail) });
+      if (id !== undefined) return { b: await p.buildReviewContext(id, { trigger: manual(botId, detail) }), shape: 'context' };
     }
-    if (step.kind === 'replan') return p.buildPlanningContext({ trigger: manual(botId, detail) });
-    return brief(p, botId, 'manual', detail);
+    if (step.kind === 'replan') return { b: await p.buildPlanningContext({ trigger: manual(botId, detail) }), shape: 'context' };
+    return { b: await brief(p, botId, 'manual', detail), shape: 'brief' };
+  }
+
+  /** Stream mode: the request's segments, from the bot's stream (R-B19 prefix rule applied in `send`). */
+  async function streamed(ctx: RunContext, botId: string, b: ContextBundle, shape: 'brief' | 'context') {
+    streams ??= briefStream({ restreamTokens: opts.stream!.restreamTokens, count: ctx.count });
+    const { store, projectId } = ledger!;
+    for (const e of await store.read(projectId, nextSeq)) {
+      nextSeq = e.seq + 1;
+      if (e.author.kind === 'human' && e.body.type === 'chat') humans.push(e);
+    }
+    const board = await project!.board();
+    return streams.request(botId, { core: b.segments, shape, board, humans }).segments;
   }
 
   /**
@@ -168,16 +194,17 @@ export function projectPolicy(opts: { publicBoard?: PublicBoardSwitches } = {}):
    * brief; on a bot's first brief only the common segment (the analogue of the shared template).
    * The core-flagged total is kept as an upper bound for the report.
    */
-  async function send(ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', b: ContextBundle) {
-    const texts = b.segments.map(s => s.text);
+  async function send(ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', b: ContextBundle, shape: 'brief' | 'context' = 'brief') {
+    const segments: { text: string; cacheable: boolean; kind: string }[] = opts.stream ? await streamed(ctx, botId, b, shape) : b.segments;
+    const texts = segments.map(s => s.text);
     const inPrefix = prefixCacheable(prevTexts.get(botId) ?? null, texts, 1);
     prevTexts.set(botId, texts);
-    for (const s of b.segments) if (s.cacheable) flaggedCacheable += ctx.count(s.text);
+    for (const s of segments) if (s.cacheable) flaggedCacheable += ctx.count(s.text);
     return ctx.call({
       botId,
       step,
       kind,
-      segments: b.segments.map((s, i) => ({ text: s.text, cacheable: s.cacheable && inPrefix[i]!, kind: s.kind })),
+      segments: segments.map((s, i) => ({ text: s.text, cacheable: s.cacheable && inPrefix[i]!, kind: s.kind })),
     });
   }
 
@@ -222,9 +249,11 @@ export function projectPolicy(opts: { publicBoard?: PublicBoardSwitches } = {}):
     const s = ctx.scenario;
     const newId = benchIds();
     const store = memoryStore({ newId });
+    ledger = { store, projectId: s.id };
     const employees = createEmployeeRegistry({ store });
     for (const e of s.employees) await employees.upsert({ botId: e.botId, persona: e.persona, skills: [...e.skills] });
     const p = createProject({ projectId: s.id, store, employees, clock: benchClock(), newId, ...(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard }) });
+    project = p; // stream mode reads the board for setup requests too
     p.on('wake', e => void woken.push(...e.wakes));
     woken.push(...(await p.start({ goal: s.goal, constraints: [...s.constraints], lead: s.lead, by: s.owner })));
     await wakeRequests(p, ctx, 0, -1);
@@ -269,7 +298,8 @@ export function projectPolicy(opts: { publicBoard?: PublicBoardSwitches } = {}):
         const merged = mergedWakes.get(botId) ?? [];
         mergedWakes.delete(botId);
         const detail = [fmtTask(botId, step), ...merged].join('; ');
-        const out = await send(ctx, botId, index, 'scripted', await stepRequest(p, botId, step, detail));
+        const { b, shape } = await stepRequest(p, botId, step, detail);
+        const out = await send(ctx, botId, index, 'scripted', b, shape);
         for (const op of out.ops) await runTool(p, ctx, botId, await coreOp(p, op));
       }
       await wakeRequests(p, ctx, index, index);
@@ -277,7 +307,8 @@ export function projectPolicy(opts: { publicBoard?: PublicBoardSwitches } = {}):
     async finish() {
       const unfinished = project ? (await project.board()).workstreams.some(w => w.status !== 'delivered') : false;
       project?.dispose();
-      return { compactions: 0, pauses: 0, coreErrors, unfinished, cacheableUpperBound: flaggedCacheable };
+      // Stream mode flags every segment cacheable, so the core-flagged upper bound means nothing there.
+      return { compactions: 0, pauses: 0, coreErrors, unfinished, ...(opts.stream ? {} : { cacheableUpperBound: flaggedCacheable }) };
     },
   };
 }
