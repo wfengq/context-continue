@@ -206,7 +206,9 @@ export function renderReport(
     out.push(
       "- C runs the --c-stream prototype: the core is driven as without it, but each bot's request is an append-only stream assembled by the bench. " +
         'A snapshot (common, memory, workspace, a board with every convention, contract, decision, failure, workstream and human message in full, the projection) ' +
-        "is followed per request by new or changed project-wide items (to every bot), the core's delta and trigger, or the review/planning body; " +
+        "is followed per request by new or changed project-wide items (to every bot), the bot's memory, notes or projection whenever the core's text of one changed (appended whole), " +
+        "the core's delta and trigger, or the review/planning body; a snapshot on a review or replan takes the lead's projection from a peek brief; " +
+        "like C without the stream, it does not carry the bot's own replies or tool calls; " +
         'once more than restreamTokens were appended since the snapshot, the next request is a new snapshot. Every stream segment counts as flagged cacheable, ' +
         'so no upper-bound line is printed, and the C miss causes (a)-(c) above apply only to what the stream does not restate.',
     );

@@ -33,7 +33,15 @@ export interface StreamInput {
   board: ProjectBoard;
   /** Every human chat entry so far, in ledger order. */
   humans: readonly LedgerEntry[];
+  /**
+   * `context` shape only: the bot's projection from a peek brief, for a snapshot (the core builds no
+   * projection for a review or planning context). See `needsSnapshot`.
+   */
+  projection?: string;
 }
+
+/** The bot's own segments: frozen in a snapshot, appended whole whenever the core's text differs (R-S1). */
+const OWN = ['memory', 'workspace', 'projection'] as const;
 
 const NOTHING = '(nothing yet)';
 const DELTA_HEADING = '# Since you last looked';
@@ -91,6 +99,8 @@ interface BotStream {
   known: Map<Section, Map<string, string>>;
   /** Ids of human chat entries in this stream. */
   humans: Set<string>;
+  /** The latest text of each own segment in this stream. */
+  own: Map<string, string>;
 }
 
 const seg = (kind: string, text: string): StreamSegment => ({ kind, text, cacheable: true });
@@ -113,7 +123,14 @@ function trimDelta(text: string, carried: readonly LedgerEntry[]): string | null
 export function briefStream(opts: { restreamTokens: number; count: (text: string) => number }) {
   const streams = new Map<string, BotStream>();
 
+  const needsSnapshot = (botId: string): boolean => {
+    const st = streams.get(botId);
+    return st === undefined || st.appended > opts.restreamTokens;
+  };
+
   return {
+    /** True when `botId`'s next request is a snapshot (the host then passes a peeked projection for a context request). */
+    needsSnapshot,
     /**
      * The segments of `botId`'s request: its stream so far, unchanged, plus what this request appends;
      * or, on its first request and once more than `restreamTokens` were appended since its snapshot, a
@@ -122,8 +139,14 @@ export function briefStream(opts: { restreamTokens: number; count: (text: string
     request(botId: string, r: StreamInput): { segments: StreamSegment[]; snapshot: boolean } {
       const byKind = (k: string) => r.core.find(s => s.kind === k);
       const items = projectWide(r.board);
+      // The bot's own segments in this request: a context's projection segment is its body, not a projection.
+      const own = new Map<string, string>();
+      for (const k of OWN) {
+        const text = k === 'projection' && r.shape === 'context' ? r.projection : byKind(k)?.text;
+        if (text !== undefined) own.set(k, text);
+      }
       let st = streams.get(botId);
-      const snapshot = st === undefined || st.appended > opts.restreamTokens;
+      const snapshot = needsSnapshot(botId);
       const added: StreamSegment[] = [];
       if (snapshot) {
         const head = ['common', 'memory', 'workspace'].flatMap(k => {
@@ -131,9 +154,9 @@ export function briefStream(opts: { restreamTokens: number; count: (text: string
           return s ? [seg(k, s.text)] : [];
         });
         head.push(seg('board', renderSnapshotBoard(items, r.humans)));
-        const projection = byKind('projection');
-        if (r.shape === 'brief' && projection) head.push(seg('projection', projection.text));
-        st = { segments: head, appended: 0, known: items, humans: new Set(r.humans.map(h => h.id)) };
+        const projection = own.get('projection');
+        if (projection !== undefined) head.push(seg('projection', projection));
+        st = { segments: head, appended: 0, known: items, humans: new Set(r.humans.map(h => h.id)), own };
         streams.set(botId, st);
       } else {
         const s = st!;
@@ -151,6 +174,11 @@ export function briefStream(opts: { restreamTokens: number; count: (text: string
         if (lines.length > 0) added.push(seg('updates', ['# Project updates', '', ...lines].join('\n')));
         for (const h of fresh) s.humans.add(h.id);
         s.known = items;
+        for (const [k, text] of own) {
+          if (s.own.get(k) === text) continue;
+          added.push(seg(k, text));
+          s.own.set(k, text);
+        }
       }
       const s = st!;
       if (r.shape === 'brief') {

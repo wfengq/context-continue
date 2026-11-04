@@ -185,7 +185,12 @@ export function projectPolicy(
       if (e.author.kind === 'human' && e.body.type === 'chat') humans.push(e);
     }
     const board = await project!.board();
-    return streams.request(botId, { core: b.segments, shape, board, humans }).segments;
+    // A snapshot on a review or planning request takes the bot's projection from a peek brief (no side effects).
+    const projection =
+      shape === 'context' && streams.needsSnapshot(botId)
+        ? (await project!.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, peek: true })).segments.find(x => x.kind === 'projection')?.text
+        : undefined;
+    return streams.request(botId, { core: b.segments, shape, board, humans, ...(projection === undefined ? {} : { projection }) }).segments;
   }
 
   /**

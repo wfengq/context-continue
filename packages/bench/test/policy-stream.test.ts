@@ -152,12 +152,42 @@ describe('briefStream', () => {
     expect(isPrefix(texts(r3.segments), texts(r4.segments))).toBe(true);
   });
 
-  test('a snapshot on a review or planning request has no projection of its own: the body follows the board', () => {
+  test('a snapshot on a review or planning request takes the projection the host passes (a peek brief), then the body', () => {
     const s = briefStream(big);
-    const r = s.request('pm', { core: context('BODY', 'review'), shape: 'context', board: board(), humans: [] });
+    expect(s.needsSnapshot('pm')).toBe(true);
+    const r = s.request('pm', { core: context('BODY', 'review'), shape: 'context', board: board(), humans: [], projection: '# Your part\n\npm part' });
     expect(r.snapshot).toBe(true);
-    expect(kinds(r.segments)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'trigger']);
-    expect(r.segments[4]!.text).toBe('BODY');
+    expect(kinds(r.segments)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'projection', 'trigger']);
+    expect(r.segments[4]!.text).toBe('# Your part\n\npm part');
+    expect(r.segments[5]!.text).toBe('BODY');
+    expect(s.needsSnapshot('pm')).toBe(false);
+    // the next brief compares its projection with the peeked one: unchanged, so nothing re-appended
+    const r2 = s.request('pm', { core: brief('pm', '- d', 't'), shape: 'brief', board: board(), humans: [] });
+    expect(kinds(r2.segments.slice(r.segments.length))).toEqual(['delta', 'trigger']);
+  });
+
+  test('a changed memory, workspace or projection is appended whole, once; a review body is never compared as a projection', () => {
+    const s = briefStream(big);
+    const core = (bot: string, notes: string, part: string, mem = bot) =>
+      brief(bot, '- d', 't').map(x =>
+        x.kind === 'workspace' ? { ...x, text: `# Your notes\n\n${notes}` } : x.kind === 'projection' ? { ...x, text: part } : x.kind === 'memory' ? { ...x, text: `# Your memory\n\n${mem}` } : x,
+      );
+    const r1 = s.request('art', { core: core('art', 'n1', 'P1'), shape: 'brief', board: board(), humans: [] });
+    const r2 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P1'), shape: 'brief', board: board(), humans: [] });
+    expect(isPrefix(texts(r1.segments), texts(r2.segments))).toBe(true);
+    const a2 = r2.segments.slice(r1.segments.length);
+    expect(kinds(a2)).toEqual(['workspace', 'delta', 'trigger']);
+    expect(a2[0]!.text).toBe('# Your notes\n\nn1 MARK-PIN');
+    const r3 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P2 upstream MARK-UP', 'art MARK-MEM'), shape: 'brief', board: board(), humans: [] });
+    expect(kinds(r3.segments.slice(r2.segments.length))).toEqual(['memory', 'projection', 'delta', 'trigger']);
+    const r4 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P2 upstream MARK-UP', 'art MARK-MEM'), shape: 'brief', board: board(), humans: [] });
+    expect(kinds(r4.segments.slice(r3.segments.length))).toEqual(['delta', 'trigger']);
+    // a context request: its projection segment is the body; memory/workspace are still compared
+    const ctx = context('BODY', 'review').map(x => (x.kind === 'workspace' ? { ...x, text: '# Your notes\n\nn1 MARK-PIN' } : x.kind === 'memory' ? { ...x, text: '# Your memory\n\nart MARK-MEM' } : x));
+    const r5 = s.request('art', { core: ctx, shape: 'context', board: board(), humans: [] });
+    expect(kinds(r5.segments.slice(r4.segments.length))).toEqual(['projection', 'trigger']);
+    const r6 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P2 upstream MARK-UP', 'art MARK-MEM'), shape: 'brief', board: board(), humans: [] });
+    expect(kinds(r6.segments.slice(r5.segments.length))).toEqual(['delta', 'trigger']);
   });
 
   test('Focus 3: once more than restreamTokens were appended since the snapshot, the next request is a new, complete snapshot', () => {
@@ -260,11 +290,35 @@ describe('group C with --c-stream on', () => {
       const p = prev.get(req.botId);
       if (p !== undefined && !isPrefix(p, t)) {
         snapshots++;
-        expect(t[3]!.startsWith('# Project')).toBe(true);
+        // a snapshot: common, memory, workspace, the full board, projection(s), then at most delta and trigger
+        expect(t[0]!.startsWith('# Team')).toBe(true);
+        expect(t[3]!.startsWith('# Project\n\n## Goal')).toBe(true);
+        expect(t.length).toBeLessThanOrEqual(7);
+        expect(t.some(x => x.startsWith('# Project updates'))).toBe(false);
+        expect(t.at(-1)!.startsWith('# Why you are awake')).toBe(true);
       }
       prev.set(req.botId, t);
     }
     expect(snapshots).toBeGreaterThan(0);
+  });
+
+  test('a restream landing on a review or replan carries the lead projection from a peek brief; the core is driven the same', async () => {
+    const off = await runC('long-app');
+    const { seen, records, stats } = await runC('long-app', { restreamTokens: 300 });
+    expect(records.map(r => [r.botId, r.kind, r.step])).toEqual(off.records.map(r => [r.botId, r.kind, r.step]));
+    expect(stats.coreErrors).toBe(off.stats.coreErrors);
+    const prev = new Map<string, string[]>();
+    let onContext = 0;
+    for (const req of seen) {
+      const t = req.segments.map(x => x.text);
+      const p = prev.get(req.botId);
+      prev.set(req.botId, t);
+      if (p === undefined || isPrefix(p, t)) continue;
+      expect(t[4]!.startsWith('# Your part')).toBe(true);
+      const body = t.at(-2)!;
+      if (body.startsWith('# Plan the project') || body.includes('## Content to review')) onContext++;
+    }
+    expect(onContext).toBeGreaterThan(0);
   });
 
   test('the stream setting reaches group C only', () => {
