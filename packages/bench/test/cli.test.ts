@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { main, SCENARIO_IDS } from '../src/cli.js';
+import { LONG_IDS, main, SCENARIO_IDS, STANDARD_IDS, XLONG_IDS } from '../src/cli.js';
 
 const STANDARD = ['product-plan', 'flappy-bird', 'event-plan'];
 const LONG = ['long-app', 'long-event'];
@@ -65,6 +65,14 @@ describe('bench cli', () => {
 
   test('SCENARIO_IDS lists the three standard scenarios, then the two long ones', () => {
     expect([...SCENARIO_IDS]).toEqual([...STANDARD, ...LONG]);
+  });
+
+  test('the xlong set is empty until its scenario exists; --scenario xlong is then a usage error, and all still runs', async () => {
+    expect([...SCENARIO_IDS]).toEqual([...STANDARD_IDS, ...LONG_IDS, ...XLONG_IDS]);
+    if (XLONG_IDS.length > 0) return; // once Task 2 adds the scenario, `--scenario xlong` runs it (covered there)
+    const r = await run(['run', '--scenario', 'xlong', '--group', 'A', '--out', tmp(), '--stamp', 'X']);
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/xlong.*no scenarios/);
   });
 
   test('flags reach the metrics and the E policy', async () => {

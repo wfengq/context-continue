@@ -80,7 +80,10 @@ pnpm -C packages/bench bench run --scenario all --group all
 ```
 
 `--scenario standard` runs only the three standard scenarios and `--scenario long` only the two
-long ones; `all` runs all five.
+long ones; `xlong` runs the extra-long tier (1,000 to 1,500 steps; `tier: "xlong"`). No xlong
+scenario file exists yet, so `--scenario xlong` currently exits with a usage error (code 2) saying
+the set has no scenarios; once its ids are listed in `src/cli.ts`, `xlong` and `all` include them.
+`all` runs every listed scenario (currently the five).
 
 The `bench` script builds the core library and the bench, then runs `node dist/cli.js`. With
 `pnpm -C packages/bench`, the working directory is `packages/bench`, so the default output lands in
@@ -125,10 +128,13 @@ category, pool `perFact` in `results.json` by the id prefix (`change-`, `conv-`,
 
 ## Reading the results
 
-- Standard and long scenarios are summarised separately: the report has one summary table per tier
-  present in the run ("Summary (standard scenarios)", "Summary (long scenarios)") and never adds
-  the two tiers together, because the long scenarios would swamp the standard ones. Long scenarios
-  also get a table of the average request size per 25 steps, showing how each group grows.
+- Scenarios are summarised separately by tier: the report has one summary table per tier present in
+  the run ("Summary (standard scenarios)", "Summary (long scenarios)", "Summary (xlong scenarios)")
+  and never adds tiers together, because the longer scenarios would swamp the shorter ones. Long
+  scenarios also get a table of the average request size per 25 steps, showing how each group
+  grows; xlong scenarios get the same table per 100 steps.
+- In `results.json`, a request record's `segments` merge adjacent entries with the same kind and
+  cacheable flag (tokens summed). Totals, cacheable tokens and every metric are unaffected.
 - Group A is a single-agent baseline, not a multi-bot alternative. Its one append-only history is
   mostly cacheable, so A can be the cheapest group on cost units even though it has no team at all.
   Compare the multi-bot groups (B to F) with each other, and A only as a reference point.

@@ -49,7 +49,7 @@ const scenarioSchema = z.object({
     skills: z.array(z.string()),
   })),
   plan: planSchema,
-  tier: z.enum(['standard', 'long']).optional(),
+  tier: z.enum(['standard', 'long', 'xlong']).optional(),
   idleReply: z.string().optional(),
   facts: z.array(z.object({
     id: z.string().min(1),
@@ -193,18 +193,50 @@ function countRequirementChanges(s: Scenario): number {
 
 const FACT_CATEGORIES = ['change-', 'conv-', 'contract-', 'fail-'];
 
+/** Per-tier coverage minimums (counts) for the tiers that have them. */
+const MINIMUMS = {
+  long: { name: 'long', steps: [150, 300], facts: 15, replans: 3, changes: 4, failed: 6, conventions: 8, queries: 10 },
+  xlong: { name: 'xlong', steps: [1000, 1500], facts: 40, replans: 6, changes: 8, failed: 15, conventions: 20, queries: 30 },
+} as const;
+/** An xlong scenario needs this many facts that audience bots can still be asked about this many steps after they are told. */
+const LONG_LIVED_FACTS = 10;
+const LONG_LIVED_GAP = 300;
+
+/** Who makes the model request of a step: the work step's bot, the lead for review/replan; none for a human step. */
+const requester = (s: Scenario, st: Step): string | undefined =>
+  st.kind === 'work' ? st.botId : st.kind === 'human' ? undefined : s.lead;
+
+/**
+ * Facts with a scripted bot request from their audience (every employee for "*") at a step strictly
+ * after fact.step + 300. Computed from the script's steps, not from any annotation.
+ */
+function countLongLivedFacts(s: Scenario): number {
+  const lastBy = new Map<string, number>();
+  s.steps.forEach((st, i) => {
+    const bot = requester(s, st);
+    if (bot !== undefined) lastBy.set(bot, i);
+  });
+  return (s.facts ?? []).filter(f => {
+    const bots = f.audience.includes('*') ? s.employees.map(e => e.botId) : f.audience;
+    return bots.some(b => (lastBy.get(b) ?? -1) > f.step + LONG_LIVED_GAP);
+  }).length;
+}
+
 /**
  * The coverage items a formal scenario must include (spec §3, §5), in a fixed order; returns the ones
  * missing (empty when the scenario qualifies):
  * - human requirement change; failed review; review with conventions; replan; bot-to-bot query;
- * - step count, for every scenario: standard 20–40, long 150–300;
+ * - step count, for every scenario: standard 20–40, long 150–300, xlong 1,000–1,500;
  * - long tier: at least 15 facts, and minimum counts of replans (3), requirement
  *   changes (4), failed reviews (6), new conventions (8) and queries (10);
+ * - xlong tier: at least 40 facts, replans 6, requirement changes 8, failed reviews 15, new
+ *   conventions 20, queries 30, and at least 10 facts that are still needed 300+ steps after they are
+ *   told (see countLongLivedFacts);
  * - standard tier: 4–6 facts — checked only when the scenario has a `facts` field (R-L1);
  * - facts (when required): one per category, by id prefix change-, conv-, contract-, fail-.
  */
 export function checkCoverage(s: Scenario): string[] {
-  const long = s.tier === 'long';
+  const min = s.tier === 'long' ? MINIMUMS.long : s.tier === 'xlong' ? MINIMUMS.xlong : undefined;
   const missing: string[] = [];
   if (countRequirementChanges(s) === 0) missing.push('human requirement change');
   if (!s.steps.some(st => st.kind === 'review' && !st.passed)) missing.push('failed review');
@@ -213,24 +245,28 @@ export function checkCoverage(s: Scenario): string[] {
   if (!s.steps.some(hasQuery)) missing.push('bot-to-bot query');
 
   const n = s.steps.length;
-  if (long ? n < 150 || n > 300 : n < 20 || n > 40) missing.push(`${long ? 'long' : 'standard'} scenario needs ${long ? '150–300' : '20–40'} steps`);
+  const [lo, hi] = min?.steps ?? [20, 40];
+  if (n < lo || n > hi) missing.push(`${min?.name ?? 'standard'} scenario needs ${lo}–${hi} steps`);
 
-  // R-L1: fact requirements apply to long scenarios, and to standard ones only once they have `facts`.
-  if (!long && s.facts === undefined) return missing;
+  // R-L1: fact requirements apply to long and xlong scenarios, and to standard ones only once they have `facts`.
+  if (min === undefined && s.facts === undefined) return missing;
   const facts = s.facts ?? [];
-  if (long) {
-    if (facts.length < 15) missing.push('long scenario needs at least 15 facts');
+  if (min !== undefined) {
+    if (facts.length < min.facts) missing.push(`${min.name} scenario needs at least ${min.facts} facts`);
   } else if (facts.length < 4 || facts.length > 6) missing.push('standard scenario needs 4–6 facts');
   for (const prefix of FACT_CATEGORIES) if (!facts.some(f => f.id.startsWith(prefix))) missing.push(`fact category ${prefix}`);
 
-  if (long) {
+  if (min !== undefined) {
     const count = (pred: (st: Step) => boolean) => s.steps.filter(pred).length;
-    if (count(st => st.kind === 'replan') < 3) missing.push('long scenario needs at least 3 replans');
-    if (countRequirementChanges(s) < 4) missing.push('long scenario needs at least 4 requirement changes');
-    if (count(st => st.kind === 'review' && !st.passed) < 6) missing.push('long scenario needs at least 6 failed reviews');
+    if (count(st => st.kind === 'replan') < min.replans) missing.push(`${min.name} scenario needs at least ${min.replans} replans`);
+    if (countRequirementChanges(s) < min.changes) missing.push(`${min.name} scenario needs at least ${min.changes} requirement changes`);
+    if (count(st => st.kind === 'review' && !st.passed) < min.failed) missing.push(`${min.name} scenario needs at least ${min.failed} failed reviews`);
     const conventions = s.steps.reduce((sum, st) => sum + (st.kind === 'review' ? (st.conventions ?? []).length : 0), 0);
-    if (conventions < 8) missing.push('long scenario needs at least 8 new conventions');
-    if (count(hasQuery) < 10) missing.push('long scenario needs at least 10 bot-to-bot queries');
+    if (conventions < min.conventions) missing.push(`${min.name} scenario needs at least ${min.conventions} new conventions`);
+    if (count(hasQuery) < min.queries) missing.push(`${min.name} scenario needs at least ${min.queries} bot-to-bot queries`);
+    if (min.name === 'xlong' && countLongLivedFacts(s) < LONG_LIVED_FACTS) {
+      missing.push(`xlong scenario needs at least ${LONG_LIVED_FACTS} facts needed ${LONG_LIVED_GAP}+ steps after they are introduced`);
+    }
   }
   return missing;
 }

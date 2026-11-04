@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { nearestRank, type GroupMetrics } from './metrics.js';
-import type { CallRecord, Group } from './types.js';
+import { growthBucket, nearestRank, type GroupMetrics } from './metrics.js';
+import type { CallRecord, Group, Tier } from './types.js';
 
 const ORDER: Group[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -68,7 +68,7 @@ function sumGroup(rows: GroupMetrics[], g: Group): GroupMetrics | undefined {
 
 export function renderReport(
   all: GroupMetrics[],
-  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; dsbotRef: 'f823773'; tiers: Record<string, 'standard' | 'long'> },
+  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; dsbotRef: 'f823773'; tiers: Record<string, Tier> },
 ): string {
   const out: string[] = [
     '> Results come from a scripted fake model: they measure context size only, not task quality.',
@@ -84,7 +84,7 @@ export function renderReport(
     '',
   ];
   // R-L3: a scenario's tier is the one its metrics carry; meta.tiers must name every scenario and agree.
-  const tiers = new Map<string, 'standard' | 'long'>();
+  const tiers = new Map<string, Tier>();
   for (const sc of meta.scenarios) {
     const given = meta.tiers[sc];
     if (given === undefined) throw new Error(`renderReport: meta.tiers has no tier for scenario "${sc}"`);
@@ -93,7 +93,7 @@ export function renderReport(
     }
     tiers.set(sc, given);
   }
-  const tierOf = (sc: string): 'standard' | 'long' => tiers.get(sc)!;
+  const tierOf = (sc: string): Tier => tiers.get(sc)!;
   for (const sc of meta.scenarios) {
     const rows = all.filter(r => r.scenario === sc);
     out.push(`## Scenario: ${sc}`, '');
@@ -111,10 +111,10 @@ export function renderReport(
       if (c.unfinished) out.push('Group C: the project was not finished (a workstream of the approved plan was never delivered).');
       out.push('');
     }
-    if (tierOf(sc) === 'long') {
+    if (tierOf(sc) !== 'standard') {
       const from = [...new Set(rows.flatMap(r => r.growth.map(b => b.fromStep)))].sort((a, b) => a - b);
       if (from.length > 0) {
-        out.push('Average request input tokens per 25-step bucket:', '');
+        out.push(`Average request input tokens per ${growthBucket(tierOf(sc))}-step bucket:`, '');
         out.push(`| Group | ${from.map(f => `From step ${f}`).join(' | ')} |`, `|---|${from.map(() => '---').join('|')}|`);
         for (const g of ORDER) {
           const r = rows.find(x => x.group === g);
@@ -138,7 +138,7 @@ export function renderReport(
       out.push('');
     }
   }
-  const tiersPresent = (['standard', 'long'] as const).filter(t => meta.scenarios.some(sc => tierOf(sc) === t));
+  const tiersPresent = (['standard', 'long', 'xlong'] as const).filter(t => meta.scenarios.some(sc => tierOf(sc) === t));
   for (const t of tiersPresent) {
     const sums = ORDER.map(g => sumGroup(all.filter(r => meta.scenarios.includes(r.scenario) && r.tier === t), g)).filter(
       (r): r is GroupMetrics => r !== undefined,

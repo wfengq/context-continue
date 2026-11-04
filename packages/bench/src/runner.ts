@@ -108,7 +108,11 @@ export async function runScenario(
         const tokens = count(seg.text);
         inputTokens += tokens;
         if (seg.cacheable) cacheableTokens += tokens;
-        if (seg.kind !== undefined) kinds.push({ kind: seg.kind, tokens, cacheable: seg.cacheable });
+        if (seg.kind === undefined) continue;
+        // Adjacent entries of the same kind and cacheable flag are one entry (R-L: keeps results.json small).
+        const last = kinds[kinds.length - 1];
+        if (last !== undefined && last.kind === seg.kind && last.cacheable === seg.cacheable) last.tokens += tokens;
+        else kinds.push({ kind: seg.kind, tokens, cacheable: seg.cacheable });
       }
       const record: CallRecord = { group: policy.group, scenario: s.id, step, botId, kind, inputTokens, cacheableTokens };
       if (kinds.length > 0) record.segments = kinds;

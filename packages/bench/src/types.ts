@@ -27,10 +27,13 @@ export interface Fact {
   audience: string[];
 }
 
+/** 'standard' is 20–40 steps, 'long' 150–300, 'xlong' 1,000–1,500. */
+export type Tier = 'standard' | 'long' | 'xlong';
+
 export interface Scenario {
   id: string;
-  /** Defaults to 'standard' (20–40 steps); 'long' is 150–300 steps. */
-  tier?: 'standard' | 'long';
+  /** Defaults to 'standard'. */
+  tier?: Tier;
   goal: string;
   constraints: string[];
   owner: string;
@@ -53,6 +56,7 @@ export interface CallRecord {
   inputTokens: number;
   /** Always <= inputTokens. */
   cacheableTokens: number;
+  /** Adjacent segments with the same kind and cacheable flag are merged (tokens summed). */
   segments?: { kind: string; tokens: number; cacheable: boolean }[];
   /**
    * Scripted requests only, and only when the request has fact opportunities (the fact's audience

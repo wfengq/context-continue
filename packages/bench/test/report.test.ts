@@ -6,7 +6,7 @@ import type { GroupMetrics } from '../src/metrics.js';
 import { fmtInt, renderReport, writeResults } from '../src/report.js';
 import type { Group } from '../src/types.js';
 
-const meta = { scenarios: ['s1', 's2'], params: { ratio: 0.1 }, dsbotRef: 'f823773' as const, tiers: { s1: 'standard', s2: 'standard' } as Record<string, 'standard' | 'long'> };
+const meta = { scenarios: ['s1', 's2'], params: { ratio: 0.1 }, dsbotRef: 'f823773' as const, tiers: { s1: 'standard', s2: 'standard' } as Record<string, 'standard' | 'long' | 'xlong'> };
 const gm = (group: Group, scenario: string, input: number, extra: Partial<GroupMetrics> = {}): GroupMetrics => ({
   group, scenario, inputTokens: input, cacheableTokens: 0, uncachedTokens: input, costUnits: input,
   scriptedRequests: 2, extraRequests: 1, contextMedian: input / 2, contextP90: input, contextMax: input,
@@ -110,11 +110,11 @@ describe('renderReport', () => {
   });
 });
 
-const withFacts = (g: Group, sc: string, opp: number, hits: number, tier: 'standard' | 'long' = 'standard', extra: Partial<GroupMetrics> = {}) =>
+const withFacts = (g: Group, sc: string, opp: number, hits: number, tier: 'standard' | 'long' | 'xlong' = 'standard', extra: Partial<GroupMetrics> = {}) =>
   gm(g, sc, 100, { tier, factOpportunities: opp, factHits: hits, factMisses: opp - hits, perFact: [{ id: 'fa', opportunities: opp, hits }, { id: 'fz', opportunities: 0, hits: 0 }], ...extra });
 
 describe('renderReport: facts, growth, tiers', () => {
-  const mixedMeta = { ...meta, tiers: { s1: 'standard', s2: 'long' } as Record<string, 'standard' | 'long'> };
+  const mixedMeta = { ...meta, tiers: { s1: 'standard', s2: 'long' } as Record<string, 'standard' | 'long' | 'xlong'> };
   const mixed = () => [
     ...groups.map(g => withFacts(g, 's1', 3, 2)),
     ...groups.map(g => withFacts(g, 's2', 4, 4, 'long', { growth: [{ fromStep: 0, avgInput: 120 }, { fromStep: 50, avgInput: 340 }] })),
@@ -164,6 +164,21 @@ describe('renderReport: facts, growth, tiers', () => {
     const row = md.split('\n').find(l => l === '| A | 120 | 340 |');
     expect(row).toBeDefined();
     expect(md.match(/Average request input tokens per 25-step bucket/g)).toHaveLength(1);
+  });
+
+  test('an xlong-only report has one summary table titled for xlong, and a 100-step growth table', () => {
+    const xl = groups.map(g => withFacts(g, 'x1', 4, 4, 'xlong', { growth: [{ fromStep: 0, avgInput: 120 }, { fromStep: 100, avgInput: 340 }] }));
+    const md = renderReport(xl, { ...meta, scenarios: ['x1'], tiers: { x1: 'xlong' } });
+    expect(md.match(/^## Summary.*$/gm)).toEqual(['## Summary (xlong scenarios)']);
+    expect(md.match(/Average request input tokens per 100-step bucket/g)).toHaveLength(1);
+    expect(md).not.toContain('25-step');
+    expect(md.match(/^\| Group \| From step 0 \| From step 100 \|$/gm)).toHaveLength(1);
+    expect(md).toContain('| A | 120 | 340 |');
+    // mixed with the other tiers: one summary each, in tier order, long's growth table still 25-step
+    const m3 = renderReport([...mixed(), ...xl], { ...mixedMeta, scenarios: ['s1', 's2', 'x1'], tiers: { s1: 'standard', s2: 'long', x1: 'xlong' } });
+    expect(m3.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)', '## Summary (long scenarios)', '## Summary (xlong scenarios)']);
+    expect(m3.match(/per 25-step bucket/g)).toHaveLength(1);
+    expect(m3.match(/per 100-step bucket/g)).toHaveLength(1);
   });
 
   test('per-fact visibility table per scenario; zero opportunities print n/a', () => {

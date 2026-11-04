@@ -116,6 +116,32 @@ describe('runScenario', () => {
     ]);
   });
 
+  test('records merge adjacent segments with the same kind and cacheable flag, metrics unchanged', async () => {
+    // 'aaaa' = 1 token, 'bbbbbbbb' = 2, 'cccccccccccc' = 3.
+    const segs = [
+      { text: 'aaaa', cacheable: true, kind: 'page' },
+      { text: 'bbbbbbbb', cacheable: true, kind: 'page' },
+      { text: 'aaaa', cacheable: false, kind: 'page' }, // same kind, other flag: stays apart
+      { text: 'cccccccccccc', cacheable: false, kind: 'page' },
+      { text: 'aaaa', cacheable: false, kind: 'delta' },
+      { text: 'aaaa', cacheable: false, kind: 'page' }, // not adjacent to the earlier page entries
+    ];
+    const { records } = await runScenario(tiny(), recordingPolicy(segs));
+    expect(records[0]!.segments).toEqual([
+      { kind: 'page', tokens: 3, cacheable: true },
+      { kind: 'page', tokens: 4, cacheable: false },
+      { kind: 'delta', tokens: 1, cacheable: false },
+      { kind: 'page', tokens: 1, cacheable: false },
+    ]);
+    expect(records[0]).toMatchObject({ inputTokens: 9, cacheableTokens: 3 });
+    // kind-less segments between two same-kind ones are not recorded, so the neighbours still merge
+    const gap = await runScenario(tiny(), recordingPolicy([
+      { text: 'aaaa', cacheable: true, kind: 'p' }, { text: 'aaaa', cacheable: true }, { text: 'aaaa', cacheable: true, kind: 'p' },
+    ]));
+    expect(gap.records[0]!.segments).toEqual([{ kind: 'p', tokens: 2, cacheable: true }]);
+    expect(gap.records[0]).toMatchObject({ inputTokens: 3, cacheableTokens: 3 });
+  });
+
   test('scripted call passes the work step reply/ops; extra call passes null and gets idleReply', async () => {
     const spy = new SpyModel();
     const out: unknown[] = [];

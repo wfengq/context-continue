@@ -13,18 +13,20 @@ import type { CallRecord, Group, Scenario } from './types.js';
 export const STANDARD_IDS = ['product-plan', 'flappy-bird', 'event-plan'] as const;
 /** The long scenarios (tier long, 150–300 steps), in report order. */
 export const LONG_IDS = ['long-app', 'long-event'] as const;
-/** Every formal scenario, in report order: the standard ones, then the long ones. */
-export const SCENARIO_IDS = [...STANDARD_IDS, ...LONG_IDS] as const;
+/** The extra-long scenarios (tier xlong, 1,000–1,500 steps). Empty until Task 2 adds the scenario file. */
+export const XLONG_IDS = [] as const satisfies readonly string[];
+/** Every formal scenario, in report order: the standard ones, then the long ones, then the xlong ones. */
+export const SCENARIO_IDS = [...STANDARD_IDS, ...LONG_IDS, ...XLONG_IDS] as const;
 
 /** `--scenario` names that stand for a set of scenarios. */
-const SCENARIO_SETS: Record<string, readonly string[]> = { all: SCENARIO_IDS, standard: STANDARD_IDS, long: LONG_IDS };
+const SCENARIO_SETS: Record<string, readonly string[]> = { all: SCENARIO_IDS, standard: STANDARD_IDS, long: LONG_IDS, xlong: XLONG_IDS };
 const GROUPS: Group[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 /** `scenarios/` at the package root; the module sits one level below it in both `src/` and `dist/`. */
 const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 
 const USAGE =
-  'Usage: bench run --scenario <id|path.json|standard|long|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
+  'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] [--out results] [--stamp <s>]';
 
 interface Args {
@@ -134,6 +136,11 @@ export async function main(argv: string[]): Promise<number> {
 
   // Load and validate every scenario before running anything.
   const ids = Object.hasOwn(SCENARIO_SETS, args.scenario) ? [...SCENARIO_SETS[args.scenario]!] : [args.scenario];
+  // A named set with no scenarios (xlong, until its scenario file exists) would write an empty report: a usage error.
+  if (ids.length === 0) {
+    process.stderr.write(`bench: --scenario ${args.scenario}: the "${args.scenario}" set has no scenarios yet\n${USAGE}\n`);
+    return 2;
+  }
   const scenarios: Scenario[] = [];
   for (const id of ids) {
     try {

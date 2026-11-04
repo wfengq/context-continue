@@ -1,4 +1,4 @@
-import type { CallRecord, Group, PolicyStats } from './types.js';
+import type { CallRecord, Group, PolicyStats, Tier } from './types.js';
 
 export interface GroupMetrics {
   group: Group;
@@ -18,20 +18,25 @@ export interface GroupMetrics {
   coreErrors: number;
   /** Group C: the project could not be finished (a workstream never delivered). */
   unfinished: boolean;
-  tier: 'standard' | 'long';
+  tier: Tier;
   /** Fact visibility: opportunities are scripted requests after a fact's step whose audience includes the bot. */
   factOpportunities: number;
   factHits: number;
   factMisses: number;
   /** One entry per scenario fact, in scenario order; a fact with no opportunity has 0/0. */
   perFact: { id: string; opportunities: number; hits: number }[];
-  /** Average input tokens of all requests per 25-step bucket (fromStep 0, 25, ...); empty buckets omitted. */
+  /** Average input tokens of all requests per growthBucket(tier)-step bucket (25 steps; 100 for xlong); empty buckets omitted. */
   growth: { fromStep: number; avgInput: number }[];
   /**
    * Group C only: what a provider that caches the core's flagged stable segments could cache, and
    * the cost units that would give. Shown as a caveat line, never in the tables (R-B19).
    */
   upperBound?: { cacheableTokens: number; costUnits: number };
+}
+
+/** Steps per growth-table bucket: 25 for standard and long, 100 for xlong. */
+export function growthBucket(tier: Tier): number {
+  return tier === 'xlong' ? 100 : 25;
 }
 
 /** Nearest-rank percentile (p in (0,1]); an empty set gives 0. */
@@ -48,7 +53,7 @@ export function computeMetrics(
   records: CallRecord[],
   stats: PolicyStats,
   cacheRatio: number,
-  tier: 'standard' | 'long',
+  tier: Tier,
   /** The scenario's fact ids in order; defaults to the ids seen in the records (first-seen order). */
   factIds?: string[],
 ): GroupMetrics {
@@ -70,8 +75,9 @@ export function computeMetrics(
   const factHits = records.reduce((n, r) => n + (r.factsSeen?.length ?? 0), 0);
   const factMisses = records.reduce((n, r) => n + (r.factsMissed?.length ?? 0), 0);
   const buckets = new Map<number, number[]>();
+  const bucket = growthBucket(tier);
   for (const r of records) {
-    const from = Math.floor(r.step / 25) * 25;
+    const from = Math.floor(r.step / bucket) * bucket;
     buckets.set(from, [...(buckets.get(from) ?? []), r.inputTokens]);
   }
   const growth = [...buckets.entries()]

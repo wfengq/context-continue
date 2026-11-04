@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { computeMetrics, nearestRank } from '../src/metrics.js';
+import { computeMetrics, growthBucket, nearestRank } from '../src/metrics.js';
 import type { CallRecord, PolicyStats } from '../src/types.js';
 
 const zero: PolicyStats = { compactions: 0, pauses: 0, coreErrors: 0 };
@@ -70,6 +70,19 @@ describe('computeMetrics: fact visibility and growth', () => {
     ]);
     const none = computeMetrics('B', 's', [rec(1, 0)], zero, 0.1, 'standard');
     expect([none.factOpportunities, none.factHits, none.factMisses, none.perFact]).toEqual([0, 0, 0, []]);
+  });
+
+  test('growthBucket is 25 for standard and long, 100 for xlong; xlong growth uses 100-step buckets', () => {
+    expect([growthBucket('standard'), growthBucket('long'), growthBucket('xlong')]).toEqual([25, 25, 100]);
+    const rs = [0, 99, 100, 250, 999].map((st, i) => rec([10, 20, 30, 40, 50][i]!, 0, 'scripted', st));
+    const m = computeMetrics('B', 's', rs, zero, 0.1, 'xlong');
+    expect(m.tier).toBe('xlong');
+    expect(m.growth).toEqual([
+      { fromStep: 0, avgInput: 15 },
+      { fromStep: 100, avgInput: 30 },
+      { fromStep: 200, avgInput: 40 },
+      { fromStep: 900, avgInput: 50 },
+    ]);
   });
 
   test('growth buckets every 25 steps with rounded averages; empty buckets omitted', () => {
