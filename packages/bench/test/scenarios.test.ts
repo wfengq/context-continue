@@ -20,6 +20,28 @@ const tiny = (steps: unknown[]): Scenario =>
     steps,
   });
 
+describe('merged record segments on the bundled scenarios', () => {
+  test('group C records have no adjacent same kind+cacheable entries and segment tokens add up to the record totals', async () => {
+    const dir = fileURLToPath(new URL('../scenarios/', import.meta.url));
+    let withSegments = 0;
+    for (const id of ['product-plan', 'flappy-bird', 'event-plan', 'long-app', 'long-event']) {
+      const s = loadScenario(`${dir}${id}.json`);
+      const { records } = await runScenario(s, createPolicy('C', { window: 128000, compactRatio: 0.8, summaryTokens: 1500 }));
+      for (const r of records) {
+        if (r.segments === undefined) continue;
+        withSegments++;
+        r.segments.forEach((seg, i) => {
+          const prev = r.segments![i - 1];
+          if (prev !== undefined) expect(prev.kind === seg.kind && prev.cacheable === seg.cacheable).toBe(false);
+        });
+        expect(r.segments.reduce((n, x) => n + x.tokens, 0)).toBe(r.inputTokens);
+        expect(r.segments.filter(x => x.cacheable).reduce((n, x) => n + x.tokens, 0)).toBe(r.cacheableTokens);
+      }
+    }
+    expect(withSegments).toBeGreaterThan(0);
+  }, 60_000);
+});
+
 describe('checkCoverage', () => {
   test('reports every missing item for a scenario that covers nothing', () => {
     expect(checkCoverage(tiny([{ kind: 'human', text: 'Hello.' }]))).toEqual([

@@ -134,7 +134,8 @@ category, pool `perFact` in `results.json` by the id prefix (`change-`, `conv-`,
   scenarios also get a table of the average request size per 25 steps, showing how each group
   grows; xlong scenarios get the same table per 100 steps.
 - In `results.json`, a request record's `segments` merge adjacent entries with the same kind and
-  cacheable flag (tokens summed). Totals, cacheable tokens and every metric are unaffected.
+  cacheable flag (tokens summed); only group C records segments. Totals, cacheable tokens and every
+  metric are unaffected.
 - Group A is a single-agent baseline, not a multi-bot alternative. Its one append-only history is
   mostly cacheable, so A can be the cheapest group on cost units even though it has no team at all.
   Compare the multi-bot groups (B to F) with each other, and A only as a reference point.

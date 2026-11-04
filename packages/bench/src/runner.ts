@@ -109,7 +109,7 @@ export async function runScenario(
         inputTokens += tokens;
         if (seg.cacheable) cacheableTokens += tokens;
         if (seg.kind === undefined) continue;
-        // Adjacent entries of the same kind and cacheable flag are one entry (R-L: keeps results.json small).
+        // Adjacent entries of the same kind and cacheable flag are one entry (tokens summed).
         const last = kinds[kinds.length - 1];
         if (last !== undefined && last.kind === seg.kind && last.cacheable === seg.cacheable) last.tokens += tokens;
         else kinds.push({ kind: seg.kind, tokens, cacheable: seg.cacheable });
