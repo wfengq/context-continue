@@ -30,6 +30,10 @@ test('directivesKeep defaults to 20 and is validated like the other numeric opti
   expect(DEFAULT_OPTIONS.directivesKeep).toBe(20);
   expect(resolveOptions({ directivesKeep: 3 }).directivesKeep).toBe(3);
   expect(() => resolveOptions({ directivesKeep: 0 })).toThrow(/directivesKeep/);
+  for (const bad of [0.5, 1.5, 2.000001]) {
+    expect(() => resolveOptions({ directivesKeep: bad })).toThrow(expect.objectContaining({ code: 'INVALID_OP' }));
+  }
+  expect(resolveOptions({ directivesKeep: 1 }).directivesKeep).toBe(1);
 });
 
 test('publicBoard rejects non-boolean switches', async () => {
@@ -37,7 +41,6 @@ test('publicBoard rejects non-boolean switches', async () => {
     { directives: 'yes' },
     { contracts: 1 },
     { failures: null },
-    { unknown: true },
     'all',
     null,
     [],
@@ -48,4 +51,10 @@ test('publicBoard rejects non-boolean switches', async () => {
     );
   }
   await expect(makeProject({ publicBoard: { directives: true, contracts: false } })).resolves.toBeDefined();
+});
+
+test('publicBoard ignores unknown switches (R-P2), like unknown numeric options', async () => {
+  const publicBoard = { unknown: true, directives: true } as never;
+  await expect(makeProject({ publicBoard })).resolves.toBeDefined();
+  await expect(makeProject({ publicBoard: { unknown: 'x' } as never })).resolves.toBeDefined();
 });

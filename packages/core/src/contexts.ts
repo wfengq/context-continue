@@ -7,8 +7,7 @@ import type { EmployeeRegistry } from './employees.js';
 import { ContextError } from './errors.js';
 import { assertMember, botMembers, defaultMemory, defaultWorkspace, renderTeam } from './members.js';
 import { renderBoardPublic, renderMemory, renderPlanning, renderRetro, renderReview, renderTrigger, renderWorkspace, untrimmedKeeps } from './render.js';
-import { DEFAULT_OPTIONS } from './options.js';
-import { publicBoardView, type PublicBoardSwitches } from './publicBoard.js';
+import { isHumanChat, publicBoardView, type PublicBoardSwitches } from './publicBoard.js';
 import { toolDefinitions } from './tools.js';
 import type { Store } from './store/store.js';
 import type { ContextBundle, PlanProposal, ProjectBoard, Segment, SegmentKind, WakeReason, Workstream } from './types.js';
@@ -20,13 +19,13 @@ export interface ContextDeps {
   count: (s: string) => number;
   /** Optional public board sections (spec 2026-11-04); absent means every switch is off. */
   publicBoard?: Required<PublicBoardSwitches>;
-  /** Used only when directives are on; required then so the board matches buildBrief's. */
-  directivesKeep?: number;
+  /** The resolved `options.directivesKeep`, so the board matches buildBrief's (read only when directives are on). */
+  directivesKeep: number;
 }
 
 /** The board segment text, rendered exactly as buildBrief renders it (same view, same keep). */
 async function boardSegment(deps: ContextDeps, board: ProjectBoard, ws: Workstream[]): Promise<string> {
-  const view = await publicBoardView(deps.store, deps.projectId, deps.publicBoard, deps.directivesKeep ?? DEFAULT_OPTIONS.directivesKeep);
+  const view = await publicBoardView(deps.store, deps.projectId, deps.publicBoard, deps.directivesKeep);
   return renderBoardPublic(board, ws, view);
 }
 
@@ -108,7 +107,7 @@ export async function planningContext(
   trigger?: ContextTrigger,
 ): Promise<ContextBundle> {
   const { store, projectId } = deps;
-  const humanMessages = (await store.read(projectId, 1)).filter(e => e.author.kind === 'human' && e.body.type === 'chat');
+  const humanMessages = (await store.read(projectId, 1)).filter(isHumanChat);
   const meta = await store.getMeta<PlanMeta>(projectId, 'plan');
   const plan: PlanProposal | null = meta ? await store.getPlanProposal(meta.proposalId) : null;
   const body = renderPlanning({
@@ -136,6 +135,7 @@ export async function reviewContext(
     decisions: board.decisions.filter(x => x.affects.includes(w.id)),
     facts: board.facts.filter(x => x.affects.includes(w.id)),
     failures: board.failures.filter(x => x.affects.includes(w.id)),
+    onBoard: deps.publicBoard,
   });
   return leadBundle(deps, board, ws, body, trigger);
 }

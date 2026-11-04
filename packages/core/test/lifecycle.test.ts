@@ -9,6 +9,7 @@ import type { WorkstreamSource } from '../src/workstreams/source.js';
 import { withRetry } from '../src/project.js';
 import { createEmployeeRegistry } from '../src/employees.js';
 import { createProject } from '../src/project.js';
+import { defaultCountTokens } from '../src/tokens.js';
 import { FIXTURE_PLAN, makeProject, type FacadeProject } from './helpers.js';
 
 const pairs = (w: Wake[]) => w.map(x => [x.botId, x.reason]).sort();
@@ -590,6 +591,33 @@ describe('facade wiring', () => {
     const artBrief = await fx.p.buildBrief('art', { maxTokens: 1_000_000, peek: true });
     expect(seg(retro, 'board')).toBe(seg(artBrief, 'board'));
     expect(seg(retro, 'board')).toContain('## Directives');
+  });
+
+  test('switches do not change board-size archiving', async () => {
+    const BIG = { maxTokens: 1_000_000, peek: true };
+    // The limit fits the approved base board plus a little, so long conventions get archived.
+    const probe = await makeProject({ approved: true });
+    const limit = defaultCountTokens(seg(await probe.p.buildBrief('pm', BIG), 'board')!) + 40;
+    const run = async (publicBoard?: { directives?: boolean; contracts?: boolean; failures?: boolean }) => {
+      let n = 0;
+      const fx = await makeProject({ approved: true, publicBoard, options: { boardMaxTokens: limit }, newId: p => `${p}-${++n}` });
+      await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'Make it cute. '.repeat(20) });
+      for (let i = 0; i < 4; i++) {
+        const convention: BoardOp = { op: 'add', section: 'conventions', item: { text: `Convention ${i}: ${'x'.repeat(60)}`, source: { entryIds: [], by: 'art' } } };
+        await fx.p.submit('art', { type: 'proposal', ops: [convention, failure(['art'], `Tried thing ${i} ${'y'.repeat(80)}`, 'z'.repeat(80))] });
+      }
+      const ledger = await fx.store.read(fx.projectId, 1);
+      const archived = ledger.flatMap(e => (e.body.type === 'event' && e.body.event.kind === 'archived' ? [e.body.event] : []));
+      return { board: await fx.store.getBoard(fx.projectId), archived, boardText: seg(await fx.p.buildBrief('pm', BIG), 'board')! };
+    };
+    const off = await run();
+    expect(off.archived.length).toBeGreaterThan(0);
+    const on = await run({ directives: true, contracts: true, failures: true });
+    expect(on.board).toEqual(off.board);
+    expect(on.archived).toEqual(off.archived);
+    // The rendered board is over the limit with the sections on, yet nothing more was archived (R-P1).
+    expect(defaultCountTokens(on.boardText)).toBeGreaterThan(limit);
+    expect(defaultCountTokens(off.boardText)).toBeLessThanOrEqual(limit);
   });
 
   test('a trigger option adds a final non-cacheable trigger segment rendered like the brief trigger', async () => {

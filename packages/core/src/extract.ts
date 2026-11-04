@@ -6,6 +6,7 @@ import type { Clock } from './clock.js';
 import { parseOps } from './board/schema.js';
 import type { EventBus } from './events.js';
 import type { Options } from './options.js';
+import { isHumanChat } from './publicBoard.js';
 import type { Store } from './store/store.js';
 import type { BoardOp, LedgerEntry, ProjectBoard } from './types.js';
 
@@ -48,8 +49,6 @@ export interface Extractor {
   flush(): Promise<void>;
   dispose(): void;
 }
-
-const isHumanChat = (e: LedgerEntry) => e.author.kind === 'human' && e.body.type === 'chat';
 
 export function createExtractor(deps: ExtractorDeps): Extractor {
   const { store, projectId, clock, options, extract, emit } = deps;

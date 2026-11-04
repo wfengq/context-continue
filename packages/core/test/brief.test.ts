@@ -658,3 +658,116 @@ describe('public board directives (spec 2026-11-04 section 2.1)', () => {
     expect(on.deltas.get('art')).toContain('art, ping');
   });
 });
+
+describe('public board contracts and failures (spec 2026-11-04 sections 2.2-2.4)', () => {
+  const BUDGET = { maxTokens: 1_000_000 };
+  type Switches = { directives?: boolean; contracts?: boolean; failures?: boolean };
+  const failureOp = (affects: string[], text: string, reason: string) => ({
+    op: 'addFailure' as const,
+    failure: { text, reason, affects, source: { entryIds: [], by: 'art' } },
+  });
+  const CONTRACT_LINE = '- [c1@1] art → logic: PNG sprite sheets, 16x16 tiles';
+
+  /** An approved project with two failures and one art deliverable; returns its review context too. */
+  async function setup(publicBoard?: Switches) {
+    let n = 0;
+    const f = await makeProject({ approved: true, publicBoard, newId: prefix => `${prefix}-${++n}` });
+    await f.p.submit('art', {
+      type: 'proposal',
+      ops: [failureOp(['art'], 'Tried SVG sprites', 'Renderer blurs them'), failureOp(['audio'], 'Tried WAV', 'Too large')],
+    });
+    await f.p.submit('art', { type: 'deliverable', workstreamId: 'art', summary: 'sprite sheet', content: 'sprites.png' });
+    const deliverableId = (await f.p.board()).workstreams.find(w => w.id === 'art')!.deliverables.at(-1)!.id;
+    return { f, deliverableId };
+  }
+
+  test('contracts on: every contract is on the board with its spec, and the projection no longer repeats it', async () => {
+    const { f, deliverableId } = await setup({ contracts: true });
+    const art = await f.p.buildBrief('art', BUDGET);
+    const logic = await f.p.buildBrief('logic', BUDGET);
+    for (const b of [art, logic]) {
+      expect(seg(b, 'board')).toContain(['## Conventions', '(nothing yet)', '', '## Contracts', CONTRACT_LINE, '', '## Workstreams'].join('\n'));
+      expect(seg(b, 'projection')).not.toContain('## Contracts');
+      expect(seg(b, 'projection')).not.toContain('PNG sprite sheets');
+      // failures stay in the projection while their switch is off
+      expect(seg(b, 'projection')).toContain('## Failures');
+    }
+    expect(seg(art, 'board')).not.toContain('## Failures');
+    // audio has no contract in its projection, but the board lists every contract
+    expect(seg(await f.p.buildBrief('audio', BUDGET), 'board')).toContain(CONTRACT_LINE);
+    const review = await f.p.buildReviewContext(deliverableId);
+    expect(seg(review, 'board')).toBe(seg(await f.p.buildBrief('pm', { ...BUDGET, peek: true }), 'board'));
+    expect(seg(review, 'projection')).not.toContain('## Contracts');
+    expect(seg(review, 'projection')).not.toContain('PNG sprite sheets');
+    expect(seg(review, 'projection')).toContain('## Failures');
+  });
+
+  test('failures on: every failure is on the board, and projection and review body no longer repeat it', async () => {
+    const { f, deliverableId } = await setup({ failures: true });
+    const art = await f.p.buildBrief('art', BUDGET);
+    const [svg, wav] = (await f.p.board()).failures.map(x => x.id);
+    const blocks = [
+      `- [${svg}] tried: Tried SVG sprites\n  why it failed: Renderer blurs them\n  affects: art`,
+      `- [${wav}] tried: Tried WAV\n  why it failed: Too large\n  affects: audio`,
+    ];
+    const board = seg(art, 'board');
+    expect(board).toContain(['## Conventions', '(nothing yet)', '', '## Failures', ...blocks, '', '## Workstreams'].join('\n'));
+    expect(board).not.toContain('## Contracts');
+    for (const id of ['art', 'audio', 'logic', 'pm']) {
+      const proj = seg(await f.p.buildBrief(id, BUDGET), 'projection');
+      expect(proj).not.toContain('## Failures');
+      expect(proj).not.toContain('Tried SVG sprites');
+      expect(proj).not.toContain('Tried WAV');
+    }
+    expect(seg(art, 'projection')).toContain('## Contracts');
+    const review = await f.p.buildReviewContext(deliverableId);
+    expect(seg(review, 'board')).toBe(seg(await f.p.buildBrief('pm', { ...BUDGET, peek: true }), 'board'));
+    expect(seg(review, 'projection')).not.toContain('## Failures');
+    expect(seg(review, 'projection')).not.toContain('Tried SVG sprites');
+    expect(seg(review, 'projection')).toContain('## Contracts');
+  });
+
+  test('all on: sections follow Goal, Constraints, Directives, Conventions, Contracts, Failures, Workstreams', async () => {
+    const { f, deliverableId } = await setup({ directives: true, contracts: true, failures: true });
+    await f.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'Make it cute.' });
+    const board = seg(await f.p.buildBrief('art', BUDGET), 'board');
+    const headings = board.split('\n').filter(l => l.startsWith('## '));
+    expect(headings).toEqual(['## Goal', '## Constraints', '## Directives', '## Conventions', '## Contracts', '## Failures', '## Workstreams']);
+    for (const ctx of [await f.p.buildPlanningContext(), await f.p.buildReviewContext(deliverableId)]) {
+      expect(seg(ctx, 'board')).toBe(seg(await f.p.buildBrief('pm', { ...BUDGET, peek: true }), 'board'));
+    }
+  });
+
+  test('contracts/failures off: projection and review text are unchanged', async () => {
+    const run = async (publicBoard?: Switches) => {
+      const { f, deliverableId } = await setup(publicBoard);
+      const out: string[] = [];
+      for (const id of ['pm', 'art', 'logic', 'audio']) out.push(seg(await f.p.buildBrief(id, BUDGET), 'projection'));
+      out.push(seg(await f.p.buildReviewContext(deliverableId), 'projection'));
+      return out;
+    };
+    const base = await run();
+    expect(await run({ contracts: false, failures: false })).toEqual(base);
+    // directives alone do not touch the projection or the review body
+    expect(await run({ directives: true })).toEqual(base);
+    const all = base.join('\n');
+    expect(all).toContain('[c1@v1] art -> logic: PNG sprite sheets');
+    expect(all).toContain('tried: Tried SVG sprites');
+  });
+
+  test('board items on the public board are never compacted as seen', async () => {
+    const { f } = await setup({ contracts: true, failures: true });
+    const first = await f.p.buildBrief('art', BUDGET);
+    await f.p.callTool('art', 'updateNotes', { text: 'started' }); // confirms what the brief showed
+    const ws = await f.store.getWorkspace(f.projectId, 'art');
+    const failureIds = (await f.p.board()).failures.map(x => x.id);
+    expect(failureIds).toHaveLength(2);
+    expect(ws!.seenItemIds).not.toContain('c1@1');
+    for (const id of failureIds) expect(ws!.seenItemIds).not.toContain(id);
+    const again = seg(await f.p.buildBrief('art', BUDGET), 'board');
+    expect(again).toBe(seg(first, 'board'));
+    expect(again).toContain(CONTRACT_LINE);
+    expect(again).toContain('why it failed: Renderer blurs them');
+    expect(again).not.toContain('(seen)');
+  });
+});

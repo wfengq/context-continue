@@ -16,7 +16,7 @@ import type {
   Workspace,
   Workstream,
 } from './types.js';
-import type { PublicBoardView } from './publicBoard.js';
+import type { PublicBoardSwitches, PublicBoardView } from './publicBoard.js';
 
 export interface Projection {
   workstream: Workstream | null;
@@ -143,6 +143,11 @@ export function renderCommon(members: { id: string; kind: 'human' | 'bot'; role:
   ].join('\n');
 }
 
+/** A contract on the public board (spec 2026-11-04 section 2.2): `- [<id>@<version>] <from> → <to>: <spec>`. */
+function boardContractLine(c: Contract): string {
+  return `- [${c.id}@${c.version}] ${c.from} → ${c.to}: ${c.spec}`;
+}
+
 /** A directive line: `- [#<seq> <author id>] <original text>` (ledger authors carry only an id). */
 function directiveLine(e: LedgerEntry): string {
   return `- [#${e.seq} ${e.author.id}] ${e.body.type === 'chat' ? e.body.text : ''}`;
@@ -151,7 +156,8 @@ function directiveLine(e: LedgerEntry): string {
 /**
  * The public board (segment 4). Without `view`, or with every switch off, the base render.
  * Optional sections (spec 2026-11-04 section 2.4) go in the order Goal, Constraints, Directives,
- * Conventions, Workstreams; a section that is switched off does not appear.
+ * Conventions, Contracts, Failures, Workstreams; a section that is switched off does not appear.
+ * Board items are always shown in full: the seen rule applies only to the projection.
  */
 export function renderBoardPublic(board: ProjectBoard, workstreams: Workstream[], view?: PublicBoardView): string {
   const directives: string[] = [];
@@ -160,6 +166,8 @@ export function renderBoardPublic(board: ProjectBoard, workstreams: Workstream[]
     const lines = view.directives.map(directiveLine);
     directives.push('## Directives', ...(omitted.length + lines.length > 0 ? [...omitted, ...lines] : [NOTHING]), '');
   }
+  const contracts = view?.switches.contracts ? ['## Contracts', ...list(board.contracts.map(boardContractLine)), ''] : [];
+  const failures = view?.switches.failures ? ['## Failures', ...list(board.failures.map(failureBlock)), ''] : [];
   return [
     '# Project',
     '',
@@ -173,6 +181,8 @@ export function renderBoardPublic(board: ProjectBoard, workstreams: Workstream[]
     '## Conventions',
     ...list(board.conventions.map(itemLine)),
     '',
+    ...contracts,
+    ...failures,
     '## Workstreams',
     ...list(workstreams.map(workstreamLine)),
   ].join('\n');
@@ -204,7 +214,15 @@ export function renderMemory(m: EmployeeMemory, recentKeep: number): string {
 // segment 5: projection with seen-item compression
 // ---------------------------------------------------------------------------
 
-export function renderProjection(p: Projection, seen: Set<string>): { text: string; shownKeys: string[] } {
+/**
+ * `onBoard`: the public board switches. A section whose items are on the public board (contracts,
+ * failures) is left out here, heading included, and its items are never shown or marked seen.
+ */
+export function renderProjection(
+  p: Projection,
+  seen: Set<string>,
+  onBoard?: PublicBoardSwitches,
+): { text: string; shownKeys: string[] } {
   if (p.workstream === null) return { text: ['# Your part', '', NO_PART].join('\n'), shownKeys: [] };
 
   const shownKeys: string[] = [];
@@ -223,32 +241,26 @@ export function renderProjection(p: Projection, seen: Set<string>): { text: stri
   if (w.writeScopes.length > 0) head.push(`write scopes: ${w.writeScopes.join(', ')}`);
   head.push(`review rounds: ${w.reviewRounds}`);
 
-  const contracts = entries(
-    p.contracts,
-    (c) => `- [${c.id}@v${c.version}] ${c.from} -> ${c.to} (seen)`,
-    contractLine,
-  );
+  const contracts = onBoard?.contracts
+    ? []
+    : ['## Contracts', ...list(entries(p.contracts, (c) => `- [${c.id}@v${c.version}] ${c.from} -> ${c.to} (seen)`, contractLine)), ''];
   const decisions = entries(p.decisions, compactItem, decisionBlock);
   const facts = entries(p.facts, compactItem, itemLine);
-  const failures = entries(p.failures, compactItem, failureBlock);
+  const failures = onBoard?.failures ? [] : ['## Failures', ...list(entries(p.failures, compactItem, failureBlock)), ''];
 
   const text = [
     '# Your part',
     '',
     ...head,
     '',
-    '## Contracts',
-    ...list(contracts),
-    '',
+    ...contracts,
     '## Decisions',
     ...list(decisions),
     '',
     '## Facts',
     ...list(facts),
     '',
-    '## Failures',
-    ...list(failures),
-    '',
+    ...failures,
     '## Upstream deliverables',
     ...list(p.upstream.map((u) => `- ${u.workstream.id} delivered v${u.deliverable.version}: ${u.deliverable.summary} (ref: ${u.deliverable.ref})`)),
     '',
@@ -346,7 +358,11 @@ export function renderReview(i: {
   decisions: Decision[];
   failures: Failure[];
   facts: Fact[];
+  /** The public board switches: contracts and failures on the board are not repeated here. */
+  onBoard?: PublicBoardSwitches;
 }): string {
+  const contracts = i.onBoard?.contracts ? [] : ['## Contracts', ...list(i.contracts.map(contractLine)), ''];
+  const failures = i.onBoard?.failures ? [] : ['## Failures', ...list(i.failures.map(failureBlock)), ''];
   return [
     REVIEW_INSTRUCTION,
     '',
@@ -356,18 +372,14 @@ export function renderReview(i: {
     '## Conventions',
     ...list(i.conventions.map(itemLine)),
     '',
-    '## Contracts',
-    ...list(i.contracts.map(contractLine)),
-    '',
+    ...contracts,
     '## Decisions',
     ...list(i.decisions.map(decisionBlock)),
     '',
     '## Facts',
     ...list(i.facts.map(itemLine)),
     '',
-    '## Failures',
-    ...list(i.failures.map(failureBlock)),
-    '',
+    ...failures,
     '## Content to review',
     i.content,
   ].join('\n');

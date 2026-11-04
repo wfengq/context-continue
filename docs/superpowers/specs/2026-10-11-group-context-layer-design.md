@@ -363,7 +363,7 @@ type BoardOp =
 
 前四段标记为可缓存。项目板变化只使第 4 段及其后的缓存失效，第 1–3 段仍可复用。负责人的拆分与审查上下文复用第 1–4 段（见第 4 节）。
 
-**可选的项目板小节**（见 `2026-11-04-project-wide-board.md`）：`createProject({ publicBoard: { directives?, contracts?, failures? } })`，缺省全部关闭，关闭时第 4 段与上表一致。开启 `directives` 后，第 4 段在约束与约定之间多一节"## Directives"：人发的聊天消息原文，按时间顺序，每行 `- [#seq 作者id] 原文`，只保留最近 `directivesKeep` 条（默认 20），更早的以 `(N earlier directives omitted)` 一行注明；同时人发的聊天消息不再进入任何 Bot（含负责人）的第 6 段，叫醒规则不变；规划上下文的"全部人类消息"不变。规划、审查与复盘上下文的项目板段与同一时刻的简报使用同一渲染（含新小节）；项目板大小限制（归档）与路由输入仍用不含新小节的基础渲染。
+**可选的项目板小节**（见 `2026-11-04-project-wide-board.md`）：`createProject({ publicBoard: { directives?, contracts?, failures? } })`，缺省全部关闭，关闭时第 4 段与上表一致。开启 `directives` 后，第 4 段在约束与约定之间多一节"## Directives"：人发的聊天消息原文，按时间顺序，每行 `- [#seq 作者id] 原文`，只保留最近 `directivesKeep` 条（默认 20），更早的以 `(N earlier directives omitted)` 一行注明；同时人发的聊天消息不再进入任何 Bot（含负责人）的第 6 段，叫醒规则不变；规划上下文的"全部人类消息"不变。规划、审查与复盘上下文的项目板段与同一时刻的简报使用同一渲染（含新小节）；项目板大小限制（归档）与路由输入仍用不含新小节的基础渲染。开启 `contracts` 后，约定之后多一节"## Contracts"，列出全部契约，每行 `- [id@版本] 来源 → 去向: 规格原文`；开启 `failures` 后其后再多一节"## Failures"，用与投影相同的失败字段布局。各节顺序：Goal、Constraints、Directives、Conventions、Contracts、Failures、Workstreams。开启的节不再在第 5 段（投影）与审查正文中重复（连同节标题一起省略，这些条目也不会记为已看过）；项目板上的条目始终完整显示，"已看过"规则只作用于投影。未知的 `publicBoard` 键被忽略；`directivesKeep` 须为不小于 1 的整数。第 4 段从不裁剪，指示、契约或失败记录很长时可能抛出 `BudgetTooSmallError`。
 
 **已读条目压缩**（借鉴 DeLM）：第 5 段中，条目 id 不在 `Workspace.seenItemIds` 里的显示完整内容，展示后先记入 `pendingSeenItemIds`（每次简报覆盖上一次的待确认），该 Bot 之后调用任意工具（即使工具报错）时才把其中仍在项目板上的并入 `seenItemIds`；简报后没有调用工具的空转请求不算看过，下次照样完整显示，`peek` 不改动两者；为负责人组装审查或规划上下文时，丢弃该负责人的待确认条目（上下文取代了那次简报，不算看过；无工作区则不创建）；已在其中且之后没有变化的，只显示 id、标题和状态。条目被覆盖或修改后从 `seenItemIds` 中移除，下次重新完整展示。Bot 需要再看完整内容时调用 `getBoardItem`。
 

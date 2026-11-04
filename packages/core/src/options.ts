@@ -34,7 +34,10 @@ export const DEFAULT_OPTIONS: Readonly<Required<Options>> = Object.freeze({
   directivesKeep: 20,
 });
 
-/** Defaults filled in; throws INVALID_OP for a value that is not a finite positive number. */
+/** Options that count items; a fraction would be meaningless. */
+const INTEGER_OPTIONS: ReadonlySet<keyof Options> = new Set(['directivesKeep']);
+
+/** Defaults filled in; throws INVALID_OP for a value that is not a finite positive number (an integer for counts like directivesKeep). */
 export function resolveOptions(o?: Options): Required<Options> {
   const resolved: Required<Options> = { ...DEFAULT_OPTIONS };
   if (o) {
@@ -43,6 +46,9 @@ export function resolveOptions(o?: Options): Required<Options> {
       if (v === undefined) continue;
       if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
         throw new ContextError('INVALID_OP', `Option ${key} must be a finite positive number, got ${String(v)}`);
+      }
+      if (INTEGER_OPTIONS.has(key) && !Number.isInteger(v)) {
+        throw new ContextError('INVALID_OP', `Option ${key} must be an integer, got ${String(v)}`);
       }
       resolved[key] = v;
     }

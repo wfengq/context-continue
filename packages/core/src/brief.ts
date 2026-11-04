@@ -274,7 +274,7 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
   const shown: string[] = [];
   const blocks: string[] = [];
   for (const p of selectProjections(board, workstreams, botId, writeScopeOverlaps(workstreams))) {
-    const r = renderProjection(p, seen);
+    const r = renderProjection(p, seen, deps.publicBoard);
     blocks.push(r.text);
     for (const k of r.shownKeys) seen.add(k);
     shown.push(...r.shownKeys);

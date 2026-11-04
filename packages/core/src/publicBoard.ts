@@ -18,29 +18,31 @@ export interface PublicBoardView {
 
 const SWITCHES = ['directives', 'contracts', 'failures'] as const;
 
-/** Defaults filled in; throws INVALID_OP for anything but a plain object of known boolean switches. */
+/**
+ * Defaults filled in; throws INVALID_OP for anything but a plain object whose known switches are
+ * booleans. Unknown keys are ignored (R-P2), like unknown numeric options.
+ */
 export function resolvePublicBoard(p?: PublicBoardSwitches): Required<PublicBoardSwitches> {
   const resolved = { directives: false, contracts: false, failures: false };
   if (p === undefined) return resolved;
   if (typeof p !== 'object' || p === null || Array.isArray(p)) {
     throw new ContextError('INVALID_OP', `publicBoard must be an object of boolean switches, got ${String(p)}`);
   }
-  for (const [key, v] of Object.entries(p)) {
-    if (!(SWITCHES as readonly string[]).includes(key)) {
-      throw new ContextError('INVALID_OP', `Unknown publicBoard switch "${key}"`);
-    }
+  for (const key of SWITCHES) {
+    const v: unknown = (p as Record<string, unknown>)[key];
     if (v === undefined) continue;
     if (typeof v !== 'boolean') throw new ContextError('INVALID_OP', `publicBoard.${key} must be a boolean, got ${String(v)}`);
-    resolved[key as (typeof SWITCHES)[number]] = v;
+    resolved[key] = v;
   }
   return resolved;
 }
 
+/** A chat message written by a human (directives, the planning body and extraction input). */
 export const isHumanChat = (e: LedgerEntry): boolean => e.author.kind === 'human' && e.body.type === 'chat';
 
 /**
  * The view for the board segment, or `undefined` when every switch is off (the base render).
- * Reads the ledger only when directives are on.
+ * Reads the ledger only when directives are on; contracts and failures come from the board itself.
  */
 export async function publicBoardView(
   store: Store,
@@ -53,7 +55,7 @@ export async function publicBoardView(
   let directivesOmitted = 0;
   if (switches.directives) {
     const all = (await store.read(projectId, 1)).filter(isHumanChat);
-    const keep = Math.min(all.length, Math.max(0, Math.floor(directivesKeep)));
+    const keep = Math.min(all.length, directivesKeep); // an integer >= 1 (resolveOptions)
     directives = all.slice(all.length - keep);
     directivesOmitted = all.length - keep;
   }
