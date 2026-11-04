@@ -6,6 +6,7 @@ import { LONG_IDS, main, SCENARIO_IDS, STANDARD_IDS, XLONG_IDS } from '../src/cl
 
 const STANDARD = ['product-plan', 'flappy-bird', 'event-plan'];
 const LONG = ['long-app', 'long-event'];
+const XLONG = ['xlong-product'];
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'bench-cli-'));
 
@@ -33,13 +34,13 @@ describe('bench cli', () => {
     expect((await run(['run', '--scenario', 'all', '--group', 'all', '--out', out, '--stamp', 'T'])).code).toBe(0);
     const report = readFileSync(join(out, 'T', 'report.md'), 'utf8');
     for (const g of ['A', 'B', 'C', 'D', 'E', 'F']) expect(report).toMatch(new RegExp(`^\\| ${g} \\|`, 'm'));
-    for (const id of [...STANDARD, ...LONG]) expect(report).toContain(`## Scenario: ${id}`);
-    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)', '## Summary (long scenarios)']);
+    for (const id of [...STANDARD, ...LONG, ...XLONG]) expect(report).toContain(`## Scenario: ${id}`);
+    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)', '## Summary (long scenarios)', '## Summary (xlong scenarios)']);
     const json = JSON.parse(readFileSync(join(out, 'T', 'results.json'), 'utf8'));
     expect(json.params).toEqual({ cacheRatio: 0.1, compactRatio: 0.8, summaryTokens: 1500, window: 128000 });
-    expect(json.metrics).toHaveLength(30);
+    expect(json.metrics).toHaveLength(36);
     expect(json.records.length).toBeGreaterThan(0);
-  }, 60_000);
+  }, 300_000);
 
   test('--scenario long runs only the two long scenarios, with one long summary', async () => {
     const out = tmp();
@@ -63,17 +64,22 @@ describe('bench cli', () => {
     expect(json.metrics.every((m: { tier: string }) => m.tier === 'standard')).toBe(true);
   });
 
-  test('SCENARIO_IDS lists the three standard scenarios, then the two long ones', () => {
-    expect([...SCENARIO_IDS]).toEqual([...STANDARD, ...LONG]);
+  test('SCENARIO_IDS lists the three standard scenarios, then the two long ones, then the xlong one', () => {
+    expect([...SCENARIO_IDS]).toEqual([...STANDARD, ...LONG, ...XLONG]);
+    expect([...SCENARIO_IDS]).toEqual([...STANDARD_IDS, ...LONG_IDS, ...XLONG_IDS]);
   });
 
-  test('the xlong set is empty until its scenario exists; --scenario xlong is then a usage error, and all still runs', async () => {
-    expect([...SCENARIO_IDS]).toEqual([...STANDARD_IDS, ...LONG_IDS, ...XLONG_IDS]);
-    if (XLONG_IDS.length > 0) return; // once Task 2 adds the scenario, `--scenario xlong` runs it (covered there)
-    const r = await run(['run', '--scenario', 'xlong', '--group', 'A', '--out', tmp(), '--stamp', 'X']);
-    expect(r.code).toBe(2);
-    expect(r.err).toMatch(/xlong.*no scenarios/);
-  });
+  test('--scenario xlong runs only xlong-product, with one xlong summary in which E compacts', async () => {
+    const out = tmp();
+    expect((await run(['run', '--scenario', 'xlong', '--group', 'all', '--out', out, '--stamp', 'X'])).code).toBe(0);
+    const report = readFileSync(join(out, 'X', 'report.md'), 'utf8');
+    expect(report.match(/^## Scenario: .*$/gm)).toEqual(XLONG.map(id => `## Scenario: ${id}`));
+    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (xlong scenarios)']);
+    expect(report).toContain('- E compacted in this run');
+    const json = JSON.parse(readFileSync(join(out, 'X', 'results.json'), 'utf8'));
+    expect(json.metrics.every((m: { tier: string }) => m.tier === 'xlong')).toBe(true);
+    expect(json.metrics.find((m: { group: string }) => m.group === 'E').compactions).toBeGreaterThanOrEqual(1);
+  }, 300_000);
 
   test('flags reach the metrics and the E policy', async () => {
     const out = tmp();
@@ -99,7 +105,7 @@ describe('bench cli', () => {
     for (const f of ['results.json', 'report.md']) {
       expect(readFileSync(join(a, 'T', f)).equals(readFileSync(join(b, 'T', f)))).toBe(true);
     }
-  }, 120_000);
+  }, 600_000);
 
   test('without --stamp the directory is named by a UTC timestamp', async () => {
     const out = tmp();

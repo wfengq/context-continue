@@ -13,8 +13,8 @@ import type { CallRecord, Group, Scenario } from './types.js';
 export const STANDARD_IDS = ['product-plan', 'flappy-bird', 'event-plan'] as const;
 /** The long scenarios (tier long, 150–300 steps), in report order. */
 export const LONG_IDS = ['long-app', 'long-event'] as const;
-/** The extra-long scenarios (tier xlong, 1,000–1,500 steps). Empty until Task 2 adds the scenario file. */
-export const XLONG_IDS = [] as const satisfies readonly string[];
+/** The extra-long scenarios (tier xlong, 1,000–1,500 steps), in report order. */
+export const XLONG_IDS = ['xlong-product'] as const;
 /** Every formal scenario, in report order: the standard ones, then the long ones, then the xlong ones. */
 export const SCENARIO_IDS = [...STANDARD_IDS, ...LONG_IDS, ...XLONG_IDS] as const;
 
@@ -136,7 +136,7 @@ export async function main(argv: string[]): Promise<number> {
 
   // Load and validate every scenario before running anything.
   const ids = Object.hasOwn(SCENARIO_SETS, args.scenario) ? [...SCENARIO_SETS[args.scenario]!] : [args.scenario];
-  // A named set with no scenarios (xlong, until its scenario file exists) would write an empty report: a usage error.
+  // A named set with no scenarios would write an empty report: a usage error.
   if (ids.length === 0) {
     process.stderr.write(`bench: --scenario ${args.scenario}: the "${args.scenario}" set has no scenarios yet\n${USAGE}\n`);
     return 2;

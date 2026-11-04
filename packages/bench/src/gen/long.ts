@@ -75,6 +75,8 @@ interface Doc {
 
 export interface Head {
   id: string;
+  /** Defaults to 'long'. */
+  tier?: 'long' | 'xlong';
   goal: string;
   constraints: string[];
   owner: string;
@@ -256,7 +258,7 @@ export class LongScenarioBuilder {
     const { idleReply, ...head } = this.head;
     const raw = {
       id: head.id,
-      tier: 'long' as const,
+      tier: head.tier ?? ('long' as const),
       goal: head.goal,
       constraints: head.constraints,
       owner: head.owner,

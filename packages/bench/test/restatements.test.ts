@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { generateLongApp } from '../src/gen/long-app.js';
 import { cite } from '../src/gen/long.js';
 import { generateLongEvent } from '../src/gen/long-event.js';
+import { generateXlongProduct, XLONG_PRODUCT_RESTATEMENTS } from '../src/gen/xlong-product.js';
 import type { Scenario, Step } from '../src/types.js';
 
 // R-L11: one marker rule in both long generators: a fact's marker appears wherever its content is
@@ -115,6 +116,8 @@ function unmarked(s: Scenario, phrases: Record<string, string[]>): string[] {
 describe.each([
   { id: 'long-app', generate: generateLongApp, phrases: LONG_APP },
   { id: 'long-event', generate: generateLongEvent, phrases: LONG_EVENT },
+  // The xlong generator's own table: with 40+ facts a second copy here would only drift from it.
+  { id: 'xlong-product', generate: generateXlongProduct, phrases: XLONG_PRODUCT_RESTATEMENTS },
 ])('$id restatements carry markers (R-L11)', ({ generate, phrases }) => {
   test('every fact has a phrase list', () => {
     expect((generate().facts ?? []).map(f => f.id).filter(id => !(id in phrases))).toEqual([]);

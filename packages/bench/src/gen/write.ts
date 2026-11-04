@@ -1,9 +1,10 @@
-// Writes the generated long scenarios to packages/bench/scenarios/ (`pnpm gen:scenarios`).
+// Writes the generated long and xlong scenarios to packages/bench/scenarios/ (`pnpm gen:scenarios`).
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Scenario } from '../types.js';
 import { generateLongApp } from './long-app.js';
 import { generateLongEvent } from './long-event.js';
+import { generateXlongProduct } from './xlong-product.js';
 
 /** A scenario as committed: JSON with 2-space indentation and a trailing newline. */
 export function scenarioJson(s: Scenario): string {
@@ -19,7 +20,7 @@ const SCENARIO_DIR = new URL('../../scenarios/', import.meta.url);
 
 const isMain = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-  for (const s of [generateLongApp(), generateLongEvent()]) {
+  for (const s of [generateLongApp(), generateLongEvent(), generateXlongProduct()]) {
     const path = fileURLToPath(new URL(`${s.id}.json`, SCENARIO_DIR));
     writeScenario(s, path);
     console.log(`wrote ${path} (${s.steps.length} steps, ${(s.facts ?? []).length} facts)`);
