@@ -41,6 +41,16 @@ const REVIEW_INSTRUCTION =
   'Do not judge style, quality or anything else. ' +
   'Reply with a pass, or with the specific conventions or contracts that are violated.';
 
+/** The review instruction when contracts are on the public board (spec 2026-11-04 section 2.2), not in the review body. */
+function reviewInstructionContractsOnBoard(workstreamId: string): string {
+  return (
+    'Check only whether the content violates the conventions listed below, or the contracts involving ' +
+    `workstream "${workstreamId}" in the Contracts section of the project board above. ` +
+    'Do not judge style, quality or anything else. ' +
+    'Reply with a pass, or with the specific conventions or contracts that are violated.'
+  );
+}
+
 const PLANNING_INSTRUCTION =
   'You are the lead of this project. Propose a plan: split the goal into workstreams, assign each to a team member from the roster, ' +
   'declare dependencies and the interface contracts between workstreams.';
@@ -364,7 +374,7 @@ export function renderReview(i: {
   const contracts = i.onBoard?.contracts ? [] : ['## Contracts', ...list(i.contracts.map(contractLine)), ''];
   const failures = i.onBoard?.failures ? [] : ['## Failures', ...list(i.failures.map(failureBlock)), ''];
   return [
-    REVIEW_INSTRUCTION,
+    i.onBoard?.contracts ? reviewInstructionContractsOnBoard(i.workstream.id) : REVIEW_INSTRUCTION,
     '',
     '## Workstream',
     workstreamLine(i.workstream),

@@ -755,6 +755,26 @@ describe('public board contracts and failures (spec 2026-11-04 sections 2.2-2.4)
     expect(all).toContain('tried: Tried SVG sprites');
   });
 
+  test('contracts off: the review body keeps the original instruction', async () => {
+    const { f, deliverableId } = await setup({ failures: true });
+    const body = seg(await f.p.buildReviewContext(deliverableId), 'projection');
+    expect(body.startsWith(
+      'Check only whether the content violates the conventions and contracts listed below. ' +
+        'Do not judge style, quality or anything else. ' +
+        'Reply with a pass, or with the specific conventions or contracts that are violated.\n\n## Workstream',
+    )).toBe(true);
+  });
+
+  test('contracts on: the review instruction points to the board Contracts section for this workstream', async () => {
+    const { f, deliverableId } = await setup({ contracts: true });
+    const body = seg(await f.p.buildReviewContext(deliverableId), 'projection');
+    const instruction = body.split('\n\n')[0]!;
+    expect(instruction).not.toContain('contracts listed below');
+    expect(instruction).toContain('conventions listed below');
+    expect(instruction).toContain("Contracts section of the project board above");
+    expect(instruction).toContain('"art"');
+  });
+
   test('board items on the public board are never compacted as seen', async () => {
     const { f } = await setup({ contracts: true, failures: true });
     const first = await f.p.buildBrief('art', BUDGET);
