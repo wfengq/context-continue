@@ -32,7 +32,7 @@ single personal agents such as Muse or Duet.
 
 ## Scenarios
 
-`scenarios/` holds five scripted projects in two tiers.
+`scenarios/` holds six scripted projects in three tiers.
 
 **Standard scenarios** (20 to 40 steps each): `product-plan`, `flappy-bird` and `event-plan`. Every
 one covers a mid-project change of requirements, a failed review, a review that adds a convention,
@@ -56,12 +56,20 @@ ones up to 3,000). They test how each approach copes when the history keeps grow
 decisions are overtaken: how large requests get as the project goes on, and whether the
 information a bot needs still reaches it.
 
+**Extra-long scenario** (`tier: "xlong"`, 1,000 to 1,500 steps): `xlong-product`, 1,154 steps in
+which eight bots take a collaborative documents product through six release cycles (accounts,
+billing, collaboration, offline, export, compliance). Each cycle replaces the delivered workstreams
+with new ones and has its own requirement changes, failed reviews, conventions, questions and
+recorded failures; conventions and contracts from early cycles are restated in later ones, so 45
+facts include many that are still needed hundreds of steps after they are told. It is long enough
+for group E to compact at the default window.
+
 Tool calls use the core library's tool names and argument shapes, because group C executes them
 for real; in every scenario group C must finish the project with no core errors.
 
-### Generating the long scenarios
+### Generating the long and extra-long scenarios
 
-The long scenarios are not written by hand. Deterministic generators in `src/gen/` (no randomness,
+The long and extra-long scenarios are not written by hand. Deterministic generators in `src/gen/` (no randomness,
 no clock) build them step by step and check the scenario rules as they go; the JSON files are
 committed, and a test fails if regenerating them does not reproduce the committed files byte for
 byte. After changing a generator, rewrite the files with:
@@ -80,10 +88,8 @@ pnpm -C packages/bench bench run --scenario all --group all
 ```
 
 `--scenario standard` runs only the three standard scenarios and `--scenario long` only the two
-long ones; `xlong` runs the extra-long tier (1,000 to 1,500 steps; `tier: "xlong"`). No xlong
-scenario file exists yet, so `--scenario xlong` currently exits with a usage error (code 2) saying
-the set has no scenarios; once its ids are listed in `src/cli.ts`, `xlong` and `all` include them.
-`all` runs every listed scenario (currently the five).
+long ones; `xlong` runs the extra-long tier (1,000 to 1,500 steps; `tier: "xlong"`), currently
+`xlong-product`. `all` runs every listed scenario (currently the six).
 
 The `bench` script builds the core library and the bench, then runs `node dist/cli.js`. With
 `pnpm -C packages/bench`, the working directory is `packages/bench`, so the default output lands in
@@ -95,7 +101,7 @@ ignored by git.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--scenario <id\|path.json\|standard\|long\|all>` | required | A scenario id from `scenarios/`, a path to a scenario JSON file, `standard` (the three standard scenarios), `long` (the two long ones) or `all` (all five) |
+| `--scenario <id\|path.json\|standard\|long\|xlong\|all>` | required | A scenario id from `scenarios/`, a path to a scenario JSON file, `standard` (the three standard scenarios), `long` (the two long ones), `xlong` (the extra-long one) or `all` (all six) |
 | `--group <A..F\|all>` | required | One group or all six |
 | `--window <n>` | `128000` | Group E: assumed context window in tokens |
 | `--compact-ratio <r>` | `0.8` | Group E: compact when history exceeds window x ratio |
@@ -112,7 +118,7 @@ An invalid scenario, group or flag value prints a message on stderr and exits wi
 ### Comparing the public-board settings
 
 To compare group C with the core's optional public-board sections switched off and on, run all
-five scenarios once per setting (`none` is the plain board, `directives` equals `default`), each into its own output directory:
+six scenarios once per setting (`none` is the plain board, `directives` equals `default`), each into its own output directory:
 
 ```sh
 for s in none directives contracts failures all; do
@@ -121,7 +127,7 @@ done
 ```
 
 Only group C depends on `--c-public`: groups A, B, D, E and F give identical results in every
-setting. Compare C's cost units and fact visibility across the five reports; for visibility by fact
+setting. Compare C's cost units and fact visibility across the five reports (one per setting); for visibility by fact
 category, pool `perFact` in `results.json` by the id prefix (`change-`, `conv-`, `contract-`,
 `fail-`). The recorded comparison is in
 `docs/superpowers/specs/2026-11-04-project-wide-board.md`, section 6.
@@ -139,8 +145,10 @@ category, pool `perFact` in `results.json` by the id prefix (`change-`, `conv-`,
 - Group A is a single-agent baseline, not a multi-bot alternative. Its one append-only history is
   mostly cacheable, so A can be the cheapest group on cost units even though it has no team at all.
   Compare the multi-bot groups (B to F) with each other, and A only as a reference point.
-- Even the long scenarios stay well below the default 128,000-token window, so group E's
-  compaction does not trigger by default. Pass a smaller `--window` (for example `--window 2000`) to see it.
+- The standard and long scenarios stay well below the default 128,000-token window, so group E
+  compacts only in the extra-long scenario, where the lead's history passes window x compact ratio
+  near step 1,000. The report's caveats say whether E compacted in the run. Pass a smaller
+  `--window` (for example `--window 2000`) to see compaction in the shorter scenarios.
 - Wake counts (extra requests) for groups D, E and F depend on how often humans and bots
   @-mention each other in the scenario. A scenario with more or fewer mentions shifts these groups.
 - Cost units weight cacheable tokens by `--cache-ratio`; raw input tokens and the context-size

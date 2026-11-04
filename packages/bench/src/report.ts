@@ -149,6 +149,7 @@ export function renderReport(
       return [s.contextMedian, s.contextP90, s.contextMax];
     }), '');
   }
+  const eCompacted = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0);
   out.push(
     '## Caveats', '',
     '- Results come from a scripted fake model; only context size is measured.',
@@ -160,7 +161,9 @@ export function renderReport(
     '- Tool definitions are not counted in any group.',
     '- C pays one extra lead brief at step 0 when a scenario opens with a human message.',
     '- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.',
-    "- The bundled scenarios, the long ones included, stay below E's compaction threshold at the default window; pass a smaller --window to see it.",
+    eCompacted
+      ? "- E compacted in this run (see the compactions column); a scenario where E shows 0 compactions stayed below its threshold (window x compact ratio)."
+      : "- E did not compact in this run: every scenario stayed below its compaction threshold (window x compact ratio); pass a smaller --window to see it.",
     '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
     "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.",
     "- F's context is the shared pages (project, current plan, one per delivered workstream) plus the bot's own history: there is no chat thread.",
@@ -179,7 +182,7 @@ export function renderReport(
   if (meta.scenarios.includes('event-plan')) {
     out.push("- A fact's category is set by its id prefix; some failure facts come from failed review notes (event-plan records no failure op).");
   }
-  if (all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0)) {
+  if (eCompacted) {
     out.push("- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.");
   }
   out.push('');

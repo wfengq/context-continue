@@ -63,7 +63,7 @@ describe('renderReport', () => {
       "- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.",
     );
     expect(lines).toContain(
-      "- The bundled scenarios, the long ones included, stay below E's compaction threshold at the default window; pass a smaller --window to see it.",
+      "- E did not compact in this run: every scenario stayed below its compaction threshold (window x compact ratio); pass a smaller --window to see it.",
     );
     expect(lines).toContain(
       '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
@@ -202,6 +202,16 @@ describe('renderReport: facts, growth, tiers', () => {
     expect(renderReport(mixed(), mixedMeta).split('\n')).not.toContain(TRUNCATION);
     const compacted = mixed().map(r => (r.group === 'E' && r.scenario === 's2' ? { ...r, compactions: 1 } : r));
     expect(renderReport(compacted, mixedMeta).split('\n')).toContain(TRUNCATION);
+  });
+
+  test('the E compaction caveat follows whether E compacted in the run', () => {
+    const none = "- E did not compact in this run: every scenario stayed below its compaction threshold (window x compact ratio); pass a smaller --window to see it.";
+    const some = "- E compacted in this run (see the compactions column); a scenario where E shows 0 compactions stayed below its threshold (window x compact ratio).";
+    const plain = renderReport(mixed(), mixedMeta).split('\n');
+    expect([plain.includes(none), plain.includes(some)]).toEqual([true, false]);
+    const compacted = renderReport(mixed().map(r => (r.group === 'E' && r.scenario === 's2' ? { ...r, compactions: 1 } : r)), mixedMeta).split('\n');
+    expect([compacted.includes(none), compacted.includes(some)]).toEqual([false, true]);
+    expect(compacted.join('\n')).not.toContain('stay below E');
   });
 
   test('the event-plan caveat prints only when event-plan is in the run (R-L12)', () => {
