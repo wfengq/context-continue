@@ -332,7 +332,7 @@ describe('group C review and replan requests use the core contexts', () => {
     expect(records[i]!.botId).toBe('pm');
     // the core's review context (the lead's prefix, then the projection) and the trigger it renders
     expect(kinds(records[i]!)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'trigger']);
-    const body = seen[i]!.segments[4]!.text;
+    const body = seen[i]!.segments[kinds(records[i]!).indexOf('projection')]!.text;
     expect(body).toContain('sprite sheet ART-CONTENT');
     expect(body).toContain('FAIL-SVG');
     expect(body).toContain('too slow on old phones');
@@ -355,7 +355,7 @@ describe('group C review and replan requests use the core contexts', () => {
     const i = records.findIndex(r => r.step === 4 && r.kind === 'scripted');
     expect(records[i]!.botId).toBe('pm');
     expect(kinds(records[i]!)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'trigger']);
-    const body = seen[i]!.segments[4]!.text;
+    const body = seen[i]!.segments[kinds(records[i]!).indexOf('projection')]!.text;
     // both human messages, including the one that mentioned only art, and the previous plan
     expect(body).toContain('CHANGE-BLUE');
     expect(body).toContain('CHANGE-SOUND');
@@ -383,7 +383,7 @@ describe('group C review and replan requests use the core contexts', () => {
     expect(replan.r.segments!.map(s => s.cacheable)).toEqual([true, true, true, false, false, false]);
     // back to a brief: the board is unchanged since the replan request, so the prefix common to board is identical
     expect(after.r.segments!.map(s => s.cacheable)).toEqual([true, true, true, true, false, false, false]);
-    // every lead request: cacheable iff core-flagged (common, board) and inside the identical leading run
+    // every lead request: cacheable iff core-flagged (common, memory, workspace, board) and inside the identical leading run
     let prev: string[] | null = null;
     for (const { r, q } of pm) {
       const texts = q.segments.map(g => g.text);

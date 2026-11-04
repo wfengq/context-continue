@@ -361,7 +361,7 @@ type BoardOp =
 | 6 | 增量：自 `lastSeenSeq` 以来与自己相关的事件和消息，以及自 `lastSeenBoardVersion` 以来与自己相关的变化摘要（由变更记录渲染，不调用模型；`lastSeenBoardVersion = 0` 时省略）；负责人的增量另包含所有人类发的聊天消息，不论是否 @、回复或匹配其工作块 | 否 |
 | 7 | 本次触发原因与触发内容 | 否 |
 
-前四段标记为可缓存。项目板变化只使第 4 段及其后的缓存失效，第 1–3 段仍可复用。
+前四段标记为可缓存。项目板变化只使第 4 段及其后的缓存失效，第 1–3 段仍可复用。负责人的拆分与审查上下文复用第 1–4 段（见第 4 节）。
 
 **已读条目压缩**（借鉴 DeLM）：第 5 段中，条目 id 不在 `Workspace.seenItemIds` 里的显示完整内容，展示后先记入 `pendingSeenItemIds`（每次简报覆盖上一次的待确认），该 Bot 之后调用任意工具（即使工具报错）时才把其中仍在项目板上的并入 `seenItemIds`；简报后没有调用工具的空转请求不算看过，下次照样完整显示，`peek` 不改动两者；为负责人组装审查或规划上下文时，丢弃该负责人的待确认条目（上下文取代了那次简报，不算看过；无工作区则不创建）；已在其中且之后没有变化的，只显示 id、标题和状态。条目被覆盖或修改后从 `seenItemIds` 中移除，下次重新完整展示。Bot 需要再看完整内容时调用 `getBoardItem`。
 
@@ -415,7 +415,7 @@ const project = createProject({
 
 // 生命周期
 await project.start({ goal, constraints, lead, by });
-const planCtx   = await project.buildPlanningContext();
+const planCtx   = await project.buildPlanningContext({ trigger? });
 await project.proposePlan(plan, { by: lead });
 await project.approvePlan(proposalId, { by, edits? });
 await project.rejectPlan(proposalId, { by, feedback });
@@ -425,7 +425,7 @@ await project.submit(botId, submission);
 //             | { type: 'proposal', ops }
 //             | { type: 'blocked', workstreamId, reason }
 //             | { type: 'notes', notes }
-const reviewCtx = await project.buildReviewContext(deliverableId);
+const reviewCtx = await project.buildReviewContext(deliverableId, { trigger? });
 await project.submitReview(deliverableId, { passed, notes, conventions? });
 await project.resolveProposal(proposalId, { accept, edits? });
 await project.close({ by, force? });

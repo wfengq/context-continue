@@ -16,6 +16,7 @@ import {
   untrimmedKeeps,
   type Projection,
 } from './render.js';
+import type { ContextTrigger } from './contexts.js';
 import { matchWorkstreams } from './route.js';
 import type { Store } from './store/store.js';
 import type {
@@ -27,7 +28,6 @@ import type {
   Segment,
   SegmentKind,
   ToolDefinition,
-  WakeReason,
   Workspace,
   Workstream,
 } from './types.js';
@@ -48,7 +48,7 @@ export interface BriefOptions {
   maxTokens: number;
   /** Render without marking anything as seen or advancing the bot's pointers. */
   peek?: boolean;
-  trigger?: { reason: WakeReason | 'manual'; detail: string };
+  trigger?: ContextTrigger;
 }
 
 type Overlaps = ReturnType<typeof writeScopeOverlaps>;

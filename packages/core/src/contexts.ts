@@ -47,7 +47,6 @@ async function bundle(
   board: ProjectBoard,
   ws: Workstream[],
   body: string,
-  role: 'lead' | 'member',
 ): Promise<ContextBundle> {
   const members = botMembers(board, ws);
   const personas = await personasOf(deps, members);
@@ -56,7 +55,7 @@ async function bundle(
     { kind: 'board', text: renderBoardPublic(board, ws), cacheable: true },
     { kind: 'projection', text: body, cacheable: false },
   ];
-  return { segments, tools: toolDefinitions(role), stats: stats(deps, segments) };
+  return { segments, tools: toolDefinitions('member'), stats: stats(deps, segments) };
 }
 
 /**
@@ -148,5 +147,5 @@ export async function retroContext(
     reviews,
     memory: (await deps.employees.get(botId)) ?? defaultMemory(botId),
   });
-  return bundle(deps, board, ws, body, 'member');
+  return bundle(deps, board, ws, body);
 }
