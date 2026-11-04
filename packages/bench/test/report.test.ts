@@ -214,6 +214,27 @@ describe('renderReport: facts, growth, tiers', () => {
     expect(compacted.join('\n')).not.toContain('stay below E');
   });
 
+  const XLONG_SUMMARY = "- Group E's compaction summary keeps every marker seen before compacting; on xlong scenarios, where E compacts, this assumption weighs more.";
+  const XLONG_DIRECTIVES = '- C keeps only the newest 20 human messages on the board (core directivesKeep); on xlong scenarios older human messages reach the lead only through the planning context.';
+
+  test('the window caveat names the groups other than E whose context max exceeds --window', () => {
+    const windowMeta = { ...meta, params: { ratio: 0.1, window: 2500 } };
+    const lines = renderReport(all(), windowMeta).split('\n');
+    // all(): A 1000/1007, B 2000/2007, C 3000/3007, D 4000/4007, E 5000/5007, F 6000/6007
+    expect(lines).toContain('- C, D and F exceed the 2,500-token window in this run: their figures assume an unlimited context window (only E models the window and compaction).');
+    expect(renderReport(all(), { ...meta, params: { ratio: 0.1, window: 100000 } })).not.toContain('assume an unlimited context window');
+    const onlyF = renderReport(all(), { ...meta, params: { ratio: 0.1, window: 6003 } }).split('\n');
+    expect(onlyF).toContain('- F exceeds the 6,003-token window in this run: its figures assume an unlimited context window (only E models the window and compaction).');
+  });
+
+  test('the xlong caveats on the E summary and C directives print only when an xlong scenario is in the run', () => {
+    const plain = renderReport(mixed(), mixedMeta).split('\n');
+    expect([plain.includes(XLONG_SUMMARY), plain.includes(XLONG_DIRECTIVES)]).toEqual([false, false]);
+    const xl = mixed().map(r => (r.scenario === 's2' ? { ...r, tier: 'xlong' as const } : r));
+    const lines = renderReport(xl, { ...mixedMeta, tiers: { s1: 'standard', s2: 'xlong' } }).split('\n');
+    expect([lines.includes(XLONG_SUMMARY), lines.includes(XLONG_DIRECTIVES)]).toEqual([true, true]);
+  });
+
   test('the event-plan caveat prints only when event-plan is in the run (R-L12)', () => {
     expect(renderReport(all(), meta).split('\n')).not.toContain(EVENT_PLAN);
     const withEventPlan = all().map(r => (r.scenario === 's2' ? { ...r, scenario: 'event-plan' } : r));

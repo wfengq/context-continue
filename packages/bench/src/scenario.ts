@@ -171,6 +171,8 @@ export function loadScenario(path: string): Scenario {
 
 /** Words that mark a human message as a change of goal or constraints. */
 const CHANGE_MARKERS = /\b(chang(e|ed|es|ing)|instead|no longer|drop|switch(ed)?)\b/i;
+/** Fact markers cited in a message (CHANGE-SAML-SSO, CONV-X1): ids, not words, so they never count as change words. */
+const MARKER_TOKENS = /\b[A-Z]+-[A-Z0-9-]+\b/g;
 
 const hasQuery = (st: Step): boolean =>
   st.kind === 'work' &&
@@ -186,7 +188,7 @@ function countRequirementChanges(s: Scenario): number {
       st.kind === 'human' &&
       firstWork >= 0 &&
       i > firstWork &&
-      CHANGE_MARKERS.test(st.text) &&
+      CHANGE_MARKERS.test(st.text.replace(MARKER_TOKENS, '')) &&
       s.steps.slice(i + 1).some(next => next.kind === 'replan'),
   ).length;
 }

@@ -29,19 +29,6 @@ async function run(argv: string[]): Promise<{ code: number; err: string }> {
 afterEach(() => vi.restoreAllMocks());
 
 describe('bench cli', () => {
-  test('cli writes results.json and report.md with six groups', async () => {
-    const out = tmp();
-    expect((await run(['run', '--scenario', 'all', '--group', 'all', '--out', out, '--stamp', 'T'])).code).toBe(0);
-    const report = readFileSync(join(out, 'T', 'report.md'), 'utf8');
-    for (const g of ['A', 'B', 'C', 'D', 'E', 'F']) expect(report).toMatch(new RegExp(`^\\| ${g} \\|`, 'm'));
-    for (const id of [...STANDARD, ...LONG, ...XLONG]) expect(report).toContain(`## Scenario: ${id}`);
-    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)', '## Summary (long scenarios)', '## Summary (xlong scenarios)']);
-    const json = JSON.parse(readFileSync(join(out, 'T', 'results.json'), 'utf8'));
-    expect(json.params).toEqual({ cacheRatio: 0.1, compactRatio: 0.8, summaryTokens: 1500, window: 128000 });
-    expect(json.metrics).toHaveLength(36);
-    expect(json.records.length).toBeGreaterThan(0);
-  }, 300_000);
-
   test('--scenario long runs only the two long scenarios, with one long summary', async () => {
     const out = tmp();
     expect((await run(['run', '--scenario', 'long', '--group', 'all', '--out', out, '--stamp', 'L'])).code).toBe(0);
@@ -69,17 +56,16 @@ describe('bench cli', () => {
     expect([...SCENARIO_IDS]).toEqual([...STANDARD_IDS, ...LONG_IDS, ...XLONG_IDS]);
   });
 
-  test('--scenario xlong runs only xlong-product, with one xlong summary in which E compacts', async () => {
+  test('--scenario xlong runs only xlong-product, with one xlong summary', async () => {
+    // Report shape only, with one group; E's compaction on xlong is asserted in xlong-scenario.test.ts.
     const out = tmp();
-    expect((await run(['run', '--scenario', 'xlong', '--group', 'all', '--out', out, '--stamp', 'X'])).code).toBe(0);
+    expect((await run(['run', '--scenario', 'xlong', '--group', 'E', '--out', out, '--stamp', 'X'])).code).toBe(0);
     const report = readFileSync(join(out, 'X', 'report.md'), 'utf8');
     expect(report.match(/^## Scenario: .*$/gm)).toEqual(XLONG.map(id => `## Scenario: ${id}`));
     expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (xlong scenarios)']);
-    expect(report).toContain('- E compacted in this run');
     const json = JSON.parse(readFileSync(join(out, 'X', 'results.json'), 'utf8'));
-    expect(json.metrics.every((m: { tier: string }) => m.tier === 'xlong')).toBe(true);
-    expect(json.metrics.find((m: { group: string }) => m.group === 'E').compactions).toBeGreaterThanOrEqual(1);
-  }, 300_000);
+    expect(json.metrics.map((m: { scenario: string; tier: string }) => [m.scenario, m.tier])).toEqual([['xlong-product', 'xlong']]);
+  }, 120_000);
 
   test('flags reach the metrics and the E policy', async () => {
     const out = tmp();
@@ -96,12 +82,20 @@ describe('bench cli', () => {
     expect(m.costUnits).toBe(m.cacheableTokens * 0.5 + m.uncachedTokens);
   });
 
-  test('two runs with the same stamp produce byte-identical files', async () => {
+  test('--scenario all writes results.json and report.md with six groups; two runs with the same stamp are byte-identical', async () => {
     const a = tmp();
     const b = tmp();
     for (const out of [a, b]) {
       expect((await run(['run', '--scenario', 'all', '--group', 'all', '--out', out, '--stamp', 'T'])).code).toBe(0);
     }
+    const report = readFileSync(join(a, 'T', 'report.md'), 'utf8');
+    for (const g of ['A', 'B', 'C', 'D', 'E', 'F']) expect(report).toMatch(new RegExp(`^\\| ${g} \\|`, 'm'));
+    for (const id of [...STANDARD, ...LONG, ...XLONG]) expect(report).toContain(`## Scenario: ${id}`);
+    expect(report.match(/^## Summary.*$/gm)).toEqual(['## Summary (standard scenarios)', '## Summary (long scenarios)', '## Summary (xlong scenarios)']);
+    const json = JSON.parse(readFileSync(join(a, 'T', 'results.json'), 'utf8'));
+    expect(json.params).toEqual({ cacheRatio: 0.1, compactRatio: 0.8, summaryTokens: 1500, window: 128000 });
+    expect(json.metrics).toHaveLength(36);
+    expect(json.records.length).toBeGreaterThan(0);
     for (const f of ['results.json', 'report.md']) {
       expect(readFileSync(join(a, 'T', f)).equals(readFileSync(join(b, 'T', f)))).toBe(true);
     }

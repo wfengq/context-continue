@@ -182,6 +182,22 @@ export function renderReport(
   if (meta.scenarios.includes('event-plan')) {
     out.push("- A fact's category is set by its id prefix; some failure facts come from failed review notes (event-plan records no failure op).");
   }
+  // Only E models a context window; any other group whose request outgrows it is reported as such.
+  const window = meta.params.window;
+  if (window !== undefined) {
+    const over = ORDER.filter(g => g !== 'E' && all.some(r => r.group === g && meta.scenarios.includes(r.scenario) && r.contextMax > window));
+    if (over.length > 0) {
+      const names = over.length === 1 ? over[0]! : `${over.slice(0, -1).join(', ')} and ${over[over.length - 1]}`;
+      const [verb, their] = over.length === 1 ? ['exceeds', 'its'] : ['exceed', 'their'];
+      out.push(`- ${names} ${verb} the ${fmtInt(window)}-token window in this run: ${their} figures assume an unlimited context window (only E models the window and compaction).`);
+    }
+  }
+  if (tiersPresent.includes('xlong')) {
+    out.push(
+      "- Group E's compaction summary keeps every marker seen before compacting; on xlong scenarios, where E compacts, this assumption weighs more.",
+      '- C keeps only the newest 20 human messages on the board (core directivesKeep); on xlong scenarios older human messages reach the lead only through the planning context.',
+    );
+  }
   if (eCompacted) {
     out.push("- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.");
   }

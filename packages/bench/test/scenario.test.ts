@@ -169,6 +169,16 @@ describe('facts and tier', () => {
     const plan = { workstreams: [ws('audio', 'dev')], contracts: [] };
     expect(stepText({ kind: 'replan', plan })).toBe(JSON.stringify(plan));
   });
+  test('a cited fact marker such as CHANGE-SAML-SSO is not a change word; the words themselves still count', () => {
+    const work = { kind: 'work', botId: 'dev', workstreamId: 'audio', reply: 'ok' };
+    const replan = { kind: 'replan', plan: minimal().plan };
+    const has = (text: string) => !checkCoverage(validateScenario(withStep(work, { kind: 'human', text }, replan))).includes('human requirement change');
+    expect(has('Short status from each of you, please, and whether suggestion mode fits (CHANGE-SUGGESTION-MODE).')).toBe(false);
+    expect(has('Please send a status (CHANGE-X1, CONV-SWITCH-ON).')).toBe(false);
+    expect(has('Change of plan (CHANGE-SAML-SSO): we add SAML.')).toBe(true);
+    expect(has('We switch to per-seat pricing.')).toBe(true);
+  });
+
   test('checkCoverage enforces step counts by tier', () => {
     const long = { ...minimal(), tier: 'long', steps: Array.from({ length: 120 }, () => ({ kind: 'human', text: 'hi' })) };
     expect(checkCoverage(validateScenario(long))).toContain('long scenario needs 150–300 steps');
