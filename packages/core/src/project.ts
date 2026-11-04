@@ -6,7 +6,7 @@ import { Merger, type MergeResult } from './board/merge.js';
 import { buildBrief as assembleBrief, confirmSeen, discardPendingSeen as discardPendingSeenOf, type BriefDeps, type BriefOptions } from './brief.js';
 import { systemClock, type Clock } from './clock.js';
 import type { CondenseFn } from './condense.js';
-import { findDeliverable, planningContext, retroContext, reviewContext, type ContextDeps, type PlanMeta } from './contexts.js';
+import { findDeliverable, planningContext, retroContext, reviewContext, type ContextDeps, type ContextTrigger, type PlanMeta } from './contexts.js';
 import type { EmployeeRegistry } from './employees.js';
 import { ContextError } from './errors.js';
 import { createEventBus, type EventBus } from './events.js';
@@ -73,15 +73,18 @@ export type Submission =
   | { type: 'blocked'; workstreamId: string; reason: string }
   | { type: 'notes'; text: string; pinned?: boolean };
 
+/** Optional trigger for the lead's planning and review contexts; adds a final `trigger` segment. */
+export type ContextOptions = { trigger?: ContextTrigger };
+
 export interface Project {
   start(i: { goal: string; constraints: string[]; lead: string; by: string }): Promise<Wake[]>;
-  buildPlanningContext(): Promise<ContextBundle>;
+  buildPlanningContext(opts?: ContextOptions): Promise<ContextBundle>;
   proposePlan(plan: PlanInput, o: { by: string }): Promise<{ proposalId: string }>;
   approvePlan(id: string, o: { by: string; edits?: PlanInput }): Promise<Wake[]>;
   rejectPlan(id: string, o: { by: string; feedback: string }): Promise<Wake[]>;
   buildBrief(botId: string, o: BriefOptions): Promise<ContextBundle>;
   submit(botId: string, s: Submission): Promise<Wake[]>;
-  buildReviewContext(deliverableId: string): Promise<ContextBundle>;
+  buildReviewContext(deliverableId: string, opts?: ContextOptions): Promise<ContextBundle>;
   submitReview(
     deliverableId: string,
     r: { by: string; passed: boolean; notes: string; conventions?: string[] },
@@ -808,11 +811,11 @@ export function createProject(cfg: ProjectConfig): Project {
 
     // The context is the lead's: it replaces the lead's brief for this request, so any items that
     // brief showed in full are not confirmed as seen (R-G1). Queued like other workspace writes.
-    buildPlanningContext: () =>
+    buildPlanningContext: opts =>
       serial(async () => {
         const board = await getBoard();
         await discardPendingSeen(board.lead);
-        return planningContext(contextDeps, board, await workstreamsOf(board));
+        return planningContext(contextDeps, board, await workstreamsOf(board), opts?.trigger);
       }),
 
     proposePlan: (plan, o) =>
@@ -864,11 +867,11 @@ export function createProject(cfg: ProjectConfig): Project {
 
     submit: (botId, s) => serial(async () => finish(await submit(botId, s))),
 
-    buildReviewContext: deliverableId =>
+    buildReviewContext: (deliverableId, opts) =>
       serial(async () => {
         const board = await getBoard();
         await discardPendingSeen(board.lead);
-        return reviewContext(contextDeps, board, await workstreamsOf(board), deliverableId);
+        return reviewContext(contextDeps, board, await workstreamsOf(board), deliverableId, opts?.trigger);
       }),
 
     submitReview: (deliverableId, r) => serial(async () => finish(await review(deliverableId, r))),

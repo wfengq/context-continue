@@ -317,6 +317,8 @@ type BoardOp =
 
 **检查发现冲突**（如两个工作块的命名风格不一致）：负责人 Bot 提交一条新约定，并以 `reviewFailed` 唤醒相关负责人修改。
 
+**上下文分段对齐**：`buildPlanningContext(opts?)` 和 `buildReviewContext(id, opts?)` 的段顺序为 `common`、`memory`、`workspace`、`board`（可缓存）+ `projection`（正文，不可缓存），传 `opts.trigger` 时末尾加不可缓存的 `trigger`。前四段与负责人同一时刻不裁剪的 `buildBrief` 逐字节相同（无工作区或记忆时用相同默认值，且不创建工作区），因此拆分、检查与负责人自己的简报共用同一段缓存前缀。
+
 **负责人 Bot 的预算**：它读的是项目板、提案和交付物，不读其他员工的工作区。
 
 ---

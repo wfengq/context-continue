@@ -77,6 +77,8 @@ describe('start and planning', () => {
     const ctx = await fx.p.buildPlanningContext();
     expect(ctx.segments.map(s => [s.kind, s.cacheable])).toEqual([
       ['common', true],
+      ['memory', true],
+      ['workspace', true],
       ['board', true],
       ['projection', false],
     ]);
@@ -544,6 +546,56 @@ describe('facade wiring', () => {
     expect(seg(plan, 'board')).toBe(seg(brief, 'board'));
     expect(seg(review, 'common')).toBe(seg(brief2, 'common'));
     expect(seg(review, 'board')).toBe(seg(brief2, 'board'));
+  });
+
+  const KINDS = ['common', 'memory', 'workspace', 'board', 'projection'];
+
+  test('review and planning contexts share the brief cacheable prefix byte for byte', async () => {
+    const fx = await makeProject({ approved: true });
+    await fx.p.submit('pm', { type: 'notes', text: 'lead note one\n\nlead note two' });
+    const { id } = await deliverArt(fx);
+    const brief = await fx.p.buildBrief('pm', { maxTokens: 1_000_000, peek: true });
+    for (const ctx of [await fx.p.buildPlanningContext(), await fx.p.buildReviewContext(id)]) {
+      expect(ctx.segments.map(s => s.kind)).toEqual(KINDS);
+      for (const k of ['common', 'memory', 'workspace', 'board'] as const) expect(seg(ctx, k)).toBe(seg(brief, k));
+      expect(seg(ctx, 'workspace')).toContain('lead note two');
+      expect(ctx.segments.map(s => s.cacheable)).toEqual([true, true, true, true, false]);
+    }
+  });
+
+  test('a trigger option adds a final non-cacheable trigger segment rendered like the brief trigger', async () => {
+    const fx = await makeProject({ approved: true });
+    const { id } = await deliverArt(fx);
+    const trigger = { reason: 'needsLead' as const, detail: 'art submitted' };
+    const brief = await fx.p.buildBrief('pm', { maxTokens: 1_000_000, peek: true, trigger });
+    for (const ctx of [await fx.p.buildPlanningContext({ trigger }), await fx.p.buildReviewContext(id, { trigger })]) {
+      expect(ctx.segments.map(s => s.kind)).toEqual([...KINDS, 'trigger']);
+      expect(ctx.segments.map(s => s.cacheable)).toEqual([true, true, true, true, false, false]);
+      expect(seg(ctx, 'trigger')).toBe(seg(brief, 'trigger'));
+    }
+    const empty = await fx.p.buildPlanningContext({ trigger: { reason: 'manual', detail: '' } });
+    const emptyBrief = await fx.p.buildBrief('pm', { maxTokens: 1_000_000, peek: true });
+    expect(seg(empty, 'trigger')).toBe(seg(emptyBrief, 'trigger'));
+  });
+
+  test('context stats cover every segment', async () => {
+    const fx = await makeProject({ approved: true });
+    const { id } = await deliverArt(fx);
+    const trigger = { reason: 'needsLead' as const, detail: 'x' };
+    for (const ctx of [await fx.p.buildPlanningContext({ trigger }), await fx.p.buildReviewContext(id)]) {
+      expect(Object.keys(ctx.stats.bySegment).sort()).toEqual(ctx.segments.map(s => s.kind).sort());
+      expect(ctx.stats.total).toBe(Object.values(ctx.stats.bySegment).reduce((a, b) => a + b, 0));
+    }
+  });
+
+  test('a lead with no workspace gets default memory/workspace text and no workspace is created', async () => {
+    const fx = await startOnly();
+    expect(await fx.store.getWorkspace(fx.projectId, 'pm')).toBeNull();
+    const brief = await fx.p.buildBrief('pm', { maxTokens: 1_000_000, peek: true });
+    const ctx = await fx.p.buildPlanningContext();
+    expect(seg(ctx, 'memory')).toBe(seg(brief, 'memory'));
+    expect(seg(ctx, 'workspace')).toBe(seg(brief, 'workspace'));
+    expect(await fx.store.getWorkspace(fx.projectId, 'pm')).toBeNull();
   });
 
   test('reviewContext shows failures and facts recorded on the reviewed workstream', async () => {
