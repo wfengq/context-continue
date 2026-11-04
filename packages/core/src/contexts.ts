@@ -1,9 +1,11 @@
-// Planning, review and retrospective contexts (design spec 4): the common and board segments
-// (cacheable, byte-identical to buildBrief's) followed by one non-cacheable body segment.
+// Planning, review and retrospective contexts (design spec 4). The lead's planning and review
+// contexts carry the lead brief's cacheable prefix (common, memory, workspace, board; untrimmed),
+// then the body as the projection and an optional trigger. The retrospective context is the
+// member shape: common and board (cacheable) followed by one non-cacheable body segment.
 import type { EmployeeRegistry } from './employees.js';
 import { ContextError } from './errors.js';
 import { assertMember, botMembers, defaultMemory, defaultWorkspace, renderTeam } from './members.js';
-import { renderBoardPublic, renderMemory, renderPlanning, renderRetro, renderReview, renderTrigger, renderWorkspace, splitParagraphs } from './render.js';
+import { renderBoardPublic, renderMemory, renderPlanning, renderRetro, renderReview, renderTrigger, renderWorkspace, untrimmedKeeps } from './render.js';
 import { toolDefinitions } from './tools.js';
 import type { Store } from './store/store.js';
 import type { ContextBundle, PlanProposal, ProjectBoard, Segment, SegmentKind, WakeReason, Workstream } from './types.js';
@@ -75,10 +77,11 @@ async function leadBundle(
   const lead = board.lead;
   const workspace = (await store.getWorkspace(projectId, lead)) ?? defaultWorkspace(projectId, lead, await store.latestSeq(projectId));
   const memory = (await deps.employees.get(lead)) ?? defaultMemory(lead);
+  const { notesKeep, memKeep } = untrimmedKeeps(workspace, memory);
   const segments: Segment[] = [
     { kind: 'common', text: renderTeam(board, members, id => personas.get(id)), cacheable: true },
-    { kind: 'memory', text: renderMemory(memory, memory.memories.filter(m => !m.pinned).length), cacheable: true },
-    { kind: 'workspace', text: renderWorkspace(workspace, splitParagraphs(workspace.notes).length), cacheable: true },
+    { kind: 'memory', text: renderMemory(memory, memKeep), cacheable: true },
+    { kind: 'workspace', text: renderWorkspace(workspace, notesKeep), cacheable: true },
     { kind: 'board', text: renderBoardPublic(board, ws), cacheable: true },
     { kind: 'projection', text: body, cacheable: false },
   ];

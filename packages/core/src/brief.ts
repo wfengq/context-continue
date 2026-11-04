@@ -13,7 +13,7 @@ import {
   renderProjection,
   renderTrigger,
   renderWorkspace,
-  splitParagraphs,
+  untrimmedKeeps,
   type Projection,
 } from './render.js';
 import { matchWorkstreams } from './route.js';
@@ -286,8 +286,7 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
   // "N older items omitted" note so no step can grow the total; the note is added at the end only
   // if the chosen state still fits with it.
   let dropped = 0;
-  let notesKeep = splitParagraphs(workspace.notes).length;
-  let memKeep = memory.memories.filter(m => !m.pinned).length;
+  let { notesKeep, memKeep } = untrimmedKeeps(workspace, memory);
   const renderDeltaNow = (withNote: boolean) => {
     const kept = delta.slice(dropped);
     return renderDelta(

@@ -552,13 +552,18 @@ describe('facade wiring', () => {
 
   test('review and planning contexts share the brief cacheable prefix byte for byte', async () => {
     const fx = await makeProject({ approved: true });
-    await fx.p.submit('pm', { type: 'notes', text: 'lead note one\n\nlead note two' });
+    // More than 5 notes and unpinned memories (the default recentKeep), so a drift to options.recentKeep would fail.
+    const notes = Array.from({ length: 7 }, (_, i) => `lead note ${i + 1}`);
+    await fx.p.submit('pm', { type: 'notes', text: notes.join('\n\n') });
+    await fx.p.commitRetro('pm', Array.from({ length: 7 }, (_, i) => ({ text: `lead lesson ${i + 1}` })));
     const { id } = await deliverArt(fx);
     const brief = await fx.p.buildBrief('pm', { maxTokens: 1_000_000, peek: true });
     for (const ctx of [await fx.p.buildPlanningContext(), await fx.p.buildReviewContext(id)]) {
       expect(ctx.segments.map(s => s.kind)).toEqual(KINDS);
       for (const k of ['common', 'memory', 'workspace', 'board'] as const) expect(seg(ctx, k)).toBe(seg(brief, k));
-      expect(seg(ctx, 'workspace')).toContain('lead note two');
+      for (const n of notes) expect(seg(ctx, 'workspace')).toContain(n);
+      expect(seg(ctx, 'memory')).toContain('lead lesson 1');
+      expect(seg(ctx, 'memory')).toContain('lead lesson 7');
       expect(ctx.segments.map(s => s.cacheable)).toEqual([true, true, true, true, false]);
     }
   });

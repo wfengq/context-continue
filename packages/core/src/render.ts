@@ -160,6 +160,11 @@ export function renderBoardPublic(board: ProjectBoard, workstreams: Workstream[]
   ].join('\n');
 }
 
+/** The keep values that render a workspace's notes and a memory untrimmed (shared by buildBrief's start state and the lead contexts). */
+export function untrimmedKeeps(workspace: Workspace, memory: EmployeeMemory): { notesKeep: number; memKeep: number } {
+  return { notesKeep: splitParagraphs(workspace.notes).length, memKeep: memory.memories.filter(m => !m.pinned).length };
+}
+
 export function renderMemory(m: EmployeeMemory, recentKeep: number): string {
   const lines: string[] = [];
   if (m.persona.trim().length > 0) lines.push('Persona:', m.persona);
