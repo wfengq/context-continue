@@ -5,6 +5,7 @@ import type { EmployeeRegistry } from './employees.js';
 import { BudgetTooSmallError } from './errors.js';
 import { assertMember, defaultMemory, defaultWorkspace, renderTeam } from './members.js';
 import type { Options } from './options.js';
+import { isHumanChat, publicBoardView, type PublicBoardSwitches } from './publicBoard.js';
 import {
   itemKey,
   renderBoardPublic,
@@ -42,6 +43,8 @@ export interface BriefDeps {
   // Not read here: recentKeep is applied by condensing (Task 11), so stored notes and memories are already bounded.
   options: Required<Options>;
   tools: (botId: string, board: ProjectBoard) => ToolDefinition[];
+  /** Optional public board sections (spec 2026-11-04); absent means every switch is off. */
+  publicBoard?: Required<PublicBoardSwitches>;
 }
 
 export interface BriefOptions {
@@ -153,8 +156,11 @@ async function relevantEntries(
     for (const e of await deps.store.read(deps.projectId, 1, fromSeq - 1)) authors.set(e.id, e.author.id);
   }
 
+  // Spec 2026-11-04 section 2.1: with directives on, human chat is on the public board, so no delta repeats it.
+  const directivesOn = deps.publicBoard?.directives === true;
   return window.filter(e => {
     if (e.author.id === botId) return false; // the bot knows what it said or did
+    if (directivesOn && isHumanChat(e)) return false;
     const body = e.body;
     if (body.type === 'chat') {
       if (isLead && e.author.kind === 'human') return true; // the lead coordinates everything, like R33
@@ -257,7 +263,11 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
 
   // Segments that are never trimmed.
   const common = renderTeam(board, botMembers, id => memories.get(id)?.persona);
-  const boardText = renderBoardPublic(board, workstreams);
+  const boardText = renderBoardPublic(
+    board,
+    workstreams,
+    await publicBoardView(store, projectId, deps.publicBoard, deps.options.directivesKeep),
+  );
   // Two-phase seen (spec 5.2): items shown in full here only become seen once the bot calls a tool.
   // Within one brief a key shown in an earlier block is compacted in later blocks.
   const seen = new Set(workspace.seenItemIds);

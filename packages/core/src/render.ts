@@ -16,6 +16,7 @@ import type {
   Workspace,
   Workstream,
 } from './types.js';
+import type { PublicBoardView } from './publicBoard.js';
 
 export interface Projection {
   workstream: Workstream | null;
@@ -142,7 +143,23 @@ export function renderCommon(members: { id: string; kind: 'human' | 'bot'; role:
   ].join('\n');
 }
 
-export function renderBoardPublic(board: ProjectBoard, workstreams: Workstream[]): string {
+/** A directive line: `- [#<seq> <author id>] <original text>` (ledger authors carry only an id). */
+function directiveLine(e: LedgerEntry): string {
+  return `- [#${e.seq} ${e.author.id}] ${e.body.type === 'chat' ? e.body.text : ''}`;
+}
+
+/**
+ * The public board (segment 4). Without `view`, or with every switch off, the base render.
+ * Optional sections (spec 2026-11-04 section 2.4) go in the order Goal, Constraints, Directives,
+ * Conventions, Workstreams; a section that is switched off does not appear.
+ */
+export function renderBoardPublic(board: ProjectBoard, workstreams: Workstream[], view?: PublicBoardView): string {
+  const directives: string[] = [];
+  if (view?.switches.directives) {
+    const omitted = view.directivesOmitted > 0 ? [`(${view.directivesOmitted} earlier directives omitted)`] : [];
+    const lines = view.directives.map(directiveLine);
+    directives.push('## Directives', ...(omitted.length + lines.length > 0 ? [...omitted, ...lines] : [NOTHING]), '');
+  }
   return [
     '# Project',
     '',
@@ -152,6 +169,7 @@ export function renderBoardPublic(board: ProjectBoard, workstreams: Workstream[]
     '## Constraints',
     ...list(board.constraints.map((c) => `- ${c}`)),
     '',
+    ...directives,
     '## Conventions',
     ...list(board.conventions.map(itemLine)),
     '',

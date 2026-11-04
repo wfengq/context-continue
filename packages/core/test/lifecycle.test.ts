@@ -568,6 +568,30 @@ describe('facade wiring', () => {
     }
   });
 
+  test('directives on: review and planning contexts share the brief board segment byte for byte', async () => {
+    const fx = await makeProject({ approved: true, publicBoard: { directives: true }, options: { directivesKeep: 1 } });
+    await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'Make it cute.' });
+    await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'Pastel colours please.' });
+    const { id } = await deliverArt(fx);
+    const brief = await fx.p.buildBrief('pm', { maxTokens: 1_000_000, peek: true });
+    expect(seg(brief, 'board')).toContain('## Directives\n(1 earlier directives omitted)\n- [#');
+    expect(seg(brief, 'board')).toContain('alice] Pastel colours please.');
+    for (const ctx of [await fx.p.buildPlanningContext(), await fx.p.buildReviewContext(id)]) {
+      expect(ctx.segments.map(s => s.kind)).toEqual(KINDS);
+      for (const k of ['common', 'memory', 'workspace', 'board'] as const) expect(seg(ctx, k)).toBe(seg(brief, k));
+    }
+    // The planning body still carries every human message (spec 2.1).
+    const planning = seg(await fx.p.buildPlanningContext(), 'projection');
+    expect(planning).toContain('Make it cute.');
+    expect(planning).toContain('Pastel colours please.');
+    // The retrospective context is a member context; its board segment is the same public board text.
+    await fx.p.close({ by: 'alice', force: true });
+    const retro = await fx.p.buildRetroContext('art');
+    const artBrief = await fx.p.buildBrief('art', { maxTokens: 1_000_000, peek: true });
+    expect(seg(retro, 'board')).toBe(seg(artBrief, 'board'));
+    expect(seg(retro, 'board')).toContain('## Directives');
+  });
+
   test('a trigger option adds a final non-cacheable trigger segment rendered like the brief trigger', async () => {
     const fx = await makeProject({ approved: true });
     const { id } = await deliverArt(fx);

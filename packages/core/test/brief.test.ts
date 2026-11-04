@@ -574,3 +574,87 @@ describe('two-phase seen (spec 2026-11-02 section 2.2)', () => {
     expect(await f.store.getWorkspace(f.projectId, 'ghost')).toBeNull();
   });
 });
+
+describe('public board directives (spec 2026-11-04 section 2.1)', () => {
+  const BUDGET = { maxTokens: 1_000_000 };
+  const say = (f: FacadeProject, text: string, mentions?: string[]) =>
+    f.p.ingest({ author: { kind: 'human', id: 'alice' }, text, ...(mentions ? { mentions } : {}) });
+  const wakePairs = (w: { botId: string; reason: string }[]) => w.map(x => [x.botId, x.reason]).sort();
+
+  test('directives off: board text and briefs are unchanged', async () => {
+    const run = async (publicBoard?: { directives?: boolean; contracts?: boolean; failures?: boolean }) => {
+      let n = 0;
+      const f = await makeProject({ approved: true, publicBoard, newId: prefix => `${prefix}-${++n}` });
+      const out: string[] = [];
+      for (const id of ['pm', 'art', 'logic', 'audio']) await f.p.buildBrief(id, BUDGET);
+      await say(f, 'Make it cute.');
+      await say(f, 'art, use pastel colours', ['art']);
+      for (const id of ['pm', 'art', 'logic', 'audio']) {
+        const b = await f.p.buildBrief(id, BUDGET);
+        out.push(...b.segments.map(s => s.text));
+      }
+      out.push(await f.p.exportMarkdown());
+      return out;
+    };
+    const base = await run();
+    expect(await run({})).toEqual(base);
+    expect(await run({ directives: false, contracts: false, failures: false })).toEqual(base);
+    expect(base.join('\n')).not.toContain('## Directives');
+  });
+
+  test('directives on: every human chat message appears on the board in order', async () => {
+    const f = await makeProject({ approved: true, publicBoard: { directives: true } });
+    const a = await say(f, 'Make it cute.');
+    await f.p.ingest({ author: { kind: 'bot', id: 'art' }, text: 'on it' });
+    const b = await say(f, 'Use pastel colours\nand round shapes.');
+    const board = seg(await f.p.buildBrief('art', BUDGET), 'board');
+    expect(board).toContain(
+      ['## Constraints', '- Runs in the browser', '', '## Directives', `- [#${a.seq} alice] Make it cute.`,
+        `- [#${b.seq} alice] Use pastel colours\nand round shapes.`, '', '## Conventions'].join('\n'),
+    );
+    expect(board).not.toContain('on it');
+  });
+
+  test('directives on with no human message yet: the section shows nothing yet', async () => {
+    const f = await makeProject({ approved: true, publicBoard: { directives: true } });
+    expect(seg(await f.p.buildBrief('art', BUDGET), 'board')).toContain('## Directives\n(nothing yet)\n\n## Conventions');
+  });
+
+  test('directives on: only the newest directivesKeep are shown with an omitted count', async () => {
+    const f = await makeProject({ approved: true, publicBoard: { directives: true }, options: { directivesKeep: 2 } });
+    await say(f, 'one');
+    const two = await say(f, 'two');
+    const three = await say(f, 'three');
+    const board = seg(await f.p.buildBrief('art', BUDGET), 'board');
+    expect(board).toContain(
+      ['## Directives', '(1 earlier directives omitted)', `- [#${two.seq} alice] two`, `- [#${three.seq} alice] three`, '', '## Conventions'].join('\n'),
+    );
+    expect(board).not.toContain('] one');
+  });
+
+  test('directives on: human chat is left out of every bot delta but still wakes the same bots', async () => {
+    const run = async (directives: boolean) => {
+      const f = await makeProject({ approved: true, publicBoard: { directives } });
+      for (const id of ['pm', 'art', 'logic', 'audio']) await f.p.buildBrief(id, BUDGET);
+      const wakes: string[][][] = [];
+      wakes.push(wakePairs(await f.p.route(await say(f, 'art, the hero needs a hat', ['art']))));
+      wakes.push(wakePairs(await f.p.route(await say(f, 'how is the Gameplay going?'))));
+      const botMsg = await f.p.ingest({ author: { kind: 'bot', id: 'logic' }, text: 'art, ping', mentions: ['art'] });
+      wakes.push(wakePairs(await f.p.route(botMsg)));
+      const deltas = new Map<string, string>();
+      for (const id of ['pm', 'art', 'logic', 'audio']) deltas.set(id, seg(await f.p.buildBrief(id, BUDGET), 'delta'));
+      return { wakes, deltas };
+    };
+    const off = await run(false);
+    const on = await run(true);
+    expect(on.wakes).toEqual(off.wakes);
+    expect(off.deltas.get('art')).toContain('the hero needs a hat');
+    expect(off.deltas.get('pm')).toContain('how is the Gameplay going?');
+    for (const d of on.deltas.values()) {
+      expect(d).not.toContain('the hero needs a hat');
+      expect(d).not.toContain('how is the Gameplay going?');
+    }
+    // bot chat still reaches the delta
+    expect(on.deltas.get('art')).toContain('art, ping');
+  });
+});

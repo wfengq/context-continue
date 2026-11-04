@@ -15,6 +15,7 @@ import { exportMarkdown as boardToMarkdown } from './markdown.js';
 import { newId as defaultNewId, type IdGenerator } from './ids.js';
 import { assertMember, botMembers, defaultWorkspace } from './members.js';
 import { resolveOptions, type Options } from './options.js';
+import { resolvePublicBoard, type PublicBoardSwitches } from './publicBoard.js';
 import { diffPlan, type ApprovedPlan, type PlanWorkstream } from './plan/replan.js';
 import { validatePlan, type PlanInput } from './plan/validate.js';
 import { addMemories, appendNote, type PrivateDeps } from './private.js';
@@ -59,6 +60,11 @@ export interface ProjectConfig {
   countTokens?: (s: string) => number;
   clock?: Clock;
   options?: Options;
+  /**
+   * Optional public board sections (spec 2026-11-04), all off by default. INVALID_OP for a
+   * non-boolean or unknown switch. Board-size archiving and the router input keep the base render.
+   */
+  publicBoard?: PublicBoardSwitches;
   /**
    * Id generator for every id the project makes (ledger entries, proposals, plans, pending items,
    * board items, deliverables, memories). Defaults to `newId` (random). Deliverable refs are made by
@@ -158,6 +164,7 @@ export function createProject(cfg: ProjectConfig): Project {
   const clock = cfg.clock ?? systemClock;
   const newId = cfg.newId ?? defaultNewId;
   const options = resolveOptions(cfg.options);
+  const publicBoard = resolvePublicBoard(cfg.publicBoard);
   const count = cfg.countTokens ?? defaultCountTokens;
   const external = cfg.workstreams !== undefined;
   const source = cfg.workstreams ?? localWorkstreamSource(store, clock);
@@ -181,6 +188,7 @@ export function createProject(cfg: ProjectConfig): Project {
     clock,
     options,
     count,
+    // R-P1: board-size archiving measures the base render, so a switch never archives anything.
     renderPublic: b => renderBoardPublic(b, b.workstreams),
     ownWorkstreams: async botId => (await workstreamsOf(await getBoard())).filter(w => w.owner === botId).map(w => w.id),
     newId,
@@ -193,8 +201,9 @@ export function createProject(cfg: ProjectConfig): Project {
     count,
     options,
     tools: (botId, board) => toolDefinitions(botId === board.lead ? 'lead' : 'member'),
+    publicBoard,
   };
-  const contextDeps: ContextDeps = { store, projectId, employees, count };
+  const contextDeps: ContextDeps = { store, projectId, employees, count, publicBoard, directivesKeep: options.directivesKeep };
   const privateDeps: PrivateDeps = {
     store,
     projectId,
@@ -946,7 +955,7 @@ export function createProject(cfg: ProjectConfig): Project {
           options,
           route: cfg.models?.route,
           routeInput: async () => ({
-            boardPublic: renderBoardPublic(board, ws),
+            boardPublic: renderBoardPublic(board, ws), // R-P1: the router sees the base render
             recent: chats.slice(-options.recentForRouter),
             candidates: members.map(botId => ({ botId, workstreams: ws.filter(w => w.owner === botId).map(w => w.id) })),
             message: entry,

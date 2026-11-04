@@ -274,9 +274,11 @@ export async function makeProject(
     workstreams?: WorkstreamSource;
     models?: ProjectConfig['models'];
     countTokens?: (s: string) => number;
+    publicBoard?: ProjectConfig['publicBoard'];
+    newId?: ProjectConfig['newId'];
   } = {},
 ): Promise<FacadeProject> {
-  const store = opts.store ?? memoryStore();
+  const store = opts.store ?? memoryStore(opts.newId ? { newId: opts.newId } : {});
   const projectId = 'p1';
   const clock = fakeClock();
   const employees = createEmployeeRegistry({ store });
@@ -292,6 +294,8 @@ export async function makeProject(
     workstreams: opts.workstreams,
     models: opts.models,
     countTokens: opts.countTokens,
+    publicBoard: opts.publicBoard,
+    newId: opts.newId,
   });
   const events: RecordedEvent[] = [];
   for (const kind of EVENT_KINDS) p.on(kind, e => events.push({ kind, e } as RecordedEvent));

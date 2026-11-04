@@ -1,11 +1,14 @@
 // Planning, review and retrospective contexts (design spec 4). The lead's planning and review
 // contexts carry the lead brief's cacheable prefix (common, memory, workspace, board; untrimmed),
 // then the body as the projection and an optional trigger. The retrospective context is the
-// member shape: common and board (cacheable) followed by one non-cacheable body segment.
+// member shape: common and board (cacheable) followed by one non-cacheable body segment. Every
+// board segment uses the same public board view as buildBrief (optional sections included).
 import type { EmployeeRegistry } from './employees.js';
 import { ContextError } from './errors.js';
 import { assertMember, botMembers, defaultMemory, defaultWorkspace, renderTeam } from './members.js';
 import { renderBoardPublic, renderMemory, renderPlanning, renderRetro, renderReview, renderTrigger, renderWorkspace, untrimmedKeeps } from './render.js';
+import { DEFAULT_OPTIONS } from './options.js';
+import { publicBoardView, type PublicBoardSwitches } from './publicBoard.js';
 import { toolDefinitions } from './tools.js';
 import type { Store } from './store/store.js';
 import type { ContextBundle, PlanProposal, ProjectBoard, Segment, SegmentKind, WakeReason, Workstream } from './types.js';
@@ -15,6 +18,16 @@ export interface ContextDeps {
   projectId: string;
   employees: EmployeeRegistry;
   count: (s: string) => number;
+  /** Optional public board sections (spec 2026-11-04); absent means every switch is off. */
+  publicBoard?: Required<PublicBoardSwitches>;
+  /** Used only when directives are on; required then so the board matches buildBrief's. */
+  directivesKeep?: number;
+}
+
+/** The board segment text, rendered exactly as buildBrief renders it (same view, same keep). */
+async function boardSegment(deps: ContextDeps, board: ProjectBoard, ws: Workstream[]): Promise<string> {
+  const view = await publicBoardView(deps.store, deps.projectId, deps.publicBoard, deps.directivesKeep ?? DEFAULT_OPTIONS.directivesKeep);
+  return renderBoardPublic(board, ws, view);
 }
 
 /** Why the lead is being run; rendered like the brief's trigger segment. */
@@ -52,7 +65,7 @@ async function bundle(
   const personas = await personasOf(deps, members);
   const segments: Segment[] = [
     { kind: 'common', text: renderTeam(board, members, id => personas.get(id)), cacheable: true },
-    { kind: 'board', text: renderBoardPublic(board, ws), cacheable: true },
+    { kind: 'board', text: await boardSegment(deps, board, ws), cacheable: true },
     { kind: 'projection', text: body, cacheable: false },
   ];
   return { segments, tools: toolDefinitions('member'), stats: stats(deps, segments) };
@@ -81,7 +94,7 @@ async function leadBundle(
     { kind: 'common', text: renderTeam(board, members, id => personas.get(id)), cacheable: true },
     { kind: 'memory', text: renderMemory(memory, memKeep), cacheable: true },
     { kind: 'workspace', text: renderWorkspace(workspace, notesKeep), cacheable: true },
-    { kind: 'board', text: renderBoardPublic(board, ws), cacheable: true },
+    { kind: 'board', text: await boardSegment(deps, board, ws), cacheable: true },
     { kind: 'projection', text: body, cacheable: false },
   ];
   if (trigger) segments.push({ kind: 'trigger', text: renderTrigger(trigger.reason, trigger.detail), cacheable: false });

@@ -14,6 +14,7 @@ export interface Options {
   maxHops?: number; // default 4
   recentKeep?: number; // recent segments kept by three-part condensing, default 5
   leadTimeoutMs?: number; // how long to wait for the lead before escalating to a human, default 600_000
+  directivesKeep?: number; // newest human chat messages shown under Directives on the public board, default 20
 }
 
 export const DEFAULT_OPTIONS: Readonly<Required<Options>> = Object.freeze({
@@ -30,6 +31,7 @@ export const DEFAULT_OPTIONS: Readonly<Required<Options>> = Object.freeze({
   maxHops: 4,
   recentKeep: 5,
   leadTimeoutMs: 600_000,
+  directivesKeep: 20,
 });
 
 /** Defaults filled in; throws INVALID_OP for a value that is not a finite positive number. */

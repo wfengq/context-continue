@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { resolveOptions, DEFAULT_OPTIONS } from '../src/options.js';
+import { makeProject } from './helpers.js';
 
 test('defaults match spec 6.1', () => {
   expect(DEFAULT_OPTIONS).toMatchObject({ extractEvery: 10, idleMs: 60_000, recentForRouter: 5, boardMaxTokens: 3_000,
@@ -23,4 +24,28 @@ test('resolveOptions rejects non-finite or non-positive numbers with INVALID_OP'
     expect(() => resolveOptions({ maxHops: bad })).toThrow(expect.objectContaining({ code: 'INVALID_OP' }));
   }
   expect(() => resolveOptions({ leadTimeoutMs: -5 })).toThrow(/leadTimeoutMs/);
+});
+
+test('directivesKeep defaults to 20 and is validated like the other numeric options', () => {
+  expect(DEFAULT_OPTIONS.directivesKeep).toBe(20);
+  expect(resolveOptions({ directivesKeep: 3 }).directivesKeep).toBe(3);
+  expect(() => resolveOptions({ directivesKeep: 0 })).toThrow(/directivesKeep/);
+});
+
+test('publicBoard rejects non-boolean switches', async () => {
+  const bad: unknown[] = [
+    { directives: 'yes' },
+    { contracts: 1 },
+    { failures: null },
+    { unknown: true },
+    'all',
+    null,
+    [],
+  ];
+  for (const publicBoard of bad) {
+    await expect(makeProject({ publicBoard: publicBoard as never })).rejects.toThrow(
+      expect.objectContaining({ code: 'INVALID_OP' }),
+    );
+  }
+  await expect(makeProject({ publicBoard: { directives: true, contracts: false } })).resolves.toBeDefined();
 });

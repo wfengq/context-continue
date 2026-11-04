@@ -22,5 +22,6 @@ export type { WorkstreamSource } from './workstreams/source.js';
 export type { PlanInput } from './plan/validate.js';
 export type { RouteInput } from './route.js';
 export type { BriefOptions } from './brief.js';
+export type { PublicBoardSwitches } from './publicBoard.js';
 export { toolDefinitions } from './tools.js';
 export type { ToolName, ProposalOutcome } from './tools.js';
