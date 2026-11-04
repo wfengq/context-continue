@@ -62,7 +62,8 @@ export interface ProjectConfig {
   options?: Options;
   /**
    * Optional public board sections (spec 2026-11-04), all off by default. INVALID_OP for a
-   * non-boolean or unknown switch. Board-size archiving and the router input keep the base render.
+   * non-boolean switch; unknown keys are ignored. Board-size archiving and the router input keep
+   * the base render.
    */
   publicBoard?: PublicBoardSwitches;
   /**
