@@ -30,7 +30,7 @@ async function runC(steps: unknown[], plan?: Parameters<typeof scenario>[1]) {
   const seen: ModelRequest[] = [];
   const inner = new ScriptedModel('Noted.');
   const model = { complete: async (r: ModelRequest) => (seen.push(r), inner.complete(r)) };
-  const policy = projectPolicy();
+  const policy = projectPolicy({ publicBoard: { directives: false, contracts: false, failures: false } }) // the plain board these tests were written for;
   const { records, stats } = await runScenario(scenario(steps, plan), policy, { model });
   return { records, stats, seen, project: policy.project! };
 }
@@ -470,13 +470,15 @@ describe('group C unfinished flag (R-B16)', () => {
       await runScenario(scenario(threeSteps()), projectPolicy(opts), { model });
       return boardOf(seen);
     };
-    const base = await run();
-    expect(await run({})).toEqual(base);
-    expect(await run({ publicBoard: {} })).toEqual(base);
+    const off = { directives: false, contracts: false, failures: false };
+    const base = await run({ publicBoard: off });
+    // no publicBoard / an empty one: the core default, directives on
+    expect(await run({})).toEqual(await run({ publicBoard: {} }));
+    expect((await run({})).join('\n')).toContain('## Directives');
     const all = await run({ publicBoard: { directives: true, contracts: true, failures: true } });
     expect(base.join('\n')).not.toMatch(/## (Directives|Contracts|Failures)/);
     for (const h of ['## Directives', '## Contracts', '## Failures']) expect(all.join('\n')).toContain(h);
-    const some = (await run({ publicBoard: { contracts: true } })).join('\n');
+    const some = (await run({ publicBoard: { ...off, contracts: true } })).join('\n');
     expect(some).toContain('## Contracts');
     expect(some).not.toMatch(/## (Directives|Failures)/);
   });

@@ -98,7 +98,7 @@ ignored by git.
 | `--compact-ratio <r>` | `0.8` | Group E: compact when history exceeds window x ratio |
 | `--summary-tokens <n>` | `1500` | Group E: size of the summary that replaces compacted history |
 | `--cache-ratio <r>` | `0.1` | Cost weight of cacheable tokens (uncached tokens weigh 1) |
-| `--c-public <none\|all\|list>` | `none` | Group C only: which optional public-board sections the core renders. `none`, `all`, or a comma-separated subset of `directives`, `contracts`, `failures` (no repeats). The setting is written to `results.json` as top-level `cPublic` (`none`, `all`, or the subset in name order) and listed in the report parameters |
+| `--c-public <default\|none\|all\|list>` | `default` | Group C only: which optional public-board sections the core renders. `default` passes no `publicBoard`, so the core's own default applies (directives on, contracts and failures off); `none` passes all three switches as false; `all` or a comma-separated subset of `directives`, `contracts`, `failures` (no repeats) switches exactly those on and the rest off explicitly. The setting is written to `results.json` as top-level `cPublic` (`default`, `none`, `all`, or the subset in name order) and listed in the report parameters |
 | `--out <dir>` | `results` | Output directory, relative to the current working directory |
 | `--stamp <s>` | UTC time `YYYYMMDDTHHmmssZ` | Name of the run's subdirectory |
 
@@ -109,7 +109,7 @@ An invalid scenario, group or flag value prints a message on stderr and exits wi
 ### Comparing the public-board settings
 
 To compare group C with the core's optional public-board sections switched off and on, run all
-five scenarios once per setting, each into its own output directory:
+five scenarios once per setting (`none` is the plain board, `directives` equals `default`), each into its own output directory:
 
 ```sh
 for s in none directives contracts failures all; do

@@ -25,7 +25,7 @@ const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 
 const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
-  '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public none|all|directives,contracts,failures] [--out results] [--stamp <s>]';
+  '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] [--out results] [--stamp <s>]';
 
 interface Args {
   scenario: string;
@@ -43,22 +43,27 @@ class UsageError extends Error {}
 
 const PUBLIC_SECTIONS = ['contracts', 'directives', 'failures'] as const;
 interface CPublic {
-  /** `none`, `all`, or the chosen section names in name order. */
+  /** `default`, `none`, `all`, or the chosen section names in name order. */
   canonical: string;
   switches: PublicBoardSwitches | undefined;
 }
 
-/** `none`, `all`, or a comma list of distinct section names; anything else is a usage error. */
+/**
+ * `default` (pass no publicBoard: whatever the core defaults to), `none`, `all`, or a comma list of
+ * distinct section names; anything else is a usage error. Everything but `default` passes all three
+ * switches explicitly, so a subset never inherits the core default.
+ */
 function parseCPublic(raw: string): CPublic {
-  if (raw === 'none') return { canonical: 'none', switches: undefined };
+  if (raw === 'default') return { canonical: 'default', switches: undefined };
+  if (raw === 'none') return { canonical: 'none', switches: { directives: false, contracts: false, failures: false } };
   const names = raw === 'all' ? [...PUBLIC_SECTIONS] : raw.split(',');
   const bad = names.find(n => !(PUBLIC_SECTIONS as readonly string[]).includes(n));
-  if (bad !== undefined) throw new UsageError(`--c-public: unknown section "${bad}" in "${raw}" (use none, all, or a list of ${PUBLIC_SECTIONS.join(', ')})`);
+  if (bad !== undefined) throw new UsageError(`--c-public: unknown section "${bad}" in "${raw}" (use default, none, all, or a list of ${PUBLIC_SECTIONS.join(', ')})`);
   if (new Set(names).size !== names.length) throw new UsageError(`--c-public: a section is repeated in "${raw}"`);
   const sorted = [...names].sort();
   return {
     canonical: sorted.length === PUBLIC_SECTIONS.length ? 'all' : sorted.join(','),
-    switches: Object.fromEntries(sorted.map(n => [n, true])) as PublicBoardSwitches,
+    switches: Object.fromEntries(PUBLIC_SECTIONS.map(n => [n, sorted.includes(n)])) as PublicBoardSwitches,
   };
 }
 
@@ -110,7 +115,7 @@ function parseArgs(argv: string[]): Args {
     compactRatio: number('--compact-ratio', seen.get('--compact-ratio') ?? '0.8', n => n > 0 && n <= 1, 'a number in (0, 1]'),
     summaryTokens: number('--summary-tokens', seen.get('--summary-tokens') ?? '1500', int, 'a positive integer'),
     cacheRatio: number('--cache-ratio', seen.get('--cache-ratio') ?? '0.1', n => n >= 0 && n <= 1, 'a number in [0, 1]'),
-    cPublic: parseCPublic(seen.get('--c-public') ?? 'none'),
+    cPublic: parseCPublic(seen.get('--c-public') ?? 'default'),
     out: seen.get('--out') ?? 'results',
     stamp,
   };

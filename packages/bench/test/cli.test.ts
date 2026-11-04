@@ -163,19 +163,35 @@ describe('bench cli', () => {
     };
     const results = (out: string) => JSON.parse(readFileSync(join(out, 'T', 'results.json'), 'utf8'));
 
-    test('default is none: recorded as a top-level string and listed in the report parameters', async () => {
+    test('default is "default": recorded as a top-level string and listed in the report parameters', async () => {
       const r = await go([]);
       expect(r.code).toBe(0);
       const json = results(r.out);
-      expect(json.cPublic).toBe('none');
+      expect(json.cPublic).toBe('default');
       expect(json.params).toEqual({ cacheRatio: 0.1, compactRatio: 0.8, summaryTokens: 1500, window: 128000 });
-      expect(readFileSync(join(r.out, 'T', 'report.md'), 'utf8')).toContain('- cPublic: none\n');
+      expect(readFileSync(join(r.out, 'T', 'report.md'), 'utf8')).toContain('- cPublic: default\n');
     });
 
-    test('explicit none equals the default, byte for byte', async () => {
+    test('explicit "default" equals omitting the flag, byte for byte', async () => {
       const a = await go([]);
-      const b = await go(['--c-public', 'none']);
+      const b = await go(['--c-public', 'default']);
       for (const f of ['results.json', 'report.md']) expect(readFileSync(join(a.out, 'T', f)).equals(readFileSync(join(b.out, 'T', f)))).toBe(true);
+    });
+
+    test('none passes all three switches off explicitly: group C differs from the default (which has directives on)', async () => {
+      const def = results((await go([], 'C')).out);
+      const none = results((await go(['--c-public', 'none'], 'C')).out);
+      expect(none.cPublic).toBe('none');
+      expect(none.metrics).not.toEqual(def.metrics);
+    });
+
+    test('a subset switches only its sections on: directives alone equals the default; contracts alone turns directives off', async () => {
+      const def = results((await go([], 'C')).out);
+      const dir = results((await go(['--c-public', 'directives'], 'C')).out);
+      expect(dir.metrics).toEqual(def.metrics);
+      const con = results((await go(['--c-public', 'contracts'], 'C')).out);
+      expect(con.metrics).not.toEqual(def.metrics);
+      expect(con.metrics).not.toEqual(results((await go(['--c-public', 'none'], 'C')).out).metrics);
     });
 
     test('subsets are normalised to name order; the full set is "all"', async () => {
@@ -188,7 +204,7 @@ describe('bench cli', () => {
     });
 
     test('only group C changes; the other groups record the same under any setting', async () => {
-      const none = results((await go([])).out);
+      const none = results((await go(['--c-public', 'none'])).out);
       const all = results((await go(['--c-public', 'all'])).out);
       const notC = (x: { group?: string; botId?: string }) => x.group !== 'C';
       expect(all.metrics.filter(notC)).toEqual(none.metrics.filter(notC));
@@ -200,12 +216,12 @@ describe('bench cli', () => {
 
     test('unknown names, duplicates, empty values and "none" inside a list exit 2 without output', async () => {
       const out = tmp();
-      for (const v of ['bogus', 'directives,bogus', 'directives,directives', '', ',', 'directives,', 'none,directives', 'all,directives', 'ALL', 'none,none']) {
+      for (const v of ['bogus', 'directives,bogus', 'directives,directives', '', ',', 'directives,', 'none,directives', 'all,directives', 'ALL', 'none,none', 'default,directives']) {
         const r = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, '--c-public', v]);
         expect(r.code, `"${v}"`).toBe(2);
         expect(r.err, `"${v}"`).toContain('--c-public');
       }
-      const dup = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, '--c-public', 'all', '--c-public', 'none']);
+      const dup = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, '--c-public', 'all', '--c-public', 'default']);
       expect(dup.code).toBe(2);
       expect(readdirSync(out)).toEqual([]);
     });
