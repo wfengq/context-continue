@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEFAULT_OPTIONS } from '@context-continue/core';
 import { growthBucket, nearestRank, type GroupMetrics } from './metrics.js';
 import type { CallRecord, Group, Tier } from './types.js';
 
@@ -149,7 +150,9 @@ export function renderReport(
       return [s.contextMedian, s.contextP90, s.contextMax];
     }), '');
   }
+  const eInRun = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario));
   const eCompacted = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0);
+  const hasXlong = tiersPresent.includes('xlong');
   out.push(
     '## Caveats', '',
     '- Results come from a scripted fake model; only context size is measured.',
@@ -161,9 +164,11 @@ export function renderReport(
     '- Tool definitions are not counted in any group.',
     '- C pays one extra lead brief at step 0 when a scenario opens with a human message.',
     '- A is a single-agent baseline, not a multi-bot alternative: its one append-only history is mostly cacheable, so A can be the cheapest group on cost units.',
-    eCompacted
-      ? "- E compacted in this run (see the compactions column); a scenario where E shows 0 compactions stayed below its threshold (window x compact ratio)."
-      : "- E did not compact in this run: every scenario stayed below its compaction threshold (window x compact ratio); pass a smaller --window to see it.",
+    ...(eCompacted
+      ? ["- E compacted in this run (see the compactions column); a scenario where E shows 0 compactions stayed below its threshold (window x compact ratio)."]
+      : eInRun
+        ? ["- E did not compact in this run: every scenario stayed below its compaction threshold (window x compact ratio); pass a smaller --window to see it."]
+        : []),
     '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
     "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.",
     "- F's context is the shared pages (project, current plan, one per delivered workstream) plus the bot's own history: there is no chat thread.",
@@ -172,7 +177,8 @@ export function renderReport(
     '- C, E and F always carry the goal and constraints; A, B and D see them only through human messages.',
     "- C's host adds the routed message and any wake merged into a bot's own next step to that bot's trigger; the core's wake detail only says why the bot was woken.",
     '- Fact visibility is literal text matching of a marker: a group that paraphrases a fact counts as missing it.',
-    "- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).",
+    "- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E)." +
+      (hasXlong && eCompacted ? ' On xlong scenarios, where E compacts, this assumption weighs more.' : ''),
     "- In groups A, B, D, E and F the lead's own history carries a replan and new conventions twice: in its announcement and in its tool call (in A, the single agent's history).",
     '- In groups D and E reviewers get deliverable references, so facts written inside a deliverable reach them less often.',
     "- C misses a fact in three ways, all core behaviour reported as results: (a) relevance projection: a bot's brief shows board items (failures, contracts) of its own part of the plan only, while many facts concern everyone; (b) seen-compression: once a bot has acted on a brief that showed a board item, later briefs show it compactly without its text (a contract without its spec, other items cut short), so they can lack its marker; (c) chat shown once: a chat message reaches a bot once (in its delta, its trigger or the planning context) and afterwards only where a board item restates it, so the lead, which owns no workstream, loses a change after that, and a fact written only as bot chat never reaches the board. An extraction model (not used here) would only turn human chat into board items.",
@@ -192,11 +198,10 @@ export function renderReport(
       out.push(`- ${names} ${verb} the ${fmtInt(window)}-token window in this run: ${their} figures assume an unlimited context window (only E models the window and compaction).`);
     }
   }
-  if (tiersPresent.includes('xlong')) {
-    out.push(
-      "- Group E's compaction summary keeps every marker seen before compacting; on xlong scenarios, where E compacts, this assumption weighs more.",
-      '- C keeps only the newest 20 human messages on the board (core directivesKeep); on xlong scenarios older human messages reach the lead only through the planning context.',
-    );
+  // C's board keeps human messages only when the directives section is on (default, all, or a list containing it).
+  const directivesOn = meta.cPublic === undefined || meta.cPublic === 'default' || meta.cPublic === 'all' || meta.cPublic.split(',').includes('directives');
+  if (hasXlong && directivesOn) {
+    out.push(`- C keeps only the newest ${DEFAULT_OPTIONS.directivesKeep} human messages on the board (the default); on xlong scenarios older human messages reach the lead mostly only through the planning context and later restatements.`);
   }
   if (eCompacted) {
     out.push("- When the markers exceed E's summary budget, E keeps markers in scenario order and drops the rest.");

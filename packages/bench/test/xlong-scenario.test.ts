@@ -175,6 +175,7 @@ describe(ID, () => {
       expect(c.stats.unfinished).toBe(false);
     });
 
+    // E compacts by a ~0.4% margin (spec §6.3): a failure here most likely means the scenario got slightly shorter.
     test('E compacts at least once at the default window (Review Focus 4)', () => {
       expect(runs.get('E')!.stats.compactions).toBeGreaterThanOrEqual(1);
     });

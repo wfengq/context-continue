@@ -214,9 +214,10 @@ describe('renderReport: facts, growth, tiers', () => {
     expect(compacted.join('\n')).not.toContain('stay below E');
   });
 
-  const XLONG_SUMMARY = "- Group E's compaction summary keeps every marker seen before compacting; on xlong scenarios, where E compacts, this assumption weighs more.";
-  const XLONG_DIRECTIVES = '- C keeps only the newest 20 human messages on the board (core directivesKeep); on xlong scenarios older human messages reach the lead only through the planning context.';
-
+  const E_SUMMARY = "- Group E's compaction summary is assumed to keep every marker seen before compacting (favourable to E).";
+  const XLONG_SUMMARY = `${E_SUMMARY} On xlong scenarios, where E compacts, this assumption weighs more.`;
+  const XLONG_DIRECTIVES = '- C keeps only the newest 20 human messages on the board (the default); on xlong scenarios older human messages reach the lead mostly only through the planning context and later restatements.';
+  const NO_COMPACT = "- E did not compact in this run: every scenario stayed below its compaction threshold (window x compact ratio); pass a smaller --window to see it.";
   test('the window caveat names the groups other than E whose context max exceeds --window', () => {
     const windowMeta = { ...meta, params: { ratio: 0.1, window: 2500 } };
     const lines = renderReport(all(), windowMeta).split('\n');
@@ -227,12 +228,33 @@ describe('renderReport: facts, growth, tiers', () => {
     expect(onlyF).toContain('- F exceeds the 6,003-token window in this run: its figures assume an unlimited context window (only E models the window and compaction).');
   });
 
-  test('the xlong caveats on the E summary and C directives print only when an xlong scenario is in the run', () => {
+  const xlongRun = (compactE: boolean) =>
+    mixed().map(r => (r.scenario === 's2' ? { ...r, tier: 'xlong' as const, ...(compactE && r.group === 'E' ? { compactions: 1 } : {}) } : r));
+  const xlongMeta = { ...mixedMeta, tiers: { s1: 'standard', s2: 'xlong' } as Record<string, 'standard' | 'long' | 'xlong'> };
+
+  test('the xlong E-summary clause is merged into the E summary caveat, only when xlong and E compacted', () => {
     const plain = renderReport(mixed(), mixedMeta).split('\n');
-    expect([plain.includes(XLONG_SUMMARY), plain.includes(XLONG_DIRECTIVES)]).toEqual([false, false]);
-    const xl = mixed().map(r => (r.scenario === 's2' ? { ...r, tier: 'xlong' as const } : r));
-    const lines = renderReport(xl, { ...mixedMeta, tiers: { s1: 'standard', s2: 'xlong' } }).split('\n');
-    expect([lines.includes(XLONG_SUMMARY), lines.includes(XLONG_DIRECTIVES)]).toEqual([true, true]);
+    expect([plain.includes(E_SUMMARY), plain.includes(XLONG_SUMMARY)]).toEqual([true, false]);
+    const noCompact = renderReport(xlongRun(false), xlongMeta).split('\n');
+    expect([noCompact.includes(E_SUMMARY), noCompact.includes(XLONG_SUMMARY)]).toEqual([true, false]);
+    const compacted = renderReport(xlongRun(true), xlongMeta).split('\n');
+    expect([compacted.includes(E_SUMMARY), compacted.includes(XLONG_SUMMARY)]).toEqual([false, true]);
+  });
+
+  test('the C directives caveat prints only for an xlong run with C directives on', () => {
+    const has = (md: string) => md.split('\n').includes(XLONG_DIRECTIVES);
+    expect(has(renderReport(mixed(), mixedMeta))).toBe(false);
+    expect(has(renderReport(xlongRun(false), xlongMeta))).toBe(true);
+    for (const cPublic of ['default', 'all', 'directives', 'contracts,directives']) expect(has(renderReport(xlongRun(false), { ...xlongMeta, cPublic }))).toBe(true);
+    for (const cPublic of ['none', 'contracts', 'contracts,failures']) expect(has(renderReport(xlongRun(false), { ...xlongMeta, cPublic }))).toBe(false);
+  });
+
+  test('the "E did not compact" caveat prints only when group E is in the run', () => {
+    expect(renderReport(mixed(), mixedMeta).split('\n')).toContain(NO_COMPACT);
+    const noE = mixed().filter(r => r.group !== 'E');
+    const md = renderReport(noE, mixedMeta);
+    expect(md).not.toContain('E did not compact');
+    expect(md).not.toContain('E compacted in this run');
   });
 
   test('the event-plan caveat prints only when event-plan is in the run (R-L12)', () => {
