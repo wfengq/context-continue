@@ -1,0 +1,31 @@
+# 核心库：审查/拆分上下文与简报共用可缓存前缀
+
+- 日期：2026-11-04
+- 状态：待审阅
+- 上游：`2026-11-02-core-visibility-gaps.md` 第 5 节（后续第 1、2 项）、`2026-10-11-group-context-layer-design.md` 第 4、5.2 节
+
+## 1. 问题
+
+简报的段为 `common, memory, workspace, board, projection, delta, trigger`（前 4 段可缓存）。审查与拆分上下文只有 `common, board, projection` 三段，项目板从第 4 段变成第 2 段。负责人在简报与上下文之间切换时，按逐段相同的前缀规则只有 `common` 能命中缓存。最终评审估算这部分在长剧本上约 15k 费用单位（C 组此前费用上升的约 1/4）。
+
+另外，审查/拆分上下文不接受触发原因，评测 C 组只能自己按核心库格式拼一个触发段，重复了核心库的渲染且不进统计。
+
+## 2. 改法
+
+- `buildReviewContext` 与 `buildPlanningContext` 返回的段改为：`common, memory, workspace, board, projection, trigger`。
+  - `common`、`memory`、`workspace`、`board` 的文字与该负责人同一时刻的 `buildBrief` 逐字节相同，可缓存标记相同（true）。
+  - `projection` 段是审查或拆分的正文（内容不变），不可缓存。
+  - 新增可选参数 `{ trigger?: { reason, detail } }`，用核心库的 `renderTrigger` 渲染为最后一段（不可缓存）；不传时没有这一段。
+  - `stats.bySegment` 与 `total` 包含全部段。
+- 构建上下文仍不改变工作区（除已有的"丢弃待确认已看过条目"）；记忆、工作区只读。
+- 向后兼容：方法签名只增加可选参数；段数变化写进设计文档与 README。
+
+## 3. 评测
+
+- C 组改为把触发原因传给核心库，删去自拼的触发段。
+- 重跑五个剧本六组，报告 C 组前后对比（基线为本计划开始时的提交）。预期：C 组费用下降，可见率不变。
+- 顺带改正上一份设计文档第 5 节的措辞（"C 现在高于 D/E"→"C 的费用现在高于 D/E"）与核心库 README 中"该 Bot 的待确认条目"（实际只丢弃负责人的）。
+
+## 4. 不做
+
+- 拆分上下文的增量去重、项目级事实、抽取方案（另立计划）。
