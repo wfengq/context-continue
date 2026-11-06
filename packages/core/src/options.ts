@@ -55,3 +55,52 @@ export function resolveOptions(o?: Options): Required<Options> {
   }
   return resolved;
 }
+
+// ---------------------------------------------------------------------------
+// Long-project stream mode (spec 2026-11-06 §2.1)
+// ---------------------------------------------------------------------------
+
+export type StreamMode = 'off' | 'on' | 'auto';
+
+export interface StreamOptions {
+  /** `off` (default): every existing output unchanged. `on`: every bot gets a stream. `auto`: on once the ledger reaches `autoAfterEntries`. */
+  mode?: StreamMode;
+  /** Tokens appended after a snapshot before the next request restreams, default 8_000. */
+  restreamTokens?: number;
+  /** `auto`: ledger entries after which requests use the stream. Provisional default; chosen by the bench evaluation. */
+  autoAfterEntries?: number;
+  /** Human messages a snapshot shows in full (the newest); older ones are folded to 160 characters, default 40. */
+  snapshotHumanKeep?: number;
+}
+
+export const DEFAULT_STREAM_OPTIONS: Readonly<Required<StreamOptions>> = Object.freeze({
+  mode: 'off',
+  restreamTokens: 8_000,
+  autoAfterEntries: 400,
+  snapshotHumanKeep: 40,
+});
+
+const STREAM_MODES: readonly StreamMode[] = ['off', 'on', 'auto'];
+const STREAM_COUNTS = ['restreamTokens', 'autoAfterEntries', 'snapshotHumanKeep'] as const;
+
+/** Defaults filled in; INVALID_OP for a non-object, an unknown mode or a count that is not a positive integer. Unknown keys are ignored. */
+export function resolveStreamOptions(s?: StreamOptions): Required<StreamOptions> {
+  const resolved: Required<StreamOptions> = { ...DEFAULT_STREAM_OPTIONS };
+  if (s === undefined) return resolved;
+  if (typeof s !== 'object' || s === null || Array.isArray(s)) {
+    throw new ContextError('INVALID_OP', `stream must be an object, got ${String(s)}`);
+  }
+  if (s.mode !== undefined) {
+    if (!STREAM_MODES.includes(s.mode)) throw new ContextError('INVALID_OP', `stream.mode must be one of ${STREAM_MODES.join(', ')}, got ${String(s.mode)}`);
+    resolved.mode = s.mode;
+  }
+  for (const key of STREAM_COUNTS) {
+    const v: unknown = s[key];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v <= 0) {
+      throw new ContextError('INVALID_OP', `stream.${key} must be a positive integer, got ${String(v)}`);
+    }
+    resolved[key] = v;
+  }
+  return resolved;
+}

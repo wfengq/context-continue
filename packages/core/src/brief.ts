@@ -247,6 +247,22 @@ export async function discardPendingSeen(store: Store, projectId: string, botId:
 // ---------------------------------------------------------------------------
 
 export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOptions): Promise<ContextBundle> {
+  return (await buildBriefParts(deps, botId, opts)).bundle;
+}
+
+/** The delta items a brief shows, before rendering: kept entries and changes, and the omitted count its note shows (0 for none). */
+export interface BriefDelta {
+  entries: LedgerEntry[];
+  changes: AppliedOp[];
+  omitted: number;
+}
+
+/** buildBrief, plus the structured delta (the stream re-renders it without the human messages it carries). */
+export async function buildBriefParts(
+  deps: BriefDeps,
+  botId: string,
+  opts: BriefOptions,
+): Promise<{ bundle: ContextBundle; delta: BriefDelta }> {
   const { store, projectId } = deps;
   const board = await store.getBoard(projectId);
   const workstreams = await resolveWorkstreams(board, deps.source);
@@ -339,10 +355,12 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
     }
     smallest = Math.min(smallest, total());
   }
+  let omitted = 0;
   if (dropped > 0) {
     const plain = texts.delta;
     set('delta', renderDeltaNow(true));
     if (total() > opts.maxTokens) set('delta', plain);
+    else omitted = dropped;
   }
 
   if (!opts.peek) {
@@ -360,9 +378,17 @@ export async function buildBrief(deps: BriefDeps, botId: string, opts: BriefOpti
   }
 
   const segments: Segment[] = kinds.map(kind => ({ kind, text: texts[kind], cacheable: CACHEABLE[kind] }));
+  const kept = delta.slice(dropped);
   return {
-    segments,
-    tools: deps.tools(botId, board),
-    stats: { bySegment: { ...counts }, total: total() },
+    bundle: {
+      segments,
+      tools: deps.tools(botId, board),
+      stats: { bySegment: { ...counts }, total: total() },
+    },
+    delta: {
+      entries: kept.flatMap(d => ('entry' in d ? [d.entry] : [])),
+      changes: kept.flatMap(d => ('change' in d ? [d.change] : [])),
+      omitted,
+    },
   };
 }

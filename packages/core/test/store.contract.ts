@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import type { Store } from '../src/store/store.js';
+import { loadStreamState, saveStreamState, type StreamState } from '../src/stream/state.js';
 import type {
   BoardChange,
   EmployeeMemory,
@@ -369,5 +370,29 @@ export function runStoreContract(name: string, make: () => Promise<Store>): void
     expect(await s.getMeta('p2', 'k')).toBeNull();
     await s.setMeta('p1', 'k', 5);
     expect(await s.getMeta<number>('p1', 'k')).toBe(5);
+  });
+
+  test(`[${name}] stream state round-trips through meta per bot, whole and as a copy`, async () => {
+    const s = await make();
+    const state = (bot: string, n: number): StreamState => ({
+      version: 1,
+      segments: Array.from({ length: n }, (_, i) => ({ kind: i % 2 ? 'own' : 'updates', text: `${bot} ${i} — ünïcödé ${'x'.repeat(500)}\n  line` })),
+      appended: n * 10,
+      board: { Goal: [['goal', 'g']], Constraints: [], Conventions: [['10', 'numeric-looking id first'], ['2', 'then this']], Contracts: [], Decisions: [], Failures: [], Workstreams: [] },
+      retired: [['c1', '- [c1@v1] a -> b: spec']],
+      humanSeq: 7,
+      own: { memory: '# Your memory', projection: '# Your part' },
+    });
+    expect(await loadStreamState(s, 'p1', 'art')).toBeNull();
+    await saveStreamState(s, 'p1', 'art', state('art', 40));
+    await saveStreamState(s, 'p1', 'logic', state('logic', 3));
+    const got = await loadStreamState(s, 'p1', 'art');
+    expect(got).toEqual(state('art', 40));
+    got!.segments.push({ kind: 'own', text: 'mutated' });
+    expect((await loadStreamState(s, 'p1', 'art'))!.segments).toHaveLength(40);
+    expect((await loadStreamState(s, 'p1', 'logic'))!.segments).toHaveLength(3);
+    expect(await loadStreamState(s, 'p2', 'art')).toBeNull();
+    await saveStreamState(s, 'p1', 'art', state('art', 2));
+    expect(await loadStreamState(s, 'p1', 'art')).toEqual(state('art', 2));
   });
 }

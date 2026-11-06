@@ -81,26 +81,26 @@ function firstCodePoints(text: string, n: number): string {
   return Array.from(firstLine).slice(0, n).join('');
 }
 
-function workstreamLine(w: Workstream): string {
+export function workstreamLine(w: Workstream): string {
   return `${w.id} | ${w.title} | ${w.owner} | ${w.status}`;
 }
 
-function itemLine(x: Item): string {
+export function itemLine(x: Item): string {
   return `- [${x.id}] ${x.text}`;
 }
 
-function contractLine(c: Contract): string {
+export function contractLine(c: Contract): string {
   return `- [${c.id}@v${c.version}] ${c.from} -> ${c.to}: ${c.spec}`;
 }
 
-function decisionBlock(d: Decision): string {
+export function decisionBlock(d: Decision): string {
   const lines = [`- [${d.id}] ${d.text}`, `  why: ${d.rationale}`];
   if (d.rejected.length > 0) lines.push(`  rejected: ${d.rejected.join('; ')}`);
   lines.push(`  affects: ${d.affects.join(', ')}`);
   return lines.join('\n');
 }
 
-function failureBlock(f: Failure): string {
+export function failureBlock(f: Failure): string {
   return [`- [${f.id}] tried: ${f.text}`, `  why it failed: ${f.reason}`, `  affects: ${f.affects.join(', ')}`].join('\n');
 }
 
@@ -159,7 +159,7 @@ function boardContractLine(c: Contract): string {
 }
 
 /** A directive line: `- [#<seq> <author id>] <original text>` (ledger authors carry only an id). */
-function directiveLine(e: LedgerEntry): string {
+export function directiveLine(e: LedgerEntry): string {
   return `- [#${e.seq} ${e.author.id}] ${e.body.type === 'chat' ? e.body.text : ''}`;
 }
 

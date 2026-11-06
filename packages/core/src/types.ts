@@ -248,6 +248,30 @@ export interface ContextBundle {
   stats: { bySegment: Partial<Record<SegmentKind, number>>; total: number };
 }
 
+/** Stream segments (spec 2026-11-06): the brief's kinds, plus appended project updates and the bot's own output. */
+export type StreamSegmentKind = SegmentKind | 'updates' | 'own';
+
+export interface StreamSegment {
+  kind: StreamSegmentKind;
+  text: string;
+  cacheable: boolean;
+}
+
+/** What `buildStream` builds the request for; `brief` by default. */
+export type StreamRequest = { kind: 'brief' } | { kind: 'review'; deliverableId: string } | { kind: 'planning' };
+
+/**
+ * A `buildStream` result. With the stream off it is the existing method's ContextBundle unchanged
+ * (no `snapshot`); with it on, every segment is cacheable and `snapshot` says whether this request
+ * started a new stream (true) or extended the previous one byte for byte (false).
+ */
+export interface StreamBundle {
+  segments: StreamSegment[];
+  tools: ToolDefinition[];
+  stats: { bySegment: Partial<Record<StreamSegmentKind, number>>; total: number };
+  snapshot?: boolean;
+}
+
 export interface ChatInput {
   author: { kind: 'human' | 'bot'; id: string };
   text: string;

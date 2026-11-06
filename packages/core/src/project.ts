@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { structuralWakes, writeScopeOverlaps } from './board/diff.js';
 import { Merger, type MergeResult } from './board/merge.js';
-import { buildBrief as assembleBrief, confirmSeen, discardPendingSeen as discardPendingSeenOf, type BriefDeps, type BriefOptions } from './brief.js';
+import { buildBrief as assembleBrief, buildBriefParts, confirmSeen, discardPendingSeen as discardPendingSeenOf, type BriefDeps, type BriefOptions } from './brief.js';
 import { systemClock, type Clock } from './clock.js';
 import type { CondenseFn } from './condense.js';
 import { findDeliverable, planningContext, retroContext, reviewContext, type ContextDeps, type ContextTrigger, type PlanMeta } from './contexts.js';
@@ -14,15 +14,17 @@ import { createExtractor } from './extract.js';
 import { exportMarkdown as boardToMarkdown } from './markdown.js';
 import { newId as defaultNewId, type IdGenerator } from './ids.js';
 import { assertMember, botMembers, defaultWorkspace } from './members.js';
-import { resolveOptions, type Options } from './options.js';
-import { resolvePublicBoard, type PublicBoardSwitches } from './publicBoard.js';
+import { resolveOptions, resolveStreamOptions, type Options, type StreamOptions } from './options.js';
+import { isHumanChat, resolvePublicBoard, type PublicBoardSwitches } from './publicBoard.js';
 import { diffPlan, type ApprovedPlan, type PlanWorkstream } from './plan/replan.js';
 import { validatePlan, type PlanInput } from './plan/validate.js';
 import { addMemories, appendNote, type PrivateDeps } from './private.js';
-import { renderBoardPublic } from './render.js';
+import { renderBoardPublic, renderDelta } from './render.js';
 import { retryingStore, withRetry } from './retry.js';
 import { humanChain, routeChat, toLedgerEntry, unrootedSinceProgress, type RouteInput } from './route.js';
 import type { Store } from './store/store.js';
+import { appendOwnOutput, streamRequest } from './stream/build.js';
+import { loadStreamState, saveStreamState } from './stream/state.js';
 import { defaultCountTokens } from './tokens.js';
 import { createToolDispatcher, proposalOutcome, toolDefinitions, type ProposalOutcome } from './tools.js';
 import type {
@@ -36,6 +38,9 @@ import type {
   PlanProposal,
   ProjectBoard,
   ProjectEvent,
+  StreamBundle,
+  StreamRequest,
+  StreamSegmentKind,
   Wake,
   Workstream,
 } from './types.js';
@@ -72,6 +77,20 @@ export interface ProjectConfig {
    * the store; give `memoryStore` the same generator for fully deterministic ids.
    */
   newId?: IdGenerator;
+  /**
+   * Long-project stream mode (spec 2026-11-06 §2.1), off by default: with it off every existing
+   * method and output is unchanged, `buildStream` is the existing brief / review / planning context
+   * and `recordOwnOutput` does nothing. INVALID_OP for an unknown mode or a count that is not a
+   * positive integer. (`auto` behaves as `off` until the auto switch-over is implemented.)
+   */
+  stream?: StreamOptions;
+}
+
+/** Options of `buildStream`: the brief budget and trigger, and which request (a brief by default). */
+export interface StreamBuildOptions {
+  maxTokens: number;
+  trigger: ContextTrigger;
+  request?: StreamRequest;
 }
 
 export type Submission =
@@ -102,6 +121,15 @@ export interface Project {
   commitRetro(botId: string, memories: { text: string; pinned?: boolean }[]): Promise<void>;
   /** Runs a bot tool (spec 6.2): NOT_A_MEMBER, then FORBIDDEN for lead-only tools, then INVALID_OP, then the facade call. */
   callTool(botId: string, name: string, args: unknown): Promise<unknown>;
+  /**
+   * The bot's request as an append-only stream (spec 2026-11-06 §2.2): its previous stream byte for
+   * byte plus what this request appends, or a new snapshot; every segment cacheable. The side effects
+   * (seen items, pointers, discarding the lead's pending items) are those of the existing method,
+   * which is what it returns, unchanged, while the stream is off.
+   */
+  buildStream(botId: string, o: StreamBuildOptions): Promise<StreamBundle>;
+  /** Appends the bot's own reply and tool-call text to its stream (counts toward the restream budget). No-op while the stream is off. */
+  recordOwnOutput(botId: string, text: string): Promise<void>;
   ingest(c: ChatInput): Promise<LedgerEntry>;
   route(e: LedgerEntry): Promise<Wake[]>;
   merge(): Promise<Wake[]>;
@@ -166,6 +194,7 @@ export function createProject(cfg: ProjectConfig): Project {
   const newId = cfg.newId ?? defaultNewId;
   const options = resolveOptions(cfg.options);
   const publicBoard = resolvePublicBoard(cfg.publicBoard);
+  const streamOptions = resolveStreamOptions(cfg.stream);
   const count = cfg.countTokens ?? defaultCountTokens;
   const external = cfg.workstreams !== undefined;
   const source = cfg.workstreams ?? localWorkstreamSource(store, clock);
@@ -795,6 +824,82 @@ export function createProject(cfg: ProjectConfig): Project {
   };
 
   // ---------------------------------------------------------------------------
+  // long-project stream mode (spec 2026-11-06)
+  // ---------------------------------------------------------------------------
+
+  const streamOn = () => streamOptions.mode === 'on';
+  const streamConfig = { restreamTokens: streamOptions.restreamTokens, snapshotHumanKeep: streamOptions.snapshotHumanKeep, count };
+
+  function checkRequest(r: StreamRequest | undefined): StreamRequest {
+    const req = r ?? { kind: 'brief' as const };
+    if (req.kind === 'brief' || req.kind === 'planning') return req;
+    if (req.kind === 'review' && typeof req.deliverableId === 'string') return req;
+    throw new ContextError('INVALID_OP', `Unknown stream request ${JSON.stringify(req)}`);
+  }
+
+  /** The existing method for this request (stream off). */
+  function unstreamed(botId: string, o: StreamBuildOptions, req: StreamRequest): Promise<ContextBundle> {
+    const trigger = o.trigger === undefined ? {} : { trigger: o.trigger };
+    if (req.kind === 'review') return project.buildReviewContext(req.deliverableId, trigger);
+    if (req.kind === 'planning') return project.buildPlanningContext(trigger);
+    return project.buildBrief(botId, { maxTokens: o.maxTokens, ...trigger });
+  }
+
+  /**
+   * Stream on, inside the queue. A brief request runs the brief exactly as buildBrief does; its delta
+   * is re-rendered without human messages (the stream carries every one). A review or planning
+   * request runs the context exactly as the existing method does, and takes the bot's own segments
+   * from a peek brief (no side effects) so they compare with what its briefs show.
+   */
+  async function streamed(botId: string, o: StreamBuildOptions, req: StreamRequest): Promise<StreamBundle> {
+    const board = await getBoard();
+    const ws = await workstreamsOf(board);
+    const trigger = o.trigger === undefined ? {} : { trigger: o.trigger };
+    let base: ContextBundle;
+    let ownFrom: ContextBundle;
+    const tail: { kind: StreamSegmentKind; text: string }[] = [];
+    if (req.kind === 'brief') {
+      const r = await buildBriefParts(briefDeps, botId, { maxTokens: o.maxTokens, ...trigger });
+      base = ownFrom = r.bundle;
+      const entries = r.delta.entries.filter(e => !isHumanChat(e));
+      if (entries.length + r.delta.changes.length + r.delta.omitted > 0) {
+        tail.push({ kind: 'delta', text: renderDelta(entries, r.delta.changes, r.delta.omitted) });
+      }
+      for (const s of base.segments) if (s.kind === 'trigger') tail.push(s);
+    } else {
+      ownFrom = (await buildBriefParts(briefDeps, botId, { maxTokens: o.maxTokens, peek: true })).bundle;
+      await discardPendingSeen(board.lead);
+      base =
+        req.kind === 'review'
+          ? await reviewContext(contextDeps, board, ws, req.deliverableId, o.trigger)
+          : await planningContext(contextDeps, board, ws, o.trigger);
+      for (const s of base.segments) if (s.kind === 'projection' || s.kind === 'trigger') tail.push(s);
+    }
+    const ownText = (k: 'common' | 'memory' | 'workspace' | 'projection') => ownFrom.segments.find(s => s.kind === k)?.text ?? '';
+    const humans = (await store.read(projectId, 1)).filter(isHumanChat);
+    const prev = await loadStreamState(store, projectId, botId);
+    const r = streamRequest(
+      prev,
+      {
+        board: { ...board, workstreams: ws },
+        humans,
+        own: { common: ownText('common'), memory: ownText('memory'), workspace: ownText('workspace'), projection: ownText('projection') },
+        tail,
+      },
+      streamConfig,
+    );
+    await saveStreamState(store, projectId, botId, r.state);
+    const bySegment: Partial<Record<StreamSegmentKind, number>> = {};
+    let total = 0;
+    for (const s of r.segments) {
+      const n = count(s.text);
+      bySegment[s.kind] = (bySegment[s.kind] ?? 0) + n;
+      total += n;
+    }
+    return { segments: r.segments, tools: base.tools, stats: { bySegment, total }, snapshot: r.snapshot };
+  }
+
+  // ---------------------------------------------------------------------------
   // the facade: every mutating method runs in the serial queue
   // ---------------------------------------------------------------------------
 
@@ -928,6 +1033,22 @@ export function createProject(cfg: ProjectConfig): Project {
       }),
 
     callTool: (botId, name, args) => callTool(botId, name, args),
+
+    async buildStream(botId, o) {
+      const req = checkRequest(o.request);
+      if (!streamOn()) return unstreamed(botId, o, req);
+      return serial(() => streamed(botId, o, req));
+    },
+
+    async recordOwnOutput(botId, text) {
+      if (typeof text !== 'string') throw new ContextError('INVALID_OP', `recordOwnOutput text must be a string, got ${typeof text}`);
+      if (!streamOn() || text.length === 0) return;
+      await serial(async () => {
+        const st = await loadStreamState(store, projectId, botId);
+        // Without a stream the bot's next request is a snapshot, which never carries own output.
+        if (st !== null) await saveStreamState(store, projectId, botId, appendOwnOutput(st, text, count));
+      });
+    },
 
     ingest: c =>
       serial(async () => {

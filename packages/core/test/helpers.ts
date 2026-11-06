@@ -278,6 +278,7 @@ export async function makeProject(
     /** Pass no publicBoard at all, to exercise the core's own default (directives on). */
     coreDefaultBoard?: boolean;
     newId?: ProjectConfig['newId'];
+    stream?: ProjectConfig['stream'];
   } = {},
 ): Promise<FacadeProject> {
   const store = opts.store ?? memoryStore(opts.newId ? { newId: opts.newId } : {});
@@ -299,6 +300,7 @@ export async function makeProject(
     // Most tests rely on the plain board, so the helper turns directives off unless told otherwise.
     ...(opts.coreDefaultBoard ? {} : { publicBoard: opts.publicBoard === undefined ? { directives: false } : opts.publicBoard }),
     newId: opts.newId,
+    ...(opts.stream === undefined ? {} : { stream: opts.stream }),
   });
   const events: RecordedEvent[] = [];
   for (const kind of EVENT_KINDS) p.on(kind, e => events.push({ kind, e } as RecordedEvent));

@@ -13,7 +13,7 @@ export type { EmployeeProfile, EmployeeRegistry } from './employees.js';
 export { createEventBus } from './events.js';
 export type { CoreEvents, EventBus } from './events.js';
 export { createProject, withRetry } from './project.js';
-export type { ContextOptions, Project, ProjectConfig, ProjectModels, Submission } from './project.js';
+export type { ContextOptions, Project, ProjectConfig, ProjectModels, StreamBuildOptions, Submission } from './project.js';
 export type { ContextTrigger } from './contexts.js';
 export { condenseSegments, CONDENSE_INSTRUCTION } from './condense.js';
 export type { CondenseFn, CondenseResult, CondenseState } from './condense.js';
