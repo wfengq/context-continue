@@ -2,10 +2,13 @@
 // unchanged plus what this request appends. Pure: everything comes from structured data (the
 // board's items, the ledger's human messages, the brief's own segments) rendered with the core's
 // single-item renderers, so marker text is the same as in a brief. Memory, notes and projection
-// are compared as whole segments here and appended whole when they change.
-import { contractLine, decisionBlock, directiveLine, failureBlock, itemLine, workstreamLine } from '../render.js';
+// are compared item by item (diff.ts); the team segment is appended again whole when it changes.
+import type { BriefDelta } from '../brief.js';
+import { isHumanChat } from '../publicBoard.js';
+import { contractLine, decisionBlock, directiveLine, failureBlock, itemLine, renderDelta, workstreamLine, type ItemPart } from '../render.js';
 import type { LedgerEntry, ProjectBoard, StreamSegment, StreamSegmentKind } from '../types.js';
-import { BOARD_SECTIONS, OWN_KINDS, type BoardSection, type OwnKind, type Shown, type StreamState } from './state.js';
+import { knownOf, sectionUpdate } from './diff.js';
+import { BOARD_SECTIONS, ITEM_KINDS, type BoardSection, type ItemKind, type OwnKind, type Shown, type StreamState } from './state.js';
 
 const NOTHING = '(nothing yet)';
 /** Older human messages in a snapshot keep this many characters (code points). */
@@ -22,11 +25,18 @@ export interface StreamInput {
   board: ProjectBoard;
   /** Every human chat message so far, in ledger order. */
   humans: readonly LedgerEntry[];
-  /** The bot's own segments as a brief renders them now. */
+  /** The bot's own segments as a brief renders them now (a snapshot shows these texts). */
   own: Record<OwnKind, string>;
-  /** This request's own part, appended last: the delta (if any) and trigger, or a context's body and trigger. */
+  /** The items of the memory, notes and projection segments above (appends compare these). */
+  items: Record<ItemKind, ItemPart[]>;
+  /** A brief request's delta: rendered first in the tail, without the human messages the stream carries. */
+  delta?: BriefDelta;
+  /** This request's own part, appended last: the trigger, or a context's body and trigger. */
   tail: readonly { kind: StreamSegmentKind; text: string }[];
 }
+
+/** The segment titles of the item-level own segments. */
+const TITLES: Record<ItemKind, string> = { memory: '# Your memory', workspace: '# Your notes', projection: '# Your part' };
 
 type Plain = { kind: StreamSegmentKind; text: string };
 
@@ -53,6 +63,9 @@ function foldedLine(e: LedgerEntry): string {
   return `- [#${e.seq} ${e.author.id}] ${short}`;
 }
 
+/** How many of the oldest human messages a snapshot folds. */
+const foldedCount = (humans: readonly LedgerEntry[], keep: number) => Math.max(0, humans.length - keep);
+
 /** The snapshot's board: every project-wide item, retired contracts, and every human message (older ones folded). */
 function snapshotBoard(items: Record<BoardSection, Shown>, retired: Shown, humans: readonly LedgerEntry[], keep: number): string {
   const out = ['# Project'];
@@ -61,7 +74,7 @@ function snapshotBoard(items: Record<BoardSection, Shown>, retired: Shown, human
     out.push('', `## ${s}`, ...(lines.length > 0 ? lines : [NOTHING]));
   }
   if (retired.length > 0) out.push('', '## Retired contracts', ...retired.map(([, t]) => t));
-  const cut = Math.max(0, humans.length - keep);
+  const cut = foldedCount(humans, keep);
   if (cut > 0) out.push('', `## Earlier human messages (first ${FOLDED_HUMAN_CHARS} characters each)`, ...humans.slice(0, cut).map(foldedLine));
   const full = humans.slice(cut);
   out.push('', '## Human messages', ...(full.length > 0 ? full.map(directiveLine) : [NOTHING]));
@@ -97,8 +110,18 @@ export function needsSnapshot(prev: StreamState | null, cfg: Pick<StreamConfig, 
 const cacheable = (xs: readonly Plain[]): StreamSegment[] => xs.map(x => ({ kind: x.kind, text: x.text, cacheable: true }));
 
 /**
+ * The delta a brief request appends: without human chat messages, which the stream carries
+ * (project updates or the snapshot's board), except, on a snapshot, those it folds to 160
+ * characters, which stay here in full. Null when nothing is left.
+ */
+function deltaText(delta: BriefDelta, folded: ReadonlySet<string>): string | null {
+  const entries = delta.entries.filter(e => !isHumanChat(e) || folded.has(e.id));
+  return entries.length + delta.changes.length + delta.omitted > 0 ? renderDelta(entries, delta.changes, delta.omitted) : null;
+}
+
+/**
  * The bot's request: a new snapshot (first request, or past the restream budget), or its previous
- * stream unchanged plus, in order, project updates, changed own segments, then this request's tail.
+ * stream unchanged plus, in order, project updates, own-segment updates, then this request's tail.
  */
 export function streamRequest(
   prev: StreamState | null,
@@ -108,34 +131,53 @@ export function streamRequest(
   const items = projectWide(input.board);
   const retired = retiredOf(input.board);
   const humanSeq = input.humans.at(-1)?.seq ?? prev?.humanSeq ?? 0;
-  const tailTokens = input.tail.reduce((n, x) => n + cfg.count(x.text), 0);
-  if (needsSnapshot(prev, cfg)) {
+  const snapshot = needsSnapshot(prev, cfg);
+  const folded = snapshot ? new Set(input.humans.slice(0, foldedCount(input.humans, cfg.snapshotHumanKeep)).map(e => e.id)) : new Set<string>();
+  const delta = input.delta === undefined ? null : deltaText(input.delta, folded);
+  const tail: Plain[] = [...(delta === null ? [] : [{ kind: 'delta' as const, text: delta }]), ...input.tail];
+  if (snapshot) {
     const segments: Plain[] = [
       { kind: 'common', text: input.own.common },
       { kind: 'memory', text: input.own.memory },
       { kind: 'workspace', text: input.own.workspace },
       { kind: 'board', text: snapshotBoard(items, retired, input.humans, cfg.snapshotHumanKeep) },
       { kind: 'projection', text: input.own.projection },
-      ...input.tail,
+      ...tail,
     ];
-    const state: StreamState = { version: 1, segments, appended: tailTokens, board: items, retired, humanSeq, own: { ...input.own } };
+    const state: StreamState = {
+      version: 2,
+      segments,
+      appended: tail.reduce((n, x) => n + cfg.count(x.text), 0),
+      board: items,
+      retired,
+      humanSeq,
+      common: input.own.common,
+      own: { memory: knownOf(input.items.memory), workspace: knownOf(input.items.workspace), projection: knownOf(input.items.projection) },
+    };
     return { state, segments: cacheable(segments), snapshot: true };
   }
   const p = prev!;
   const added: Plain[] = [];
   const updates = projectUpdates(p, items, retired, input.humans);
   if (updates !== null) added.push({ kind: 'updates', text: updates });
-  for (const k of OWN_KINDS) if (p.own[k] !== input.own[k]) added.push({ kind: k, text: input.own[k] });
-  added.push(...input.tail);
+  if (p.common !== input.own.common) added.push({ kind: 'common', text: input.own.common });
+  const own = { ...p.own };
+  for (const k of ITEM_KINDS) {
+    const r = sectionUpdate(TITLES[k], p.own[k], input.items[k]);
+    if (r.text !== null) added.push({ kind: k, text: r.text });
+    own[k] = r.known;
+  }
+  added.push(...tail);
   const segments = [...p.segments, ...added];
   const state: StreamState = {
-    version: 1,
+    version: 2,
     segments,
     appended: p.appended + added.reduce((n, x) => n + cfg.count(x.text), 0),
     board: items,
     retired,
     humanSeq: Math.max(p.humanSeq, humanSeq),
-    own: { ...input.own },
+    common: input.own.common,
+    own,
   };
   return { state, segments: cacheable(segments), snapshot: false };
 }

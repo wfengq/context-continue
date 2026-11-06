@@ -133,6 +133,62 @@ function pinnedSummaryRecent(pinned: string[], condensed: string, recent: string
   return lines;
 }
 
+// ---------------------------------------------------------------------------
+// items, for item-level comparison (stream mode, spec 2026-11-06 §2.3)
+// ---------------------------------------------------------------------------
+
+/** One item as a segment shows it: its identity, the text shown now, and its text in full (differs only for a "(seen)" form). */
+export interface ShownItem {
+  key: string;
+  text: string;
+  full: string;
+}
+
+/**
+ * The items under one heading (`''` for a part's head lines, else a `## ` heading or a label such as
+ * `Pinned:`). `leaves` says what an item that disappears means: `retract`, a real removal; `roll`, it
+ * left a window (Recent, or budget trimming) and is no news; `replace`, a single text block (persona,
+ * summary) whose removal is no news either.
+ */
+export interface ItemGroup {
+  heading: string;
+  leaves: 'retract' | 'roll' | 'replace';
+  items: ShownItem[];
+}
+
+/** A segment's items per part: one part per owned workstream for a projection (`part` = its id), one `null` part otherwise. */
+export interface ItemPart {
+  part: string | null;
+  groups: ItemGroup[];
+}
+
+const same = (key: string, text: string): ShownItem => ({ key, text, full: text });
+
+/** The items of pinnedSummaryRecent, as groups; `key` identifies a pinned or recent entry. */
+function pinnedSummaryRecentItems<T>(pinned: T[], condensed: string, recent: T[], key: (x: T) => string, text: (x: T) => string): ItemGroup[] {
+  const groups: ItemGroup[] = [];
+  if (pinned.length > 0) groups.push({ heading: 'Pinned:', leaves: 'retract', items: pinned.map((x) => same(key(x), `- ${text(x)}`)) });
+  if (condensed.trim().length > 0) groups.push({ heading: 'Summary:', leaves: 'replace', items: [same('summary', condensed)] });
+  if (recent.length > 0) groups.push({ heading: 'Recent:', leaves: 'roll', items: recent.map((x) => same(key(x), `- ${text(x)}`)) });
+  return groups;
+}
+
+/** renderMemory's items (same recentKeep): persona, skills, pinned memories, summary, recent memories (keyed by memory id). */
+export function memoryItems(m: EmployeeMemory, recentKeep: number): ItemPart[] {
+  const groups: ItemGroup[] = [];
+  if (m.persona.trim().length > 0) groups.push({ heading: 'Persona:', leaves: 'replace', items: [same('persona', m.persona)] });
+  if (m.skills.length > 0) groups.push({ heading: 'Skills:', leaves: 'retract', items: m.skills.map((s) => same(`- ${s}`, `- ${s}`)) });
+  const recent = last(m.memories.filter((x) => !x.pinned), recentKeep);
+  groups.push(...pinnedSummaryRecentItems(m.memories.filter((x) => x.pinned), m.condensed, recent, (x) => x.id, (x) => x.text));
+  return [{ part: null, groups }];
+}
+
+/** renderWorkspace's items (same recentKeep): pinned notes, summary, recent notes (notes have no id: keyed by their text). */
+export function workspaceItems(w: Workspace, recentKeep: number): ItemPart[] {
+  const id = (p: string) => p;
+  return [{ part: null, groups: pinnedSummaryRecentItems(w.pinnedNotes, w.condensed, last(splitParagraphs(w.notes), recentKeep), id, id) }];
+}
+
 /** Key used for the seen-item rule: `${id}@${version}` for contracts, `id` for everything else. */
 export function itemKey(x: Item | Contract): string {
   return 'version' in x ? `${x.id}@${x.version}` : x.id;
@@ -232,31 +288,44 @@ export function renderProjection(
   p: Projection,
   seen: Set<string>,
   onBoard?: PublicBoardSwitches,
-): { text: string; shownKeys: string[] } {
-  if (p.workstream === null) return { text: ['# Your part', '', NO_PART].join('\n'), shownKeys: [] };
+): { text: string; shownKeys: string[]; items: ItemPart } {
+  if (p.workstream === null) return { text: ['# Your part', '', NO_PART].join('\n'), shownKeys: [], items: { part: null, groups: [] } };
 
   const shownKeys: string[] = [];
-  const entries = <T extends Item | Contract>(xs: T[], compact: (x: T) => string, full: (x: T) => string): string[] =>
-    xs.map((x) => {
+  const groups: ItemGroup[] = [];
+  const group = (heading: string, items: ShownItem[]): void => {
+    groups.push({ heading, leaves: 'retract', items });
+  };
+  const entries = <T extends Item | Contract>(heading: string, xs: T[], compact: (x: T) => string, full: (x: T) => string): string[] => {
+    const shown = xs.map((x): ShownItem => {
       const key = itemKey(x);
-      if (seen.has(key)) return compact(x);
+      if (seen.has(key)) return { key: x.id, text: compact(x), full: full(x) };
       shownKeys.push(key);
-      return full(x);
+      return same(x.id, full(x));
     });
+    group(heading, shown);
+    return shown.map((x) => x.text);
+  };
   const compactItem = (x: Item): string => `- [${x.id}] ${firstCodePoints(x.text, COMPACT_CODE_POINTS)} (seen)`;
 
   const w = p.workstream;
-  const head = [workstreamLine(w), 'Brief:', w.brief];
-  if (w.dependsOn.length > 0) head.push(`depends on: ${w.dependsOn.join(', ')}`);
-  if (w.writeScopes.length > 0) head.push(`write scopes: ${w.writeScopes.join(', ')}`);
-  head.push(`review rounds: ${w.reviewRounds}`);
+  const headItems = [same('line', workstreamLine(w)), same('brief', `Brief:\n${w.brief}`)];
+  if (w.dependsOn.length > 0) headItems.push(same('dependsOn', `depends on: ${w.dependsOn.join(', ')}`));
+  if (w.writeScopes.length > 0) headItems.push(same('writeScopes', `write scopes: ${w.writeScopes.join(', ')}`));
+  headItems.push(same('reviewRounds', `review rounds: ${w.reviewRounds}`));
+  group('', headItems);
+  const head = headItems.map((x) => x.text);
 
   const contracts = onBoard?.contracts
     ? []
-    : ['## Contracts', ...list(entries(p.contracts, (c) => `- [${c.id}@v${c.version}] ${c.from} -> ${c.to} (seen)`, contractLine)), ''];
-  const decisions = entries(p.decisions, compactItem, decisionBlock);
-  const facts = entries(p.facts, compactItem, itemLine);
-  const failures = onBoard?.failures ? [] : ['## Failures', ...list(entries(p.failures, compactItem, failureBlock)), ''];
+    : ['## Contracts', ...list(entries('## Contracts', p.contracts, (c) => `- [${c.id}@v${c.version}] ${c.from} -> ${c.to} (seen)`, contractLine)), ''];
+  const decisions = entries('## Decisions', p.decisions, compactItem, decisionBlock);
+  const facts = entries('## Facts', p.facts, compactItem, itemLine);
+  const failures = onBoard?.failures ? [] : ['## Failures', ...list(entries('## Failures', p.failures, compactItem, failureBlock)), ''];
+  const upstream = p.upstream.map((u) => same(u.workstream.id, `- ${u.workstream.id} delivered v${u.deliverable.version}: ${u.deliverable.summary} (ref: ${u.deliverable.ref})`));
+  group('## Upstream deliverables', upstream);
+  const overlaps = p.overlaps.map((o) => `- overlaps with ${o.other.id} (${o.other.owner}) on ${o.prefix}`);
+  group('## Overlaps', overlaps.map((t) => same(t, t)));
 
   const text = [
     '# Your part',
@@ -272,12 +341,12 @@ export function renderProjection(
     '',
     ...failures,
     '## Upstream deliverables',
-    ...list(p.upstream.map((u) => `- ${u.workstream.id} delivered v${u.deliverable.version}: ${u.deliverable.summary} (ref: ${u.deliverable.ref})`)),
+    ...list(upstream.map((u) => u.text)),
     '',
     '## Overlaps',
-    ...list(p.overlaps.map((o) => `- overlaps with ${o.other.id} (${o.other.owner}) on ${o.prefix}`)),
+    ...list(overlaps),
   ].join('\n');
-  return { text, shownKeys };
+  return { text, shownKeys, items: { part: w.id, groups } };
 }
 
 // ---------------------------------------------------------------------------

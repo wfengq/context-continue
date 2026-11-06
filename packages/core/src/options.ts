@@ -83,7 +83,7 @@ export const DEFAULT_STREAM_OPTIONS: Readonly<Required<StreamOptions>> = Object.
 const STREAM_MODES: readonly StreamMode[] = ['off', 'on', 'auto'];
 const STREAM_COUNTS = ['restreamTokens', 'autoAfterEntries', 'snapshotHumanKeep'] as const;
 
-/** Defaults filled in; INVALID_OP for a non-object, an unknown mode or a count that is not a positive integer. Unknown keys are ignored. */
+/** Defaults filled in; INVALID_OP for a non-object, an unknown mode or a count that is not a positive integer (snapshotHumanKeep: non-negative). Unknown keys are ignored. */
 export function resolveStreamOptions(s?: StreamOptions): Required<StreamOptions> {
   const resolved: Required<StreamOptions> = { ...DEFAULT_STREAM_OPTIONS };
   if (s === undefined) return resolved;
@@ -97,8 +97,10 @@ export function resolveStreamOptions(s?: StreamOptions): Required<StreamOptions>
   for (const key of STREAM_COUNTS) {
     const v: unknown = s[key];
     if (v === undefined) continue;
-    if (typeof v !== 'number' || !Number.isInteger(v) || v <= 0) {
-      throw new ContextError('INVALID_OP', `stream.${key} must be a positive integer, got ${String(v)}`);
+    // snapshotHumanKeep may be 0: a snapshot then folds every human message.
+    const min = key === 'snapshotHumanKeep' ? 0 : 1;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < min) {
+      throw new ContextError('INVALID_OP', `stream.${key} must be ${min === 0 ? 'a non-negative' : 'a positive'} integer, got ${String(v)}`);
     }
     resolved[key] = v;
   }

@@ -4,9 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { createEmployeeRegistry } from '../src/employees.js';
+import { defaultWorkspace } from '../src/members.js';
 import { DEFAULT_STREAM_OPTIONS, resolveStreamOptions } from '../src/options.js';
 import { createProject, type Project } from '../src/project.js';
+import { memoryStore } from '../src/store/memory.js';
 import { sqliteStore } from '../src/store/sqlite.js';
+import { knownOf, sectionUpdate } from '../src/stream/diff.js';
+import { splitParagraphs } from '../src/render.js';
 import type { BoardOp, ContextBundle, StreamBundle } from '../src/types.js';
 import { FIXTURE_PLAN, fakeClock, makeProject, PERSONAS, type FacadeProject } from './helpers.js';
 
@@ -53,7 +57,7 @@ describe('stream options', () => {
     [{ restreamTokens: -5 }],
     [{ restreamTokens: 1.5 }],
     [{ restreamTokens: '8000' }],
-    [{ snapshotHumanKeep: 0 }],
+    [{ snapshotHumanKeep: -1 }],
     [{ snapshotHumanKeep: Number.POSITIVE_INFINITY }],
     [{ autoAfterEntries: 2.5 }],
     [{ autoAfterEntries: 0 }],
@@ -245,24 +249,6 @@ describe('appends', () => {
     expect(delta).not.toContain('MARK-ONCE');
   });
 
-  test('memory, notes and projection: unchanged ones are not repeated; a changed one is appended whole', async () => {
-    const fx = await streamProject();
-    const a = await brief(fx.p, 'art');
-    await fx.p.submit('art', { type: 'notes', text: 'remember MARK-NOTE', pinned: true });
-    const b = await brief(fx.p, 'art');
-    const added = b.segments.slice(a.segments.length);
-    expect(kinds({ segments: added })).toEqual(['workspace', 'trigger']);
-    expect(added[0]!.text).toContain('MARK-NOTE');
-    expect(added[0]!.text.startsWith('# Your notes')).toBe(true);
-    // a decision affecting art changes art's projection
-    await fx.p.submit('pm', { type: 'proposal', ops: [{ op: 'addDecision', decision: { text: 'Pixel art MARK-DEC', rationale: 'r', rejected: [], affects: ['art'], source: { entryIds: [], by: 'pm' } } }] });
-    await resolveAll(fx);
-    const c = await brief(fx.p, 'art');
-    const k = kinds({ segments: c.segments.slice(b.segments.length) });
-    expect(k).toContain('projection');
-    expect(k).toContain('updates');
-  });
-
   test('retired contracts: appended once under project updates; in the next snapshot; appended again after re-add and second retirement', async () => {
     const fx = await streamProject({ restreamTokens: 1_000_000 });
     const plan = (contracts: typeof FIXTURE_PLAN.contracts) => ({ workstreams: FIXTURE_PLAN.workstreams, contracts });
@@ -344,6 +330,318 @@ describe('appends', () => {
     const d = await brief(fx.p, 'art');
     expect(d.snapshot).toBe(false);
     expect(isPrefix(texts(c), texts(d))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// item-level updates of memory, notes and projection (Task 3)
+// ---------------------------------------------------------------------------
+
+const addedOf = (prev: { segments: unknown[] }, now: StreamBundle) => now.segments.slice(prev.segments.length);
+/** The text of the one appended segment of `kind` (undefined when none). */
+const appended = (prev: { segments: unknown[] }, now: StreamBundle, kind: string) => {
+  const xs = addedOf(prev, now).filter(s => s.kind === kind);
+  expect(xs.length, kind).toBeLessThanOrEqual(1);
+  return xs[0]?.text;
+};
+async function replan(fx: FacadeProject, plan: { workstreams: typeof FIXTURE_PLAN.workstreams; contracts: typeof FIXTURE_PLAN.contracts }) {
+  const { proposalId } = await fx.p.proposePlan(plan, { by: 'pm' });
+  await fx.p.approvePlan(proposalId, { by: 'alice' });
+}
+async function setPinned(fx: FacadeProject, bot: string, pinnedNotes: string[]) {
+  const ws = (await fx.store.getWorkspace(fx.projectId, bot)) ?? defaultWorkspace(fx.projectId, bot, await fx.store.latestSeq(fx.projectId));
+  await fx.store.saveWorkspace({ ...ws, pinnedNotes });
+}
+const decide = (text: string, affects: string[]): BoardOp => ({ op: 'addDecision', decision: { text, rationale: 'r', rejected: [], affects, source: { entryIds: [], by: 'pm' } } });
+
+describe('item-level updates', () => {
+  test('a new note: only that note, under its label, in a "— updates" segment', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art');
+    await fx.p.submit('art', { type: 'notes', text: 'remember MARK-NOTE', pinned: true });
+    const b = await brief(fx.p, 'art');
+    expect(kinds({ segments: addedOf(a, b) })).toEqual(['workspace', 'trigger']);
+    expect(appended(a, b, 'workspace')).toBe('# Your notes — updates\n\nPinned:\n- remember MARK-NOTE');
+    await fx.p.submit('art', { type: 'notes', text: 'later MARK-R' });
+    const c = await brief(fx.p, 'art');
+    expect(appended(b, c, 'workspace')).toBe('# Your notes — updates\n\nRecent:\n- later MARK-R');
+  });
+
+  test('memory: a new memory, a pinned one and a new skill, each under its label', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art');
+    const m = (await fx.store.getMemory('art'))!;
+    const mem = (id: string, text: string, pinned: boolean) => ({ id, text, fromProject: 'p0', createdAt: 1, pinned });
+    await fx.store.saveMemory({ ...m, skills: ['pixel art'], memories: [mem('m1', 'keep palettes small MARK-M1', false), mem('m2', 'always MARK-PIN', true)] });
+    const b = await brief(fx.p, 'art');
+    expect(appended(a, b, 'memory')).toBe('# Your memory — updates\n\nSkills:\n- pixel art\n\nPinned:\n- always MARK-PIN\n\nRecent:\n- keep palettes small MARK-M1');
+    await fx.store.saveMemory({ ...m, skills: ['pixel art'], memories: [mem('m1', 'keep palettes small MARK-M1', false), mem('m2', 'always MARK-PIN', true), mem('m3', 'new MARK-M3', false)] });
+    const c = await brief(fx.p, 'art');
+    expect(appended(b, c, 'memory')).toBe('# Your memory — updates\n\nRecent:\n- new MARK-M3');
+  });
+
+  test('Focus 2: a multi-line item changed in the middle is appended whole (notes and workstream brief)', async () => {
+    const fx = await streamProject();
+    await setPinned(fx, 'art', ['top\nmiddle\nbottom']);
+    const a = await brief(fx.p, 'art');
+    await setPinned(fx, 'art', ['top\nMIDDLE\nbottom']);
+    const b = await brief(fx.p, 'art');
+    const w = appended(a, b, 'workspace')!;
+    expect(w).toContain('Pinned:\n- top\nMIDDLE\nbottom');
+    expect(w).toContain('no longer: - top\nmiddle\nbottom');
+    const plan = (brief: string) => ({ workstreams: FIXTURE_PLAN.workstreams.map(x => (x.id === 'art' ? { ...x, brief } : x)), contracts: FIXTURE_PLAN.contracts });
+    await replan(fx, plan('Draw\nthe sprites\nfast'));
+    const c = await brief(fx.p, 'art');
+    await replan(fx, plan('Draw\nthe SPRITES\nfast'));
+    const d = await brief(fx.p, 'art');
+    const p = appended(c, d, 'projection')!;
+    expect(p).toBe('# Your part — updates\n\n(part art)\nBrief:\nDraw\nthe SPRITES\nfast');
+  });
+
+  test('Focus 2: two identical items in one section count separately; removing one says "no longer" once', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art');
+    await fx.p.submit('art', { type: 'notes', text: 'same MARK-SAME', pinned: true });
+    const b = await brief(fx.p, 'art');
+    await fx.p.submit('art', { type: 'notes', text: 'same MARK-SAME', pinned: true });
+    const c = await brief(fx.p, 'art');
+    expect(appended(a, b, 'workspace')).toBe('# Your notes — updates\n\nPinned:\n- same MARK-SAME');
+    expect(appended(b, c, 'workspace')).toBe('# Your notes — updates\n\nPinned:\n- same MARK-SAME');
+    await setPinned(fx, 'art', ['same MARK-SAME']);
+    const d = await brief(fx.p, 'art');
+    expect(appended(c, d, 'workspace')).toBe('# Your notes — updates\n\nPinned:\nno longer: - same MARK-SAME');
+    const e = await brief(fx.p, 'art');
+    expect(kinds({ segments: addedOf(d, e) })).toEqual(['trigger']);
+  });
+
+  test('Focus 2: reordered items are not a change', async () => {
+    const fx = await streamProject();
+    await setPinned(fx, 'art', ['alpha', 'beta']);
+    const a = await brief(fx.p, 'art');
+    await setPinned(fx, 'art', ['beta', 'alpha']);
+    const b = await brief(fx.p, 'art');
+    expect(kinds({ segments: addedOf(a, b) })).toEqual(['trigger']);
+  });
+
+  test('Focus 2: several workstreams: grouped by part with the part in each heading; one item in two parts is two items', async () => {
+    const fx = await streamProject();
+    const art0 = await brief(fx.p, 'art');
+    const two = { workstreams: FIXTURE_PLAN.workstreams.map(x => (x.id === 'audio' ? { ...x, owner: 'art' } : x)), contracts: FIXTURE_PLAN.contracts };
+    await replan(fx, two);
+    const art1 = await brief(fx.p, 'art');
+    // art gains the audio part, whole
+    const gained = appended(art0, art1, 'projection')!;
+    expect(gained.startsWith('# Your part — updates\n\n(part audio)\naudio | Sound | art |')).toBe(true);
+    expect(gained).toContain('Brief:\nMake the sound.');
+    expect(gained).not.toContain('(part art)');
+
+    await fx.p.submit('pm', { type: 'proposal', ops: [decide('Shared MARK-SHARED', ['art', 'audio'])] });
+    await resolveAll(fx);
+    const art2 = await brief(fx.p, 'art');
+    const p2 = appended(art1, art2, 'projection')!;
+    expect(p2).toMatch(/## Decisions \(part art\)\n- \[d-\d+\] Shared MARK-SHARED\n {2}why: r\n {2}affects: art, audio/);
+    expect(p2).toMatch(/## Decisions \(part audio\)\n- \[d-\d+\] Shared MARK-SHARED \(seen\)/);
+    expect(p2.indexOf('(part art)')).toBeLessThan(p2.indexOf('(part audio)'));
+
+    await fx.p.submit('pm', { type: 'proposal', ops: [decide('Audio only MARK-AUDIO', ['audio'])] });
+    await resolveAll(fx);
+    const art3 = await brief(fx.p, 'art');
+    const p3 = appended(art2, art3, 'projection')!;
+    expect(p3).toMatch(/^# Your part — updates\n\n## Decisions \(part audio\)\n- \[d-\d+\] Audio only MARK-AUDIO\n/);
+    expect(p3).not.toContain('(part art)');
+
+    // art loses the audio part again: one line for the whole part
+    await replan(fx, FIXTURE_PLAN);
+    const art4 = await brief(fx.p, 'art');
+    expect(appended(art3, art4, 'projection')).toMatch(/^# Your part — updates\n\n\(part audio\)\nno longer: audio \| Sound \| art \| \w+$/);
+  });
+
+  test('Focus 2: seen compaction is not a change; a new contract version is appended in full', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art');
+    expect(a.segments[4]!.text).toContain('- [c1@v1] art -> logic: PNG sprite sheets, 16x16 tiles');
+    await fx.p.callTool('art', 'getBoardItem', { id: 'c1@1' }).catch(() => undefined); // acting confirms the items shown as seen
+    const peek = await fx.p.buildBrief('art', { maxTokens: MAX, peek: true });
+    expect(peek.segments.find(s => s.kind === 'projection')!.text).toContain('- [c1@v1] art -> logic (seen)');
+    const b = await brief(fx.p, 'art');
+    expect(kinds({ segments: addedOf(a, b) })).not.toContain('projection');
+    await fx.p.submit('pm', { type: 'proposal', ops: [{ op: 'updateContract', id: 'c1', spec: 'PNG 64x64 MARK-V2' }] });
+    await resolveAll(fx);
+    const c = await brief(fx.p, 'art');
+    expect(appended(b, c, 'projection')).toBe('# Your part — updates\n\n## Contracts (part art)\n- [c1@v2] art -> logic: PNG 64x64 MARK-V2');
+  });
+
+  test('a new upstream deliverable appends only its line; the older version is not "no longer"', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'logic');
+    await fx.p.submit('art', { type: 'deliverable', workstreamId: 'art', summary: 'sheet MARK-D1', content: 'PNG' });
+    const b = await brief(fx.p, 'logic');
+    expect(appended(a, b, 'projection')).toMatch(/^# Your part — updates\n\n## Upstream deliverables \(part logic\)\n- art delivered v1: sheet MARK-D1 \(ref: [^)]+\)$/);
+    await fx.p.submit('art', { type: 'deliverable', workstreamId: 'art', summary: 'sheet MARK-D2', content: 'PNG 2' });
+    const c = await brief(fx.p, 'logic');
+    const p = appended(b, c, 'projection')!;
+    expect(p).toMatch(/^# Your part — updates\n\n## Upstream deliverables \(part logic\)\n- art delivered v2: sheet MARK-D2 \(ref: [^)]+\)$/);
+  });
+
+  test('a removed pinned note and a removed projection item get one "no longer"; a workstream field too', async () => {
+    const fx = await streamProject();
+    await fx.p.submit('pm', { type: 'proposal', ops: [decide('Old MARK-OLD', ['art'])] });
+    await resolveAll(fx);
+    await setPinned(fx, 'art', ['gone MARK-GONE', 'stays']);
+    const a = await brief(fx.p, 'art');
+    const old = (await fx.p.board()).decisions.find(d => d.text.includes('MARK-OLD'))!.id;
+    await setPinned(fx, 'art', ['stays']);
+    await fx.p.submit('pm', { type: 'proposal', ops: [{ op: 'supersede', section: 'decisions', id: old, item: { text: 'New MARK-NEW', source: { entryIds: [], by: 'pm' }, affects: ['logic'] } }] });
+    await resolveAll(fx);
+    const b = await brief(fx.p, 'art');
+    expect(appended(a, b, 'workspace')).toBe('# Your notes — updates\n\nPinned:\nno longer: - gone MARK-GONE');
+    expect(appended(a, b, 'projection')).toBe(`# Your part — updates\n\n## Decisions (part art)\nno longer: - [${old}] Old MARK-OLD`);
+    // logic loses its dependency on art: the field is gone (and logic can start)
+    const l0 = await brief(fx.p, 'logic');
+    await replan(fx, { workstreams: FIXTURE_PLAN.workstreams.map(x => (x.id === 'logic' ? { ...x, dependsOn: [] } : x)), contracts: FIXTURE_PLAN.contracts });
+    const l1 = await brief(fx.p, 'logic');
+    expect(appended(l0, l1, 'projection')).toBe('# Your part — updates\n\n(part logic)\nlogic | Gameplay | logic | active\nno longer: depends on: art');
+  });
+
+  test('notes rolling out of the Recent window, or trimmed to fit the budget, are not "no longer" and are not repeated', async () => {
+    const fx = await streamProject({}, { options: { recentKeep: 2, notesMaxTokens: 10 } });
+    let prev = await brief(fx.p, 'art');
+    const updates: string[] = [];
+    for (let i = 1; i <= 4; i++) {
+      await fx.p.submit('art', { type: 'notes', text: `note ${i} MARK-N${i}` });
+      const now = await brief(fx.p, 'art');
+      updates.push(appended(prev, now, 'workspace')!);
+      prev = now;
+    }
+    expect(updates).toEqual([1, 2, 3, 4].map(i => `# Your notes — updates\n\nRecent:\n- note ${i} MARK-N${i}`));
+    // budget trimming: the tight request drops a recent note from the brief; nothing is retracted, and it is not repeated later
+    const t = { reason: 'manual' as const, detail: 'go' };
+    const full = (await fx.p.buildBrief('art', { maxTokens: MAX, peek: true, trigger: t })).stats.total;
+    const tight = await fx.p.buildStream('art', { maxTokens: full - 1, trigger: t });
+    const trimmed = await fx.p.buildBrief('art', { maxTokens: full - 1, peek: true, trigger: t });
+    expect(trimmed.segments.find(s => s.kind === 'workspace')!.text).not.toContain('MARK-N3');
+    expect(kinds({ segments: addedOf(prev, tight) })).toEqual(['trigger']);
+    const again = await brief(fx.p, 'art');
+    expect(kinds({ segments: addedOf(tight, again) })).toEqual(['trigger']);
+  });
+
+  test('the summary is replaced whole when condensing changes it', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art');
+    const w = (await fx.store.getWorkspace(fx.projectId, 'art'))!;
+    await fx.store.saveWorkspace({ ...w, condensed: 'line one\nline two MARK-SUM' });
+    const b = await brief(fx.p, 'art');
+    expect(appended(a, b, 'workspace')).toBe('# Your notes — updates\n\nSummary:\nline one\nline two MARK-SUM');
+  });
+});
+
+describe('sectionUpdate (pure)', () => {
+  const part = (leaves: 'retract' | 'roll' | 'replace', texts: string[], heading = 'Recent:') => [
+    { part: null, groups: [{ heading, leaves, items: texts.map(t => ({ key: t, text: `- ${t}`, full: `- ${t}` })) }] },
+  ];
+  const step = (leaves: 'retract' | 'roll' | 'replace', a: string[], b: string[]) => {
+    const h = leaves === 'roll' ? 'Recent:' : 'Pinned:';
+    return sectionUpdate('# Your notes', knownOf(part(leaves, a, h)), part(leaves, b, h));
+  };
+
+  test('a window: an equal note written again is new; what rolled out stays known', () => {
+    expect(step('roll', ['a', 'b'], ['b', 'a']).text).toBe('# Your notes — updates\n\nRecent:\n- a');
+    expect(step('roll', ['a', 'b', 'c'], ['c']).text).toBeNull();
+    const r = step('roll', ['a', 'b', 'c'], ['c']);
+    expect(sectionUpdate('# Your notes', r.known, part('roll', ['b', 'c', 'd'])).text).toBe('# Your notes — updates\n\nRecent:\n- d');
+    // an edited note in the middle of the window: only the new text
+    expect(step('roll', ['a', 'b', 'c'], ['a', 'B', 'c']).text).toBe('# Your notes — updates\n\nRecent:\n- B');
+  });
+
+  test('a retracting list: duplicates count, reordering is nothing, removal says "no longer" once per item', () => {
+    expect(step('retract', ['x', 'x', 'y'], ['y', 'x', 'x']).text).toBeNull();
+    expect(step('retract', ['x', 'x', 'y'], ['x', 'y']).text).toBe('# Your notes — updates\n\nPinned:\nno longer: - x');
+    expect(step('retract', ['x'], ['x', 'x']).text).toBe('# Your notes — updates\n\nPinned:\n- x');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2 carry-overs
+// ---------------------------------------------------------------------------
+
+describe('carry-overs', () => {
+  test('snapshotHumanKeep 0 folds every human message in a snapshot', async () => {
+    expect(resolveStreamOptions({ snapshotHumanKeep: 0 }).snapshotHumanKeep).toBe(0);
+    const fx = await streamProject({ snapshotHumanKeep: 0 });
+    await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: `hi MARK-0 ${'q'.repeat(200)} TAIL-0` });
+    const board = (await brief(fx.p, 'art')).segments[3]!.text;
+    expect(board).toContain('## Earlier human messages (first 160 characters each)\n- [#');
+    expect(board).toContain('MARK-0');
+    expect(board).not.toContain('TAIL-0');
+    expect(board.endsWith('## Human messages\n(nothing yet)')).toBe(true);
+  });
+
+  test('a snapshot keeps in the delta the human messages it folds', async () => {
+    const fx = await streamProject({ snapshotHumanKeep: 1, restreamTokens: 50 });
+    await brief(fx.p, 'pm');
+    await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: `first MARK-F1 ${'v'.repeat(200)} TAIL-F1` });
+    await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'second MARK-F2' });
+    await fx.p.recordOwnOutput('pm', 'x '.repeat(400));
+    const b = await brief(fx.p, 'pm');
+    expect(b.snapshot).toBe(true);
+    expect(b.segments[3]!.text).not.toContain('TAIL-F1');
+    const delta = b.segments.find(s => s.kind === 'delta')!.text;
+    expect(delta).toContain('TAIL-F1');
+    expect(delta).not.toContain('MARK-F2');
+    expect(occurrences(all(b), 'MARK-F2')).toBe(1);
+  });
+
+  test('a workstream a replan removes is "removed from the board" in project updates', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art');
+    await replan(fx, { workstreams: FIXTURE_PLAN.workstreams.filter(w => w.id !== 'audio'), contracts: FIXTURE_PLAN.contracts });
+    const b = await brief(fx.p, 'art');
+    expect(appended(a, b, 'updates')).toContain('## Workstreams\n- workstream audio removed from the board');
+  });
+
+  test('a failing stream store read leaves no side effect (state and messages are read before the brief runs)', async () => {
+    const base = memoryStore({ newId: ids() });
+    let fail = false;
+    const store = new Proxy(base, {
+      get(t, k, r) {
+        if (k === 'getMeta') {
+          return async (pid: string, key: string) => {
+            if (fail && key.startsWith('stream:')) throw new Error('disk MARK-FAIL');
+            return t.getMeta(pid, key);
+          };
+        }
+        const v = Reflect.get(t, k, r);
+        return typeof v === 'function' ? v.bind(t) : v;
+      },
+    });
+    const fx = await makeProject({ approved: true, store, stream: on() });
+    await brief(fx.p, 'art');
+    await fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'art please MARK-X' });
+    const before = await fx.store.getWorkspace('p1', 'art');
+    fail = true;
+    await expect(brief(fx.p, 'art')).rejects.toThrow('MARK-FAIL');
+    expect(await fx.store.getWorkspace('p1', 'art')).toEqual(before);
+  });
+
+  test('concurrent buildStream and recordOwnOutput calls are serialized in call order', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art', '0');
+    const [b1, , b2, , b3] = await Promise.all([
+      brief(fx.p, 'art', '1'),
+      fx.p.recordOwnOutput('art', 'own one'),
+      brief(fx.p, 'art', '2'),
+      fx.p.recordOwnOutput('art', 'own two'),
+      brief(fx.p, 'art', '3'),
+    ]);
+    const bs = [a, b1, b2, b3] as StreamBundle[];
+    for (let i = 1; i < bs.length; i++) expect(isPrefix(texts(bs[i - 1]!), texts(bs[i]!))).toBe(true);
+    expect(addedOf(a, b3!).map(s => [s.kind, s.text])).toEqual([
+      ['trigger', '# Why you are awake\n\nreason: manual\n1'],
+      ['own', 'own one'],
+      ['trigger', '# Why you are awake\n\nreason: manual\n2'],
+      ['own', 'own two'],
+      ['trigger', '# Why you are awake\n\nreason: manual\n3'],
+    ]);
   });
 });
 
@@ -489,6 +787,15 @@ describe('invariants', () => {
       for (const w of board.workstreams) expect(text).toContain(`- ${w.id} | ${w.title} | ${w.owner} | ${w.status}`);
       for (const e of await fx.store.read('p1', 1)) {
         if (e.author.kind === 'human' && e.body.type === 'chat') expect(text).toContain(e.body.text);
+      }
+      // the bot's own items: every note, and the latest deliverable of each upstream workstream
+      const ws = await fx.store.getWorkspace('p1', owner!);
+      for (const n of [...(ws?.pinnedNotes ?? []), ...splitParagraphs(ws?.notes ?? '')]) expect(text).toContain(`- ${n}`);
+      for (const w of board.workstreams.filter(x => x.owner === owner)) {
+        for (const dep of board.workstreams.filter(x => w.dependsOn.includes(x.id))) {
+          const d = dep.deliverables.at(-1);
+          if (d) expect(text).toContain(`- ${dep.id} delivered v${d.version}: ${d.summary} (ref: ${d.ref})`);
+        }
       }
     }
     expect(appends).toBeGreaterThan(30);

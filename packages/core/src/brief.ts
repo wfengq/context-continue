@@ -8,6 +8,7 @@ import type { Options } from './options.js';
 import { isHumanChat, publicBoardView, type PublicBoardSwitches } from './publicBoard.js';
 import {
   itemKey,
+  memoryItems,
   renderBoardPublic,
   renderDelta,
   renderMemory,
@@ -15,6 +16,8 @@ import {
   renderTrigger,
   renderWorkspace,
   untrimmedKeeps,
+  workspaceItems,
+  type ItemPart,
   type Projection,
 } from './render.js';
 import type { ContextTrigger } from './contexts.js';
@@ -257,12 +260,19 @@ export interface BriefDelta {
   omitted: number;
 }
 
-/** buildBrief, plus the structured delta (the stream re-renders it without the human messages it carries). */
+/** The items of the memory, notes and projection segments a brief shows (as trimmed to its budget). */
+export interface BriefItems {
+  memory: ItemPart[];
+  workspace: ItemPart[];
+  projection: ItemPart[];
+}
+
+/** buildBrief, plus the structured delta and own items (the stream renders its appends from them). */
 export async function buildBriefParts(
   deps: BriefDeps,
   botId: string,
   opts: BriefOptions,
-): Promise<{ bundle: ContextBundle; delta: BriefDelta }> {
+): Promise<{ bundle: ContextBundle; delta: BriefDelta; items: BriefItems }> {
   const { store, projectId } = deps;
   const board = await store.getBoard(projectId);
   const workstreams = await resolveWorkstreams(board, deps.source);
@@ -289,9 +299,11 @@ export async function buildBriefParts(
   const seen = new Set(workspace.seenItemIds);
   const shown: string[] = [];
   const blocks: string[] = [];
+  const projectionParts: ItemPart[] = [];
   for (const p of selectProjections(board, workstreams, botId, writeScopeOverlaps(workstreams))) {
     const r = renderProjection(p, seen, deps.publicBoard);
     blocks.push(r.text);
+    projectionParts.push(r.items);
     for (const k of r.shownKeys) seen.add(k);
     shown.push(...r.shownKeys);
   }
@@ -390,5 +402,6 @@ export async function buildBriefParts(
       changes: kept.flatMap(d => ('change' in d ? [d.change] : [])),
       omitted,
     },
+    items: { memory: memoryItems(memory, memKeep), workspace: workspaceItems(workspace, notesKeep), projection: projectionParts },
   };
 }

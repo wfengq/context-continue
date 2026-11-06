@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { structuralWakes, writeScopeOverlaps } from './board/diff.js';
 import { Merger, type MergeResult } from './board/merge.js';
-import { buildBrief as assembleBrief, buildBriefParts, confirmSeen, discardPendingSeen as discardPendingSeenOf, type BriefDeps, type BriefOptions } from './brief.js';
+import { buildBrief as assembleBrief, buildBriefParts, confirmSeen, discardPendingSeen as discardPendingSeenOf, type BriefDelta, type BriefDeps, type BriefOptions } from './brief.js';
 import { systemClock, type Clock } from './clock.js';
 import type { CondenseFn } from './condense.js';
 import { findDeliverable, planningContext, retroContext, reviewContext, type ContextDeps, type ContextTrigger, type PlanMeta } from './contexts.js';
@@ -19,7 +19,7 @@ import { isHumanChat, resolvePublicBoard, type PublicBoardSwitches } from './pub
 import { diffPlan, type ApprovedPlan, type PlanWorkstream } from './plan/replan.js';
 import { validatePlan, type PlanInput } from './plan/validate.js';
 import { addMemories, appendNote, type PrivateDeps } from './private.js';
-import { renderBoardPublic, renderDelta } from './render.js';
+import { renderBoardPublic } from './render.js';
 import { retryingStore, withRetry } from './retry.js';
 import { humanChain, routeChat, toLedgerEntry, unrootedSinceProgress, type RouteInput } from './route.js';
 import type { Store } from './store/store.js';
@@ -846,28 +846,29 @@ export function createProject(cfg: ProjectConfig): Project {
   }
 
   /**
-   * Stream on, inside the queue. A brief request runs the brief exactly as buildBrief does; its delta
-   * is re-rendered without human messages (the stream carries every one). A review or planning
-   * request runs the context exactly as the existing method does, and takes the bot's own segments
+   * Stream on, inside the queue. A brief request runs the brief exactly as buildBrief does; the
+   * stream re-renders its delta without the human messages it carries. A review or planning request
+   * runs the context exactly as the existing method does, and takes the bot's own segments and items
    * from a peek brief (no side effects) so they compare with what its briefs show.
    */
   async function streamed(botId: string, o: StreamBuildOptions, req: StreamRequest): Promise<StreamBundle> {
+    // Read the stream's own inputs first, so a failing read leaves no side effect behind.
+    const prev = await loadStreamState(store, projectId, botId);
+    const humans = (await store.read(projectId, 1)).filter(isHumanChat);
     const board = await getBoard();
     const ws = await workstreamsOf(board);
     const trigger = o.trigger === undefined ? {} : { trigger: o.trigger };
     let base: ContextBundle;
-    let ownFrom: ContextBundle;
+    let own: Awaited<ReturnType<typeof buildBriefParts>>;
+    let delta: BriefDelta | undefined;
     const tail: { kind: StreamSegmentKind; text: string }[] = [];
     if (req.kind === 'brief') {
-      const r = await buildBriefParts(briefDeps, botId, { maxTokens: o.maxTokens, ...trigger });
-      base = ownFrom = r.bundle;
-      const entries = r.delta.entries.filter(e => !isHumanChat(e));
-      if (entries.length + r.delta.changes.length + r.delta.omitted > 0) {
-        tail.push({ kind: 'delta', text: renderDelta(entries, r.delta.changes, r.delta.omitted) });
-      }
+      own = await buildBriefParts(briefDeps, botId, { maxTokens: o.maxTokens, ...trigger });
+      base = own.bundle;
+      delta = own.delta;
       for (const s of base.segments) if (s.kind === 'trigger') tail.push(s);
     } else {
-      ownFrom = (await buildBriefParts(briefDeps, botId, { maxTokens: o.maxTokens, peek: true })).bundle;
+      own = await buildBriefParts(briefDeps, botId, { maxTokens: o.maxTokens, peek: true });
       await discardPendingSeen(board.lead);
       base =
         req.kind === 'review'
@@ -875,15 +876,15 @@ export function createProject(cfg: ProjectConfig): Project {
           : await planningContext(contextDeps, board, ws, o.trigger);
       for (const s of base.segments) if (s.kind === 'projection' || s.kind === 'trigger') tail.push(s);
     }
-    const ownText = (k: 'common' | 'memory' | 'workspace' | 'projection') => ownFrom.segments.find(s => s.kind === k)?.text ?? '';
-    const humans = (await store.read(projectId, 1)).filter(isHumanChat);
-    const prev = await loadStreamState(store, projectId, botId);
+    const ownText = (k: 'common' | 'memory' | 'workspace' | 'projection') => own.bundle.segments.find(s => s.kind === k)?.text ?? '';
     const r = streamRequest(
       prev,
       {
         board: { ...board, workstreams: ws },
         humans,
         own: { common: ownText('common'), memory: ownText('memory'), workspace: ownText('workspace'), projection: ownText('projection') },
+        items: own.items,
+        ...(delta === undefined ? {} : { delta }),
         tail,
       },
       streamConfig,

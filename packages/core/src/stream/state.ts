@@ -3,20 +3,24 @@
 // each stream as an append rather than a garbled prefix.
 import type { Store } from '../store/store.js';
 import type { StreamSegmentKind } from '../types.js';
+import type { KnownPart } from './diff.js';
 
 /** The project-wide board sections a stream carries, in render order. */
 export const BOARD_SECTIONS = ['Goal', 'Constraints', 'Conventions', 'Contracts', 'Decisions', 'Failures', 'Workstreams'] as const;
 export type BoardSection = (typeof BOARD_SECTIONS)[number];
 
-/** The bot's own segments: whole in a snapshot, appended again whole when their text changes. */
+/** The bot's own segments: whole in a snapshot; the team appended again whole when it changes, the others item by item. */
 export const OWN_KINDS = ['common', 'memory', 'workspace', 'projection'] as const;
 export type OwnKind = (typeof OWN_KINDS)[number];
+/** The own segments compared item by item. */
+export const ITEM_KINDS = ['memory', 'workspace', 'projection'] as const;
+export type ItemKind = (typeof ITEM_KINDS)[number];
 
 /** Ordered (key, rendered text) pairs: ids, not object keys, so the order never depends on what the ids look like. */
 export type Shown = [key: string, text: string][];
 
 export interface StreamState {
-  version: 1;
+  version: 2;
   /** Every segment this stream returned (and the own outputs recorded since), in order; all cacheable. */
   segments: { kind: StreamSegmentKind; text: string }[];
   /** Tokens appended since the latest snapshot (that snapshot's own request part included). */
@@ -27,8 +31,10 @@ export interface StreamState {
   retired: Shown;
   /** Seq of the newest human message this stream carries (0: none). */
   humanSeq: number;
-  /** The latest text of each own segment in this stream. */
-  own: Partial<Record<OwnKind, string>>;
+  /** The latest team segment text in this stream. */
+  common: string;
+  /** Per item-level own segment: its items as this stream shows them, per part and heading. */
+  own: Record<ItemKind, KnownPart[]>;
 }
 
 export const streamKey = (botId: string) => `stream:${botId}`;
@@ -36,7 +42,7 @@ export const streamKey = (botId: string) => `stream:${botId}`;
 /** The bot's stream state, or null when it has none yet (or an unknown version: the next request is a snapshot). */
 export async function loadStreamState(store: Store, projectId: string, botId: string): Promise<StreamState | null> {
   const s = await store.getMeta<StreamState>(projectId, streamKey(botId));
-  return s !== null && s.version === 1 ? s : null;
+  return s !== null && s.version === 2 ? s : null;
 }
 
 export function saveStreamState(store: Store, projectId: string, botId: string, state: StreamState): Promise<void> {
