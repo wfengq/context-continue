@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { LedgerEntry, ProjectBoard } from '@context-continue/core';
-import { briefStream, DEFAULT_RESTREAM_TOKENS, type CoreSegment, type StreamSegment } from '../src/policies/stream.js';
+import { briefStream, DEFAULT_RESTREAM_TOKENS, sectionUpdate, type CoreSegment, type StreamSegment } from '../src/policies/stream.js';
 import { projectPolicy } from '../src/policies/project.js';
 import { createPolicy } from '../src/policies/index.js';
 import { runScenario } from '../src/runner.js';
@@ -186,8 +186,8 @@ describe('briefStream', () => {
     expect(isPrefix(texts(r2.segments), texts(r3.segments))).toBe(true);
     const a3 = r3.segments.slice(r2.segments.length);
     expect(kinds(a3)).toEqual(['workspace', 'projection', 'delta', 'trigger']);
-    expect(a3[0]!.text).toBe('# Your notes — updates\n\n- n2 MARK-PIN');
-    expect(a3[1]!.text).toBe('# Your part — updates\n\n## Upstream deliverables\n- logic delivered v1: rules MARK-UP (ref: r1)');
+    expect(a3[0]!.text).toBe('# Your notes — updates\n\nPinned:\n- n2 MARK-PIN');
+    expect(a3[1]!.text).toBe('# Your part — updates\n\n## Upstream deliverables (part art)\n- logic delivered v1: rules MARK-UP (ref: r1)');
     // seen compaction: the decision becomes its "(seen)" form: nothing appended
     const p4 = part('- [dec-1] Use canvas for every sprite (seen)', '- [fact-1] Palette has 16 colours (seen)', '- logic delivered v1: rules MARK-UP (ref: r1)');
     const r4 = s.request('art', { core: core('Pinned:\n- n1\n- n2 MARK-PIN', p4), shape: 'brief', board: board(), humans: [] });
@@ -197,7 +197,7 @@ describe('briefStream', () => {
     const r5 = s.request('art', { core: core('Pinned:\n- n1\n- n2 MARK-PIN', p5), shape: 'brief', board: board(), humans: [] });
     const a5 = r5.segments.slice(r4.segments.length);
     expect(kinds(a5)).toEqual(['projection', 'delta', 'trigger']);
-    expect(a5[0]!.text).toBe('# Your part — updates\n\nreview rounds: 1\n\n## Facts\nno longer: - [fact-1] Palette has 16 colours (seen)');
+    expect(a5[0]!.text).toBe('# Your part — updates\n\n(part art)\nreview rounds: 1\n\n## Facts (part art)\nno longer: - [fact-1] Palette has 16 colours (seen)');
     // a context request: its projection segment is the body; memory is still diffed
     const ctx = context('BODY', 'review').map(x => (x.kind === 'workspace' ? { ...x, text: '# Your notes\n\nPinned:\n- n1\n- n2 MARK-PIN' } : x.kind === 'memory' ? { ...x, text: '# Your memory\n\nart\nMARK-MEM' } : x));
     const r6 = s.request('art', { core: ctx, shape: 'context', board: board(), humans: [] });
@@ -206,6 +206,21 @@ describe('briefStream', () => {
     expect(a6[0]!.text).toBe('# Your memory — updates\n\nMARK-MEM');
     const r7 = s.request('art', { core: core('Pinned:\n- n1\n- n2 MARK-PIN', p5, 'art\nMARK-MEM'), shape: 'brief', board: board(), humans: [] });
     expect(kinds(r7.segments.slice(r6.segments.length))).toEqual(['delta', 'trigger']);
+  });
+
+  test('R-S2: a bot owning two workstreams: updates are filed under their own part; a line new in one part is not a duplicate of the other', () => {
+    const block = (ws: string, dep: string, upstream: string) =>
+      ['# Your part', '', `${ws} | ${ws} | api | active`, 'Brief:', `do ${ws}`, ...(dep ? [`depends on: ${dep}`] : []), 'review rounds: 0', '', '## Upstream deliverables', upstream, '', '## Overlaps', '(nothing yet)'].join('\n');
+    const before = [block('api', 'db', '(nothing yet)'), block('jobs', '', '(nothing yet)')].join('\n\n');
+    const now = [block('api', 'db', '(nothing yet)'), block('jobs', 'db', '- db delivered v1: schema MARK-DB (ref: r)')].join('\n\n');
+    expect(sectionUpdate(before, now)).toBe('# Your part — updates\n\n(part jobs)\ndepends on: db\n\n## Upstream deliverables (part jobs)\n- db delivered v1: schema MARK-DB (ref: r)');
+    expect(sectionUpdate(now, now)).toBeNull();
+  });
+
+  test('R-S2: a note rolling out of the Recent window is not a retraction; a removed pinned note is', () => {
+    const notes = (pinned: string[], recent: string[]) => ['# Your notes', '', 'Pinned:', ...pinned.map(p => `- ${p}`), 'Recent:', ...recent.map(p => `- ${p}`)].join('\n');
+    expect(sectionUpdate(notes(['p1'], ['r1', 'r2']), notes(['p1'], ['r2', 'r3']))).toBe('# Your notes — updates\n\nRecent:\n- r3');
+    expect(sectionUpdate(notes(['p1', 'p2'], ['r1']), notes(['p1'], ['r1']))).toBe('# Your notes — updates\n\nPinned:\nno longer: - p2');
   });
 
   test('Focus 3: once more than restreamTokens were appended since the snapshot, the next request is a new, complete snapshot', () => {
