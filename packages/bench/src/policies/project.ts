@@ -185,12 +185,18 @@ export function projectPolicy(
       if (e.author.kind === 'human' && e.body.type === 'chat') humans.push(e);
     }
     const board = await project!.board();
-    // A snapshot on a review or planning request takes the bot's projection from a peek brief (no side effects).
-    const projection =
-      shape === 'context' && streams.needsSnapshot(botId)
-        ? (await project!.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, peek: true })).segments.find(x => x.kind === 'projection')?.text
-        : undefined;
-    return streams.request(botId, { core: b.segments, shape, board, humans, ...(projection === undefined ? {} : { projection }) }).segments;
+    // A snapshot on a review or planning request takes the bot's memory, notes and projection from one
+    // peek brief (no side effects), so they sit in the snapshot as a brief would show them.
+    let peek: { memory?: string; workspace?: string; projection?: string } | undefined;
+    if (shape === 'context' && streams.needsSnapshot(botId)) {
+      const segs = (await project!.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, peek: true })).segments;
+      peek = {};
+      for (const k of ['memory', 'workspace', 'projection'] as const) {
+        const text = segs.find(x => x.kind === k)?.text;
+        if (text !== undefined) peek[k] = text;
+      }
+    }
+    return streams.request(botId, { core: b.segments, shape, board, humans, ...(peek === undefined ? {} : { peek }) }).segments;
   }
 
   /**

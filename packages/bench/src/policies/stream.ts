@@ -34,10 +34,12 @@ export interface StreamInput {
   /** Every human chat entry so far, in ledger order. */
   humans: readonly LedgerEntry[];
   /**
-   * `context` shape only: the bot's projection from a peek brief, for a snapshot (the core builds no
-   * projection for a review or planning context). See `needsSnapshot`.
+   * `context` shape, snapshot only: the bot's memory, notes and projection from a peek brief (the core
+   * builds no projection for a review or planning context, and renders that context's memory and notes
+   * untrimmed), so the snapshot holds them as a brief would and the next brief diffs against them.
+   * See `needsSnapshot`.
    */
-  projection?: string;
+  peek?: { memory?: string; workspace?: string; projection?: string };
 }
 
 /** The bot's own segments: whole in a snapshot; afterwards their changed lines are appended (R-S1, R-S2). */
@@ -238,18 +240,20 @@ export function briefStream(opts: { restreamTokens: number; count: (text: string
       const byKind = (k: string) => r.core.find(s => s.kind === k);
       const items = projectWide(r.board);
       // The bot's own segments in this request: a context's projection segment is its body, not a projection.
-      const own = new Map<string, string>();
-      for (const k of OWN) {
-        const text = k === 'projection' && r.shape === 'context' ? r.projection : byKind(k)?.text;
-        if (text !== undefined) own.set(k, text);
-      }
       let st = streams.get(botId);
       const snapshot = needsSnapshot(botId);
+      // A context snapshot takes all three from the peek brief; otherwise a context's memory and notes are its own.
+      const fromPeek = (k: (typeof OWN)[number]) => (r.shape === 'context' && (k === 'projection' || snapshot) ? r.peek?.[k] : byKind(k)?.text);
+      const own = new Map<string, string>();
+      for (const k of OWN) {
+        const text = fromPeek(k);
+        if (text !== undefined) own.set(k, text);
+      }
       const added: StreamSegment[] = [];
       if (snapshot) {
-        const head = ['common', 'memory', 'workspace'].flatMap(k => {
-          const s = byKind(k);
-          return s ? [seg(k, s.text)] : [];
+        const head = (['common', 'memory', 'workspace'] as const).flatMap(k => {
+          const text = k === 'common' ? byKind(k)?.text : own.get(k);
+          return text !== undefined ? [seg(k, text)] : [];
         });
         head.push(seg('board', renderSnapshotBoard(items, r.humans)));
         const projection = own.get('projection');

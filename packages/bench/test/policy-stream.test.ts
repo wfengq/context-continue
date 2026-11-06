@@ -152,17 +152,27 @@ describe('briefStream', () => {
     expect(isPrefix(texts(r3.segments), texts(r4.segments))).toBe(true);
   });
 
-  test('a snapshot on a review or planning request takes the projection the host passes (a peek brief), then the body', () => {
+  test('a snapshot on a review or planning request takes memory, notes and projection from the peek brief the host passes, then the body', () => {
     const s = briefStream(big);
     expect(s.needsSnapshot('pm')).toBe(true);
-    const r = s.request('pm', { core: context('BODY', 'review'), shape: 'context', board: board(), humans: [], projection: '# Your part\n\npm part' });
+    // the context's own memory and notes (untrimmed, as the core renders them for a lead context) differ from the brief's
+    const ctx = context('BODY', 'review').map(x =>
+      x.kind === 'memory' ? { ...x, text: '# Your memory\n\npm\nCTX-ONLY-MEM' } : x.kind === 'workspace' ? { ...x, text: '# Your notes\n\nRecent:\n- old CTX-ONLY-NOTE\n- n1' } : x,
+    );
+    const peek = { memory: '# Your memory\n\npm', workspace: '# Your notes\n\nRecent:\n- n1', projection: '# Your part\n\npm part' };
+    const r = s.request('pm', { core: ctx, shape: 'context', board: board(), humans: [], peek });
     expect(r.snapshot).toBe(true);
     expect(kinds(r.segments)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'projection', 'trigger']);
+    expect(texts(r.segments).slice(1, 3)).toEqual([peek.memory, peek.workspace]);
     expect(r.segments[4]!.text).toBe('# Your part\n\npm part');
     expect(r.segments[5]!.text).toBe('BODY');
+    expect(all(r.segments)).not.toContain('CTX-ONLY');
     expect(s.needsSnapshot('pm')).toBe(false);
-    // the next brief compares its projection with the peeked one: unchanged, so nothing re-appended
-    const r2 = s.request('pm', { core: brief('pm', '- d', 't'), shape: 'brief', board: board(), humans: [] });
+    // the next brief compares its memory, notes and projection with the peeked ones: unchanged, so nothing re-appended
+    const next = brief('pm', '- d', 't').map(x =>
+      x.kind === 'memory' ? { ...x, text: peek.memory } : x.kind === 'workspace' ? { ...x, text: peek.workspace } : x.kind === 'projection' ? { ...x, text: peek.projection } : x,
+    );
+    const r2 = s.request('pm', { core: next, shape: 'brief', board: board(), humans: [] });
     expect(kinds(r2.segments.slice(r.segments.length))).toEqual(['delta', 'trigger']);
   });
 
@@ -335,7 +345,7 @@ describe('group C with --c-stream on', () => {
     expect(snapshots).toBeGreaterThan(0);
   });
 
-  test('a restream landing on a review or replan carries the lead projection from a peek brief; the core is driven the same', async () => {
+  test('a restream landing on a review or replan carries the lead memory, notes and projection from a peek brief; the core is driven the same', async () => {
     const off = await runC('long-app');
     const { seen, records, stats } = await runC('long-app', { restreamTokens: 300 });
     expect(records.map(r => [r.botId, r.kind, r.step])).toEqual(off.records.map(r => [r.botId, r.kind, r.step]));
@@ -347,6 +357,8 @@ describe('group C with --c-stream on', () => {
       const p = prev.get(req.botId);
       prev.set(req.botId, t);
       if (p === undefined || isPrefix(p, t)) continue;
+      expect(t[1]!.startsWith('# Your memory')).toBe(true);
+      expect(t[2]!.startsWith('# Your notes')).toBe(true);
       expect(t[4]!.startsWith('# Your part')).toBe(true);
       const body = t.at(-2)!;
       if (body.startsWith('# Plan the project') || body.includes('## Content to review')) onContext++;
