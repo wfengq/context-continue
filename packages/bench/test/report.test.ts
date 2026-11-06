@@ -89,6 +89,20 @@ describe('renderReport', () => {
     );
   });
 
+  test('stream mode: the cacheable caveat drops the core-flag clause and the upper-bound sentence, and says the prefix rule alone decides for C', () => {
+    const plain = "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.";
+    for (const cStream of ['on (restreamTokens 8000)', 'on (restreamTokens 8000, own outputs)']) {
+      const md = renderReport(all(), { ...meta, cStream });
+      expect(md).not.toContain('in C a segment must also be flagged');
+      expect(md).not.toContain('upper-bound line shows');
+      expect(md.split('\n')).toContain(
+        "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); with --c-stream on every C stream segment counts as flagged cacheable, so this prefix rule alone decides for C too.",
+      );
+    }
+    expect(renderReport(all(), { ...meta, cStream: 'off' }).split('\n')).toContain(plain);
+    expect(renderReport(all(), meta).split('\n')).toContain(plain);
+  });
+
   test('caveats: one cacheable rule, F pages only, references for C/D/E reviewers, goal and constraints (final fixes)', () => {
     const lines = renderReport(all(), meta).split('\n');
     for (const l of [

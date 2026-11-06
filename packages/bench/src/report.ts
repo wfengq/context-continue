@@ -154,6 +154,8 @@ export function renderReport(
   const eInRun = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario));
   const eCompacted = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0);
   const hasXlong = tiersPresent.includes('xlong');
+  const streamOn = meta.cStream !== undefined && meta.cStream !== 'off';
+  const ownOn = streamOn && meta.cStream!.includes('own outputs');
   out.push(
     '## Caveats', '',
     '- Results come from a scripted fake model; only context size is measured.',
@@ -171,7 +173,10 @@ export function renderReport(
         ? ["- E did not compact in this run: every scenario stayed below its compaction threshold (window x compact ratio); pass a smaller --window to see it."]
         : []),
     '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
-    "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give.",
+    "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); " +
+      (streamOn
+        ? 'with --c-stream on every C stream segment counts as flagged cacheable, so this prefix rule alone decides for C too.'
+        : "in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give."),
     "- F's context is the shared pages (project, current plan, one per delivered workstream) plus the bot's own history: there is no chat thread.",
     "- In D and E reviewers get a reference to the deliverable, not its text (in E only the author's chat message); a real reviewer would fetch the content with an extra tool call, which is not counted.",
     "- C's lead reviews with the core's review context (the deliverable's text and the reviewed workstream's contracts, conventions, decisions, facts and failures) and replans with its planning context (every human message so far and the previous plan); the host passes the core a trigger with the task line, merged wakes and pending tool results.",
@@ -201,8 +206,6 @@ export function renderReport(
   }
   // C's board keeps human messages only when the directives section is on (default, all, or a list containing it).
   const directivesOn = meta.cPublic === undefined || meta.cPublic === 'default' || meta.cPublic === 'all' || meta.cPublic.split(',').includes('directives');
-  const streamOn = meta.cStream !== undefined && meta.cStream !== 'off';
-  const ownOn = streamOn && meta.cStream!.includes('own outputs');
   if (streamOn) {
     out.push(
       "- C runs the --c-stream prototype: the core is driven as without it, but each bot's request is an append-only stream assembled by the bench. " +
