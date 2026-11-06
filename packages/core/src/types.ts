@@ -55,6 +55,8 @@ export interface ProjectBoard {
   conventions: Item[]; // naming, style, format rules everyone follows
   workstreams: Workstream[];
   contracts: Contract[];
+  /** Contracts a replan no longer contains (last version); absent on older boards. Not rendered. */
+  retiredContracts?: Contract[];
   decisions: Decision[];
   facts: Fact[];
   failures: Failure[]; // approaches that were tried and did not work

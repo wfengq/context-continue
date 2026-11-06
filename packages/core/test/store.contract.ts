@@ -341,6 +341,15 @@ export function runStoreContract(name: string, make: () => Promise<Store>): void
     expect((await s.getBoard('p2')).goal).toBe('ship it');
   });
 
+  test(`[${name}] board without retiredContracts loads; retiredContracts round-trips`, async () => {
+    const s = await make();
+    await s.createBoard(board('p1'));
+    expect((await s.getBoard('p1')).retiredContracts).toBeUndefined();
+    const c = { id: 'c1', from: 'a', to: 'b', spec: 's', version: 2 };
+    await s.saveBoard({ ...board('p1'), version: 1, retiredContracts: [c] }, 0, change(1));
+    expect((await s.getBoard('p1')).retiredContracts).toEqual([c]);
+  });
+
   test(`[${name}] deliverables round-trip by ref`, async () => {
     const s = await make();
     const r1 = await s.putDeliverable('p1', 'hello world');

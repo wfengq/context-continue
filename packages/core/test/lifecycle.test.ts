@@ -270,6 +270,25 @@ describe('execution and review', () => {
   });
 });
 
+describe('retired contracts', () => {
+  const plan2 = (contracts: typeof FIXTURE_PLAN.contracts) => ({ workstreams: FIXTURE_PLAN.workstreams, contracts });
+
+  test('a contract dropped by a replan keeps its last version in retiredContracts; re-adding removes it', async () => {
+    const fx = await makeProject({ approved: true });
+    expect((await fx.p.board()).retiredContracts ?? []).toEqual([]);
+    const a = await fx.p.proposePlan(plan2([]), { by: 'pm' });
+    await fx.p.approvePlan(a.proposalId, { by: 'alice' });
+    let b = await fx.p.board();
+    expect(b.contracts).toEqual([]);
+    expect(b.retiredContracts).toEqual([{ id: 'c1', from: 'art', to: 'logic', spec: 'PNG sprite sheets, 16x16 tiles', version: 1 }]);
+    const c = await fx.p.proposePlan(plan2(FIXTURE_PLAN.contracts), { by: 'pm' });
+    await fx.p.approvePlan(c.proposalId, { by: 'alice' });
+    b = await fx.p.board();
+    expect(b.contracts.map(x => x.id)).toEqual(['c1']);
+    expect(b.retiredContracts ?? []).toEqual([]);
+  });
+});
+
 describe('pending proposals', () => {
   test('setGoal from a bot becomes human-pending; owner resolves it', async () => {
     const fx = await makeProject({ approved: true });

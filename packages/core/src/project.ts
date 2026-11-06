@@ -543,6 +543,10 @@ export function createProject(cfg: ProjectConfig): Project {
         else Object.assign(row, structuredClone(w)); // the local source's own fields live here too
       }
       b.contracts = structuredClone(diff.contracts);
+      const kept = new Set(b.contracts.map(c => c.id));
+      const retired = (b.retiredContracts ?? []).filter(c => !kept.has(c.id));
+      for (const c of diff.dropped) retired.push(structuredClone(c));
+      if (retired.length > 0 || b.retiredContracts) b.retiredContracts = retired;
       b.planStatus = 'approved';
       return diff.updated.map(c => ({ op: { op: 'updateContract', id: c.id, spec: c.spec }, by: o.by, authority: 'human', touched: [c.id] }));
     });
