@@ -271,13 +271,28 @@ describe('bench cli', () => {
       expect(results(small.out).metrics).not.toEqual(json.metrics.filter((m: { group: string }) => m.group === 'C'));
     });
 
+    test('--c-stream-own on records own: true and names it in the parameter line and caveat; off is the same as not giving it', async () => {
+      const on = await go(['--c-stream', 'on'], 'C');
+      const own = await go(['--c-stream', 'on', '--c-stream-own', 'on'], 'C');
+      expect(own.code).toBe(0);
+      expect(results(own.out).cStream).toEqual({ mode: 'on', restreamTokens: 8000, own: true });
+      expect(report(own.out)).toContain('- cStream: on (restreamTokens 8000, own outputs)\n');
+      expect(report(own.out)).toContain("appends the bot's own reply and tool-call lines");
+      expect(report(on.out)).not.toContain('own outputs');
+      const cost = (out: string) => results(out).metrics[0].costUnits;
+      expect(cost(own.out)).toBeGreaterThan(cost(on.out));
+      const explicitOff = await go(['--c-stream', 'on', '--c-stream-own', 'off'], 'C');
+      for (const f of ['results.json', 'report.md']) expect(readFileSync(join(on.out, 'T', f)).equals(readFileSync(join(explicitOff.out, 'T', f)))).toBe(true);
+    });
+
     test('bad values exit 2 without output; --restream-tokens needs --c-stream on', async () => {
       const out = tmp();
       for (const extra of [['--c-stream', 'yes'], ['--c-stream', 'ON'], ['--c-stream', 'on', '--restream-tokens', '0'], ['--c-stream', 'on', '--restream-tokens', '1.5'],
-        ['--c-stream', 'on', '--restream-tokens', 'x'], ['--restream-tokens', '4000'], ['--c-stream', 'off', '--restream-tokens', '4000']]) {
+        ['--c-stream', 'on', '--restream-tokens', 'x'], ['--restream-tokens', '4000'], ['--c-stream', 'off', '--restream-tokens', '4000'],
+        ['--c-stream-own', 'on'], ['--c-stream', 'off', '--c-stream-own', 'on'], ['--c-stream', 'off', '--c-stream-own', 'off'], ['--c-stream', 'on', '--c-stream-own', 'yes']]) {
         const r = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, ...extra]);
         expect(r.code, extra.join(' ')).toBe(2);
-        expect(r.err, extra.join(' ')).toMatch(/--c-stream|--restream-tokens/);
+        expect(r.err, extra.join(' ')).toMatch(/--c-stream|--restream-tokens|--c-stream-own/);
       }
       expect(readdirSync(out)).toEqual([]);
     });

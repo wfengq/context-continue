@@ -29,7 +29,7 @@ const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
-  '[--c-stream off|on] [--restream-tokens 8000] [--out results] [--stamp <s>]';
+  '[--c-stream off|on] [--restream-tokens 8000] [--c-stream-own off|on] [--out results] [--stamp <s>]';
 
 interface Args {
   scenario: string;
@@ -72,10 +72,14 @@ function parseCPublic(raw: string): CPublic {
   };
 }
 
-/** Group C's stream prototype: off (default), or on with its restream budget. */
-type CStream = { mode: 'off' } | { mode: 'on'; restreamTokens: number };
+/**
+ * Group C's stream prototype: off (default), or on with its restream budget; `own` (recorded only when
+ * on) is the `--c-stream-own on` measurement variant that also appends each bot's own outputs.
+ */
+type CStream = { mode: 'off' } | { mode: 'on'; restreamTokens: number; own?: true };
 
-const cStreamLine = (c: CStream): string => (c.mode === 'off' ? 'off' : `on (restreamTokens ${c.restreamTokens})`);
+const cStreamLine = (c: CStream): string =>
+  c.mode === 'off' ? 'off' : `on (restreamTokens ${c.restreamTokens}${c.own ? ', own outputs' : ''})`;
 
 /** A scenario id names `scenarios/<id>.json`; anything ending in `.json` is a path (relative to cwd). */
 export function scenarioPath(idOrPath: string): string {
@@ -105,7 +109,7 @@ function parseArgs(argv: string[]): Args {
     if (seen.has(flag)) throw new UsageError(`${flag} is given more than once`);
     seen.set(flag, value);
   }
-  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--out', '--stamp'];
+  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--c-stream-own', '--out', '--stamp'];
   for (const flag of seen.keys()) if (!known.includes(flag)) throw new UsageError(`unknown flag ${flag}`);
   const scenario = seen.get('--scenario');
   const group = seen.get('--group');
@@ -122,10 +126,17 @@ function parseArgs(argv: string[]): Args {
   if (streamMode !== 'off' && streamMode !== 'on') throw new UsageError(`--c-stream must be off or on, got "${streamMode}"`);
   const restream = seen.get('--restream-tokens');
   if (restream !== undefined && streamMode !== 'on') throw new UsageError('--restream-tokens needs --c-stream on');
+  const own = seen.get('--c-stream-own');
+  if (own !== undefined && streamMode !== 'on') throw new UsageError('--c-stream-own needs --c-stream on');
+  if (own !== undefined && own !== 'off' && own !== 'on') throw new UsageError(`--c-stream-own must be off or on, got "${own}"`);
   const cStream: CStream =
     streamMode === 'off'
       ? { mode: 'off' }
-      : { mode: 'on', restreamTokens: number('--restream-tokens', restream ?? String(DEFAULT_RESTREAM_TOKENS), int, 'a positive integer') };
+      : {
+          mode: 'on',
+          restreamTokens: number('--restream-tokens', restream ?? String(DEFAULT_RESTREAM_TOKENS), int, 'a positive integer'),
+          ...(own === 'on' ? { own: true as const } : {}),
+        };
   return {
     scenario,
     group,
@@ -174,7 +185,7 @@ export async function main(argv: string[]): Promise<number> {
     compactRatio: args.compactRatio,
     summaryTokens: args.summaryTokens,
     ...(args.cPublic.switches === undefined ? {} : { publicBoard: args.cPublic.switches }),
-    ...(args.cStream.mode === 'on' ? { stream: { restreamTokens: args.cStream.restreamTokens } } : {}),
+    ...(args.cStream.mode === 'on' ? { stream: { restreamTokens: args.cStream.restreamTokens, ...(args.cStream.own ? { own: true } : {}) } } : {}),
   };
   const records: CallRecord[] = [];
   const metrics: GroupMetrics[] = [];

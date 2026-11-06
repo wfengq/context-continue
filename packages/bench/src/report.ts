@@ -202,13 +202,16 @@ export function renderReport(
   // C's board keeps human messages only when the directives section is on (default, all, or a list containing it).
   const directivesOn = meta.cPublic === undefined || meta.cPublic === 'default' || meta.cPublic === 'all' || meta.cPublic.split(',').includes('directives');
   const streamOn = meta.cStream !== undefined && meta.cStream !== 'off';
+  const ownOn = streamOn && meta.cStream!.includes('own outputs');
   if (streamOn) {
     out.push(
       "- C runs the --c-stream prototype: the core is driven as without it, but each bot's request is an append-only stream assembled by the bench. " +
         'A snapshot (common, memory, workspace, a board with every convention, contract, decision, failure, workstream and human message in full, the projection) ' +
         "is followed per request by new or changed project-wide items (to every bot), the new lines of the bot's memory, notes or projection whenever the core's text of one changed (removed items as one 'no longer' line; seen compaction ignored), " +
         "the core's delta and trigger, or the review/planning body; a snapshot on a review or replan takes the lead's projection from a peek brief; " +
-        "like C without the stream, it does not carry the bot's own replies or tool calls; " +
+        (ownOn
+          ? "with --c-stream-own on (a measurement variant) it also appends the bot's own reply and tool-call lines after each scripted request, in E's author format (tool arguments and full deliverables), as D and E histories carry them; "
+          : "like C without the stream, it does not carry the bot's own replies or tool calls; ") +
         'once more than restreamTokens were appended since the snapshot, the next request is a new snapshot. Every stream segment counts as flagged cacheable, ' +
         'so no upper-bound line is printed, and the C miss causes (a)-(c) above apply only to what the stream does not restate.',
     );

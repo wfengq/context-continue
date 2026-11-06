@@ -18,7 +18,7 @@ export interface PolicyOptions {
   /** Group C: which optional public-board sections the core renders (default none). */
   publicBoard?: PublicBoardSwitches;
   /** Group C: the `--c-stream on` prototype (append-only, scope-routed request text); absent means off. */
-  stream?: { restreamTokens: number };
+  stream?: { restreamTokens: number; own?: boolean };
 }
 
 export function createPolicy(group: Group, opts: PolicyOptions): Policy {

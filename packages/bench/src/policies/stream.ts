@@ -229,8 +229,19 @@ export function briefStream(opts: { restreamTokens: number; count: (text: string
   };
 
   return {
-    /** True when `botId`'s next request is a snapshot (the host then passes a peeked projection for a context request). */
+    /** True when `botId`'s next request is a snapshot (the host then passes a peek brief for a context request). */
     needsSnapshot,
+    /**
+     * `--c-stream-own on`: appends `botId`'s own output (its reply and tool-call lines, as the history
+     * groups show them to their author) to its stream after the request it answers, as one `own`
+     * segment; it counts toward the restream budget, and a new snapshot does not carry it.
+     */
+    appendOwn(botId: string, text: string): void {
+      const st = streams.get(botId);
+      if (st === undefined) throw new Error(`appendOwn: ${botId} has no stream yet`);
+      st.segments = [...st.segments, seg('own', text)];
+      st.appended += opts.count(text);
+    },
     /**
      * The segments of `botId`'s request: its stream so far, unchanged, plus what this request appends;
      * or, on its first request and once more than `restreamTokens` were appended since its snapshot, a

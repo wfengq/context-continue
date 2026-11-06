@@ -3,7 +3,8 @@ import type { LedgerEntry, ProjectBoard } from '@context-continue/core';
 import { briefStream, DEFAULT_RESTREAM_TOKENS, sectionUpdate, type CoreSegment, type StreamSegment } from '../src/policies/stream.js';
 import { projectPolicy } from '../src/policies/project.js';
 import { createPolicy } from '../src/policies/index.js';
-import { runScenario } from '../src/runner.js';
+import { runScenario, scriptedOutput } from '../src/runner.js';
+import { fmtBot, fmtOps } from '../src/text.js';
 import { ScriptedModel, type ModelRequest } from '../src/model.js';
 import { loadScenario } from '../src/scenario.js';
 import { scenarioPath } from '../src/cli.js';
@@ -274,6 +275,29 @@ describe('briefStream', () => {
     expect(kinds(r3.segments.slice(r2.segments.length))).toEqual(['trigger']);
   });
 
+  test('--c-stream-own: the bot\'s own output is appended after its request; the next request extends it; it counts toward the restream budget', () => {
+    const s = briefStream({ restreamTokens: 60, count });
+    const r1 = s.request('art', { core: brief('art', '- d', 't'), shape: 'brief', board: board(), humans: [] });
+    s.appendOwn('art', '[bot art] drew it MARK-OWN');
+    const r2 = s.request('art', { core: brief('art', '-', 'x'), shape: 'brief', board: board(), humans: [] });
+    expect(r2.snapshot).toBe(false);
+    expect(isPrefix(texts(r1.segments), texts(r2.segments))).toBe(true);
+    const a2 = r2.segments.slice(r1.segments.length);
+    expect(kinds(a2)).toEqual(['own', 'delta', 'trigger']);
+    expect(a2[0]!.text).toBe('[bot art] drew it MARK-OWN');
+    expect(a2[0]!.cacheable).toBe(true);
+    // another bot's stream does not get it
+    const l = s.request('logic', { core: brief('logic', '- d', 't'), shape: 'brief', board: board(), humans: [] });
+    expect(all(l.segments)).not.toContain('MARK-OWN');
+    // a large own output pushes the stream over the budget: the next request is a snapshot without it
+    s.appendOwn('art', `[bot art] ${'z'.repeat(400)}`);
+    const r3 = s.request('art', { core: brief('art', '-', 'x'), shape: 'brief', board: board(), humans: [] });
+    expect(r3.snapshot).toBe(true);
+    expect(all(r3.segments)).not.toContain('MARK-OWN');
+    // appending to a bot without a stream is an error (it always follows that bot's request)
+    expect(() => s.appendOwn('nobody', 'x')).toThrow();
+  });
+
   test('the default restream budget is 8,000 tokens', () => {
     expect(DEFAULT_RESTREAM_TOKENS).toBe(8000);
   });
@@ -284,7 +308,7 @@ describe('briefStream', () => {
 // ---------------------------------------------------------------------------
 
 /** Runs group C on a scenario, capturing every request the model sees. */
-async function runC(id: string, stream?: { restreamTokens: number }) {
+async function runC(id: string, stream?: { restreamTokens: number; own?: boolean }) {
   const s = loadScenario(scenarioPath(id));
   const seen: ModelRequest[] = [];
   const inner = new ScriptedModel(s.idleReply ?? 'Noted.');
@@ -364,6 +388,31 @@ describe('group C with --c-stream on', () => {
       if (body.startsWith('# Plan the project') || body.includes('## Content to review')) onContext++;
     }
     expect(onContext).toBeGreaterThan(0);
+  });
+
+  test('--c-stream-own: each scripted reply and tool-call lines (E\'s author format) reach the author\'s next request; the core is driven the same', async () => {
+    const id = 'product-plan';
+    const s = loadScenario(scenarioPath(id));
+    const plain = await runC(id, { restreamTokens: 1_000_000 });
+    const own = await runC(id, { restreamTokens: 1_000_000, own: true });
+    expect(own.records.map(r => [r.botId, r.kind, r.step])).toEqual(plain.records.map(r => [r.botId, r.kind, r.step]));
+    expect(own.stats.coreErrors).toBe(plain.stats.coreErrors);
+    const versions = new Map<string, number>();
+    let checked = 0;
+    for (const [i, rec] of own.records.entries()) {
+      if (rec.kind !== 'scripted') continue;
+      const out = scriptedOutput(s.steps[rec.step]!, rec.step);
+      const lines = [fmtBot(rec.botId, out.reply), ...fmtOps(rec.botId, out.ops, versions, false, true, out.reply)].join('\n');
+      const next = own.seen.slice(i + 1).find(r => r.botId === rec.botId);
+      if (next === undefined) continue;
+      const t = next.segments.map(x => x.text);
+      // right after the request it follows: the author's previous request is a prefix, then its own lines
+      expect(t[own.seen[i]!.segments.length], `step ${rec.step}`).toBe(lines);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(5);
+    const cost = (r: typeof own) => r.records.reduce((n, x) => n + x.inputTokens, 0);
+    expect(cost(own)).toBeGreaterThan(cost(plain));
   });
 
   test('the stream setting reaches group C only', () => {

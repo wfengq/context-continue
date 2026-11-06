@@ -10,7 +10,7 @@ import {
   type Wake,
 } from '@context-continue/core';
 import type { Policy, RunContext } from '../runner.js';
-import { fmtBot, fmtHuman, fmtTask } from '../text.js';
+import { fmtBot, fmtHuman, fmtOps, fmtTask } from '../text.js';
 import { prefixCacheable } from './history.js';
 import { briefStream } from './stream.js';
 import type { Step, ToolCall } from '../types.js';
@@ -125,16 +125,20 @@ async function latestDeliverableId(p: Project, workstreamId: string): Promise<st
  * With `stream` (`--c-stream on`, a prototype) the core is driven exactly the same, but the text
  * sent is each bot's append-only stream (`briefStream`) built from the core's segments, the board
  * and the human messages in the ledger; every stream segment is flagged cacheable, so R-B19 alone
- * decides, and no core-flagged upper bound is reported.
+ * decides, and no core-flagged upper bound is reported. With `stream.own` (`--c-stream-own on`, a
+ * measurement variant) each scripted reply and its tool-call lines are appended to the author's
+ * stream after its request, rendered as group E shows them to their author (`fmtBot` + `fmtOps`).
  */
 export function projectPolicy(
-  opts: { publicBoard?: PublicBoardSwitches; stream?: { restreamTokens: number } } = {},
+  opts: { publicBoard?: PublicBoardSwitches; stream?: { restreamTokens: number; own?: boolean } } = {},
 ): Policy & { readonly project: Project | null } {
   let project: Project | null = null;
   /** Stream mode: the per-bot streams, the run's store, and the human chat entries read from it so far. */
   let streams: ReturnType<typeof briefStream> | null = null;
   let ledger: { store: ReturnType<typeof memoryStore>; projectId: string } | null = null;
   const humans: LedgerEntry[] = [];
+  /** `--c-stream-own on`: deliverable versions per workstream, for the deliverable lines (as group E counts them). */
+  const ownVersions = new Map<string, number>();
   let nextSeq = 1;
   let coreErrors = 0;
   /** Wakes caught since the last time they were turned into requests. */
@@ -311,6 +315,8 @@ export function projectPolicy(
         const detail = [fmtTask(botId, step), ...merged].join('; ');
         const { b, shape } = await stepRequest(p, botId, step, detail);
         const out = await send(ctx, botId, index, 'scripted', b, shape);
+        // A measurement variant: the bot's own turn goes into its stream, in group E's author format.
+        if (opts.stream?.own) streams!.appendOwn(botId, [fmtBot(botId, out.reply), ...fmtOps(botId, out.ops, ownVersions, false, true, out.reply)].join('\n'));
         for (const op of out.ops) await runTool(p, ctx, botId, await coreOp(p, op));
       }
       await wakeRequests(p, ctx, index, index);
