@@ -166,28 +166,46 @@ describe('briefStream', () => {
     expect(kinds(r2.segments.slice(r.segments.length))).toEqual(['delta', 'trigger']);
   });
 
-  test('a changed memory, workspace or projection is appended whole, once; a review body is never compared as a projection', () => {
+  test('R-S2: a changed memory, workspace or projection appends only its new lines, under a header naming the section', () => {
     const s = briefStream(big);
-    const core = (bot: string, notes: string, part: string, mem = bot) =>
-      brief(bot, '- d', 't').map(x =>
-        x.kind === 'workspace' ? { ...x, text: `# Your notes\n\n${notes}` } : x.kind === 'projection' ? { ...x, text: part } : x.kind === 'memory' ? { ...x, text: `# Your memory\n\n${mem}` } : x,
+    const part = (decisions: string, facts: string, upstream: string) =>
+      ['# Your part', '', 'art | Art | art | active', 'Brief:', 'do art', 'review rounds: 0', '', '## Decisions', decisions, '', '## Facts', facts, '', '## Upstream deliverables', upstream].join('\n');
+    const core = (notes: string, p: string, mem = 'art') =>
+      brief('art', '- d', 't').map(x =>
+        x.kind === 'workspace' ? { ...x, text: `# Your notes\n\n${notes}` } : x.kind === 'projection' ? { ...x, text: p } : x.kind === 'memory' ? { ...x, text: `# Your memory\n\n${mem}` } : x,
       );
-    const r1 = s.request('art', { core: core('art', 'n1', 'P1'), shape: 'brief', board: board(), humans: [] });
-    const r2 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P1'), shape: 'brief', board: board(), humans: [] });
-    expect(isPrefix(texts(r1.segments), texts(r2.segments))).toBe(true);
-    const a2 = r2.segments.slice(r1.segments.length);
-    expect(kinds(a2)).toEqual(['workspace', 'delta', 'trigger']);
-    expect(a2[0]!.text).toBe('# Your notes\n\nn1 MARK-PIN');
-    const r3 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P2 upstream MARK-UP', 'art MARK-MEM'), shape: 'brief', board: board(), humans: [] });
-    expect(kinds(r3.segments.slice(r2.segments.length))).toEqual(['memory', 'projection', 'delta', 'trigger']);
-    const r4 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P2 upstream MARK-UP', 'art MARK-MEM'), shape: 'brief', board: board(), humans: [] });
+    const decision = '- [dec-1] Use canvas for every sprite\n  why: fast\n  affects: art';
+    const p1 = part(decision, '- [fact-1] Palette has 16 colours', '(nothing yet)');
+    const r1 = s.request('art', { core: core('Pinned:\n- n1', p1), shape: 'brief', board: board(), humans: [] });
+    // unchanged: nothing but delta and trigger
+    const r2 = s.request('art', { core: core('Pinned:\n- n1', p1), shape: 'brief', board: board(), humans: [] });
+    expect(kinds(r2.segments.slice(r1.segments.length))).toEqual(['delta', 'trigger']);
+    // an upstream deliverable arrives and a pinned note is added: only the new lines
+    const p3 = part(decision, '- [fact-1] Palette has 16 colours', '- logic delivered v1: rules MARK-UP (ref: r1)');
+    const r3 = s.request('art', { core: core('Pinned:\n- n1\n- n2 MARK-PIN', p3), shape: 'brief', board: board(), humans: [] });
+    expect(isPrefix(texts(r2.segments), texts(r3.segments))).toBe(true);
+    const a3 = r3.segments.slice(r2.segments.length);
+    expect(kinds(a3)).toEqual(['workspace', 'projection', 'delta', 'trigger']);
+    expect(a3[0]!.text).toBe('# Your notes — updates\n\n- n2 MARK-PIN');
+    expect(a3[1]!.text).toBe('# Your part — updates\n\n## Upstream deliverables\n- logic delivered v1: rules MARK-UP (ref: r1)');
+    // seen compaction: the decision becomes its "(seen)" form: nothing appended
+    const p4 = part('- [dec-1] Use canvas for every sprite (seen)', '- [fact-1] Palette has 16 colours (seen)', '- logic delivered v1: rules MARK-UP (ref: r1)');
+    const r4 = s.request('art', { core: core('Pinned:\n- n1\n- n2 MARK-PIN', p4), shape: 'brief', board: board(), humans: [] });
     expect(kinds(r4.segments.slice(r3.segments.length))).toEqual(['delta', 'trigger']);
-    // a context request: its projection segment is the body; memory/workspace are still compared
-    const ctx = context('BODY', 'review').map(x => (x.kind === 'workspace' ? { ...x, text: '# Your notes\n\nn1 MARK-PIN' } : x.kind === 'memory' ? { ...x, text: '# Your memory\n\nart MARK-MEM' } : x));
-    const r5 = s.request('art', { core: ctx, shape: 'context', board: board(), humans: [] });
-    expect(kinds(r5.segments.slice(r4.segments.length))).toEqual(['projection', 'trigger']);
-    const r6 = s.request('art', { core: core('art', 'n1 MARK-PIN', 'P2 upstream MARK-UP', 'art MARK-MEM'), shape: 'brief', board: board(), humans: [] });
-    expect(kinds(r6.segments.slice(r5.segments.length))).toEqual(['delta', 'trigger']);
+    // a content line disappears (and a value line changes): one "no longer" entry, the new value line
+    const p5 = part('- [dec-1] Use canvas for every sprite (seen)', '(nothing yet)', '- logic delivered v1: rules MARK-UP (ref: r1)').replace('review rounds: 0', 'review rounds: 1');
+    const r5 = s.request('art', { core: core('Pinned:\n- n1\n- n2 MARK-PIN', p5), shape: 'brief', board: board(), humans: [] });
+    const a5 = r5.segments.slice(r4.segments.length);
+    expect(kinds(a5)).toEqual(['projection', 'delta', 'trigger']);
+    expect(a5[0]!.text).toBe('# Your part — updates\n\nreview rounds: 1\n\n## Facts\nno longer: - [fact-1] Palette has 16 colours (seen)');
+    // a context request: its projection segment is the body; memory is still diffed
+    const ctx = context('BODY', 'review').map(x => (x.kind === 'workspace' ? { ...x, text: '# Your notes\n\nPinned:\n- n1\n- n2 MARK-PIN' } : x.kind === 'memory' ? { ...x, text: '# Your memory\n\nart\nMARK-MEM' } : x));
+    const r6 = s.request('art', { core: ctx, shape: 'context', board: board(), humans: [] });
+    const a6 = r6.segments.slice(r5.segments.length);
+    expect(kinds(a6)).toEqual(['memory', 'projection', 'trigger']);
+    expect(a6[0]!.text).toBe('# Your memory — updates\n\nMARK-MEM');
+    const r7 = s.request('art', { core: core('Pinned:\n- n1\n- n2 MARK-PIN', p5, 'art\nMARK-MEM'), shape: 'brief', board: board(), humans: [] });
+    expect(kinds(r7.segments.slice(r6.segments.length))).toEqual(['delta', 'trigger']);
   });
 
   test('Focus 3: once more than restreamTokens were appended since the snapshot, the next request is a new, complete snapshot', () => {

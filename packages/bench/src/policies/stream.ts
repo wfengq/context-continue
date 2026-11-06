@@ -40,7 +40,7 @@ export interface StreamInput {
   projection?: string;
 }
 
-/** The bot's own segments: frozen in a snapshot, appended whole whenever the core's text differs (R-S1). */
+/** The bot's own segments: whole in a snapshot; afterwards their changed lines are appended (R-S1, R-S2). */
 const OWN = ['memory', 'workspace', 'projection'] as const;
 
 const NOTHING = '(nothing yet)';
@@ -104,6 +104,66 @@ interface BotStream {
 }
 
 const seg = (kind: string, text: string): StreamSegment => ({ kind, text, cacheable: true });
+
+/** One unit of a section's text: a line plus its indented continuation lines, under its `##` heading. */
+interface Unit {
+  heading: string | null;
+  text: string;
+}
+
+/** The units of a rendered section, its first (`#`) line and blank lines left out. */
+function unitsOf(text: string): Unit[] {
+  const out: Unit[] = [];
+  let heading: string | null = null;
+  for (const line of text.split('\n').slice(1)) {
+    if (line.trim() === '') continue;
+    if (line.startsWith('## ')) heading = line;
+    else if (line.startsWith('  ') && out.length > 0 && out[out.length - 1]!.heading === heading) out[out.length - 1]!.text += `\n${line}`;
+    else out.push({ heading, text: line });
+  }
+  return out;
+}
+
+const SEEN = ' (seen)';
+/** `- [key]` of a list item, or null. */
+const itemKeyOf = (u: string): string | null => /^- \[[^\]]+\]/.exec(u)?.[0] ?? null;
+
+/**
+ * R-S2: what changed in one of the bot's own sections since the version this stream last showed, as
+ * a `<heading> — updates` segment text, or null when nothing worth appending changed. New units are
+ * listed under their `##` heading; a list item that disappeared gets `no longer: <item>`. Seen
+ * compaction (an item replaced by its `(seen)` form) is not a change, and `(nothing yet)` carries nothing.
+ */
+export function sectionUpdate(before: string, now: string): string | null {
+  const was = unitsOf(before);
+  const is = unitsOf(now);
+  const key = (u: Unit) => `${u.heading ?? ''}\u0000${u.text}`;
+  const wasKeys = new Set(was.map(key));
+  const isKeys = new Set(is.map(key));
+  const added = is.filter(u => !wasKeys.has(key(u)) && u.text !== NOTHING);
+  const removed = was.filter(u => !isKeys.has(key(u)));
+  // An item that became its "(seen)" form: drop both sides.
+  const compacted = new Set(
+    added.filter(u => u.text.endsWith(SEEN)).flatMap(u => {
+      const k = itemKeyOf(u.text);
+      return k !== null && removed.some(r => r.heading === u.heading && itemKeyOf(r.text) === k) ? [`${u.heading ?? ''}\u0000${k}`] : [];
+    }),
+  );
+  const isCompacted = (u: Unit) => {
+    const k = itemKeyOf(u.text);
+    return k !== null && compacted.has(`${u.heading ?? ''}\u0000${k}`);
+  };
+  const groups = new Map<string | null, string[]>();
+  const put = (h: string | null, t: string) => groups.set(h, [...(groups.get(h) ?? []), t]);
+  for (const u of added) if (!isCompacted(u)) put(u.heading, u.text);
+  for (const u of removed) if (u.text.startsWith('- ') && !isCompacted(u)) put(u.heading, `no longer: ${u.text}`);
+  if (groups.size === 0) return null;
+  const title = `${now.split('\n')[0]} — updates`;
+  const blocks = [...groups].map(([h, lines]) => (h === null ? lines : [h, ...lines]).join('\n'));
+  // Headless lines first, then the `##` groups in order of first appearance.
+  const top = groups.has(null) ? [blocks[[...groups.keys()].indexOf(null)]!] : [];
+  return [title, ...top, ...blocks.filter((_, i) => [...groups.keys()][i] !== null)].join('\n\n');
+}
 
 /**
  * The core's delta without the human chat lines this stream already carries (each message reaches a
@@ -175,8 +235,11 @@ export function briefStream(opts: { restreamTokens: number; count: (text: string
         for (const h of fresh) s.humans.add(h.id);
         s.known = items;
         for (const [k, text] of own) {
-          if (s.own.get(k) === text) continue;
-          added.push(seg(k, text));
+          const before = s.own.get(k);
+          if (before === text) continue;
+          const update = before === undefined ? text : sectionUpdate(before, text);
+          if (update !== null) added.push(seg(k, update));
+          // The next diff is against what the stream has now effectively shown.
           s.own.set(k, text);
         }
       }
