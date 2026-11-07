@@ -185,13 +185,19 @@ export async function runScenario(
   if (!opts.probe) return { records, stats };
   // Every scheduled probe fires unless probing was stopped; any left over is recorded, not dropped.
   if (probeStopped === undefined) {
-    for (const [step, factIds] of [...probesAt].sort((a, b) => a[0] - b[0]))
+    notFired: for (const [step, factIds] of [...probesAt].sort((a, b) => a[0] - b[0]))
       for (const factId of factIds) {
         const f = s.facts!.find(x => x.id === factId)!;
-        await emit({
-          group: policy.group, scenario: s.id, step, botId: actorOf(s.steps[step]!), factId, question: f.probe!.question,
-          answer: '', verdict: 'error', error: 'not fired', inputTokens: 0, cacheableTokens: 0,
-        });
+        try {
+          await emit({
+            group: policy.group, scenario: s.id, step, botId: actorOf(s.steps[step]!), factId, question: f.probe!.question,
+            answer: '', verdict: 'error', error: 'not fired', inputTokens: 0, cacheableTokens: 0,
+          });
+        } catch (e) {
+          if (!(e instanceof ProbeStop)) throw e;
+          probeStopped = e.message;
+          break notFired;
+        }
       }
   }
   return probeStopped === undefined ? { records, stats, probes } : { records, stats, probes, probeStopped };

@@ -37,8 +37,15 @@ const MAX_ERROR_LENGTH = 200;
 export function probeErrorMessage(e: unknown): string {
   const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
   const masked = raw
-    .replace(/sk-[A-Za-z0-9_-]+/g, 'sk-***')
-    .replace(/(x-api-key|authorization|api[_-]?key)(["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, '$1$2***')
+    // Header / key-value secrets, with an optional auth scheme word: `Authorization: Bearer x`, {"x-api-key":"y"}.
+    .replace(/((?:proxy-)?authorization|x-api-key|api[_-]?key|access[_-]?token|secret)(["']?\s*[:=]\s*["']?)(?:(?:bearer|basic|token)\s+)?[^\s"',}]+/gi, '$1$2***')
+    // A scheme word followed by a credential anywhere: `bearer ghp_…`, `Basic dXNl…`.
+    .replace(/\b(bearer|basic|token)\s+[^\s"',}]+/gi, '$1 ***')
+    // JWT-shaped strings: three base64url parts joined by dots.
+    .replace(/[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '***')
+    // Well-known key prefixes.
+    .replace(/\bsk-[A-Za-z0-9_-]+/g, 'sk-***')
+    .replace(/\b(gh[pousr]_)[A-Za-z0-9]+/g, '$1***')
     .replace(/\s+/g, ' ')
     .trim();
   return masked.length > MAX_ERROR_LENGTH ? `${masked.slice(0, MAX_ERROR_LENGTH - 1)}…` : masked;
@@ -55,11 +62,16 @@ export function normaliseAnswer(text: string): string {
 }
 
 const ALNUM = /[\p{L}\p{N}]/u;
+/** Scripts written without spaces between words: a neighbour from these never breaks a boundary. */
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+/** A neighbouring character that joins a term to a longer word (letters and digits, except CJK). */
+const joins = (c: string | undefined): boolean => c !== undefined && ALNUM.test(c) && !CJK.test(c);
 
 /**
  * True when normalised `term` occurs in normalised `text` with a boundary at each alphanumeric edge:
  * the character before / after the occurrence must not be a letter or digit ("12x12" is not in
- * "112x120", "eu-central-1" is not in "eu-central-10").
+ * "112x120", "eu-central-1" is not in "eu-central-10"), except Han / Kana / Hangul, which have no
+ * spaces ("北京" is in "北京市").
  */
 export function containsTerm(text: string, term: string): boolean {
   const t = normaliseAnswer(text);
@@ -70,8 +82,8 @@ export function containsTerm(text: string, term: string): boolean {
   for (let i = t.indexOf(n); i !== -1; i = t.indexOf(n, i + 1)) {
     const before = t[i - 1];
     const after = t[i + n.length];
-    if (startEdge && before !== undefined && ALNUM.test(before)) continue;
-    if (endEdge && after !== undefined && ALNUM.test(after)) continue;
+    if (startEdge && joins(before)) continue;
+    if (endEdge && joins(after)) continue;
     return true;
   }
   return false;

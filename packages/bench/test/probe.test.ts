@@ -85,6 +85,13 @@ describe('gradeAnswer', () => {
     expect(gradeAnswer({ question: 'q', expect: ['12x12'] }, '112x12 or 12x12')).toBe('correct');
     expect(gradeAnswer({ question: 'q', expect: ['12x12'], reject: ['10x10'] }, '12x12, not 210x100')).toBe('correct');
   });
+  test('CJK neighbours do not break a boundary', () => {
+    expect(gradeAnswer({ question: 'q', expect: ['北京'] }, '在北京市')).toBe('correct');
+    expect(gradeAnswer({ question: 'q', expect: ['12x12'] }, '盘面是12x12格')).toBe('correct');
+    expect(gradeAnswer({ question: 'q', expect: ['とうきょう'] }, 'とうきょうと')).toBe('correct');
+    expect(gradeAnswer({ question: 'q', expect: ['서울'] }, '서울시')).toBe('correct');
+    expect(gradeAnswer({ question: 'q', expect: ['12x12'] }, '盘面是112x12格')).toBe('wrong');
+  });
   test('expect strings with × match answers with x', () => {
     expect(gradeAnswer({ question: 'q', expect: ['12×12'] }, '12x12')).toBe('correct');
   });
@@ -277,6 +284,25 @@ describe('probe failures, stop and streaming', () => {
     expect(probeErrorMessage('plain')).toBe('plain');
   });
 
+  test('probeErrorMessage masks auth schemes, JSON headers, bare bearer tokens and JWTs', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
+    const cases: [string, string[]][] = [
+      ['401 Authorization: Bearer abc123.def456', ['abc123', 'def456']],
+      ['Authorization: Basic dXNlcjpwYXNz', ['dXNlcjpwYXNz']],
+      ['request {"authorization":"Bearer zzz"} failed', ['zzz']],
+      ['retry with bearer ghp_abcdefghijklmnop0123', ['ghp_abcdefghijklmnop0123', 'abcdefghijklmnop']],
+      ['token ghp_abcdefghijklmnop0123 rejected', ['abcdefghijklmnop']],
+      [`invalid jwt ${jwt}`, ['eyJhbGciOiJIUzI1NiJ9', 'dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U']],
+      ['{"x-api-key": "sk-ant-api03-AAAA"}', ['AAAA']],
+      ['Proxy-Authorization: Basic Zm9vOmJhcg==', ['Zm9vOmJhcg']],
+    ];
+    for (const [input, secrets] of cases) {
+      const m = probeErrorMessage(new Error(input));
+      for (const secret of secrets) expect(m, `${input} -> ${m}`).not.toContain(secret);
+    }
+    expect(probeErrorMessage(new Error('HTTP 529 overloaded from api.anthropic.com'))).toBe('Error: HTTP 529 overloaded from api.anthropic.com');
+  });
+
   test('onProbe receives each record as it is made', async () => {
     const s = scenario();
     const streamed: ProbeRecord[] = [];
@@ -333,5 +359,26 @@ describe('probe failures, stop and streaming', () => {
     expect(run.probes!.map(p => [p.step, p.verdict, p.error])).toEqual([[1, 'correct', undefined], [9, 'correct', undefined], [5, 'error', 'not fired']]);
     expect(run.probes![2]!.botId).toBe('art');
     expect('probeStopped' in run).toBe(false);
+  });
+
+  test('ProbeStop from onProbe on a "not fired" record ends probing without escaping runScenario', async () => {
+    const s = scenario();
+    const skipping: Policy = {
+      group: 'D',
+      async onStep(step, index, ctx) {
+        if (step.kind === 'human' || index === 5 || index === 9) return;
+        await ctx.call({ botId: ctx.actorOf(step), step: index, kind: 'scripted', segments: [{ text: 't', cacheable: false }] });
+      },
+      async finish() { return { compactions: 0, pauses: 0, coreErrors: 0 }; },
+    };
+    const run = await runScenario(s, skipping, {
+      probe: {
+        model: { async complete() { return { reply: '12x12', ops: [] }; } },
+        onProbe: r => { if (r.verdict === 'error') throw new ProbeStop('sink full'); },
+      },
+    });
+    // step 1 fired; 5 is the first "not fired" record (kept, then stop); 9 is not recorded
+    expect(run.probes!.map(p => [p.step, p.verdict])).toEqual([[1, 'correct'], [5, 'error']]);
+    expect(run.probeStopped).toBe('sink full');
   });
 });
