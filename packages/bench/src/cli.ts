@@ -414,7 +414,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
     pa !== undefined && !pa.dryRun
       ? {
           model: pa.model, ...(pa.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: pa.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS,
-          thinking: pa.provider === 'openai' ? ('not sent' as const) : ('disabled' as const), temperature: pa.provider === 'openai' ? '0' : 'not sent (model default)', samples: pa.samples,
+          thinking: 'disabled' as const, temperature: pa.provider === 'openai' ? '0' : 'not sent (model default)', samples: pa.samples,
           ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
           groups: pa.groups, control: pa.control, maxCost: pa.maxCost!, price: pa.price, usage: guard!.spent.usage, cost: guard!.spent.cost, stopped, records: probeRecords,
         }

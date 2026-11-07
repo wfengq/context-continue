@@ -179,26 +179,29 @@ ANTHROPIC_API_KEY=... pnpm -C packages/bench bench run --scenario long --group a
 `--provider openai` sends probes to any server with an OpenAI-style `/chat/completions` endpoint
 (`src/models/openai.ts`). It needs `--base-url`, `--model` and `--price`, and `--max-cost` for a real
 run (all usage errors, exit 2, before any request). The prompt is one user message, the segments
-joined with a newline; `max_tokens` 200, `temperature` 0, `stream` false; no cache markers (these
-servers cache prefixes themselves). Usage is read from `prompt_cache_hit_tokens` /
-`prompt_cache_miss_tokens` (DeepSeek) or `prompt_tokens_details.cached_tokens`; the output count
-includes reasoning tokens, and `reasoning_content` is ignored. Empty answers and `content_filter` are
-probe errors (their usage still counts). 401/402/403/404 stop probing; 400/422 fail one probe;
-408/409/429/5xx are retried as with Anthropic.
+joined with a newline; `max_tokens` 200, `temperature` 0, `stream` false, `thinking: {type:
+"disabled"}` (DeepSeek thinks by default; without this a short `max_tokens` holds only the CoT and
+every answer is empty); no cache markers (these servers cache prefixes themselves). Usage is read
+from `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` (DeepSeek) or
+`prompt_tokens_details.cached_tokens`; the output count includes reasoning tokens, and
+`reasoning_content` is ignored. Empty answers and `content_filter` are probe errors (their usage
+still counts). 401/402/403/404 stop probing; 400/422 fail one probe; 408/409/429/5xx are retried as
+with Anthropic.
 
 ```sh
 export DEEPSEEK_API_KEY=...
 pnpm -C packages/bench bench run --scenario long --group all --c-stream auto --probes \
-  --provider openai --base-url https://api.deepseek.com --model deepseek-chat \
+  --provider openai --base-url https://api.deepseek.com --model deepseek-flash \
   --api-key-env DEEPSEEK_API_KEY --price <in>,<cache-hit>,<out> --max-cost 1 \
   --out results --stamp probes-long
 ```
 
 Take the prices from DeepSeek's pricing page, in USD per 1M tokens: input (cache miss), input
-(cache hit), output. The bench has no price table for these models: you are responsible for the
-prices you give, and the cost guard and the report's costs are only as good as they are. A custom
-price has one tier and no cache-write premium; the high estimate prices every cacheable token at the
-input rate. Node's `fetch` does not use `HTTPS_PROXY`, so the server must be reachable directly.
+(cache hit), output (use the off-peak or peak row that matches when you run). The bench has no price
+table for these models: you are responsible for the prices you give, and the cost guard and the
+report's costs are only as good as they are. A custom price has one tier and no cache-write premium;
+the high estimate prices every cacheable token at the input rate. Node's `fetch` does not use
+`HTTPS_PROXY`, so the server must be reachable directly.
 
 Local server: `LOCAL_API_KEY` is deliberately a variable you leave unset for a server that needs no
 key, so that a key such as `OPENAI_API_KEY` is never sent to localhost (a note is printed when the

@@ -33,7 +33,8 @@ const model = (f: typeof fetch, extra: object = {}) => new OpenAIModel({ model: 
 describe('request', () => {
   test('body joins segments with a newline; fixed sampling; no cache markers', () => {
     expect(buildChatBody('m', 200, [seg('a'), seg('b')])).toEqual({
-      model: 'm', max_tokens: 200, temperature: 0, stream: false, messages: [{ role: 'user', content: 'a\nb' }],
+      model: 'm', max_tokens: 200, temperature: 0, stream: false, thinking: { type: 'disabled' },
+      messages: [{ role: 'user', content: 'a\nb' }],
     });
   });
   test('url: trailing slashes removed, query kept after the path', () => {

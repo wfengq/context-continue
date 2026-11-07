@@ -8,8 +8,9 @@ import type { ModelUsage, ToolCall } from '../types.js';
  * HTTP with Node's fetch. Used only for fact probes.
  *
  * Request: POST `<base-url>/chat/completions`, one user message holding the segments joined with a
- * newline (as the bench counts them); `max_tokens`, `temperature` 0, `stream` false. No cache
- * markers: such servers cache prefixes by themselves.
+ * newline (as the bench counts them); `max_tokens`, `temperature` 0, `stream` false,
+ * `thinking: {type: "disabled"}` (DeepSeek thinks by default; a short max_tokens must hold the
+ * answer). No cache markers: such servers cache prefixes by themselves.
  */
 
 export const DEFAULT_API_KEY_ENV = 'OPENAI_API_KEY';
@@ -23,6 +24,9 @@ export function buildChatBody(model: string, maxTokens: number, segments: { text
     max_tokens: maxTokens,
     temperature: 0,
     stream: false,
+    // DeepSeek enables thinking by default; a short max_tokens would then hold only the CoT
+    // (content empty → every probe an error). Local servers that ignore unknown fields are fine.
+    thinking: { type: 'disabled' as const },
     messages: [{ role: 'user' as const, content: segments.map(s => s.text).join('\n') }],
   };
 }
