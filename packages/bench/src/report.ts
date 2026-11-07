@@ -110,6 +110,14 @@ export function renderReport(
             `cost units ${fmtCost(c.upperBound.costUnits)} (measured: cacheable ${fmtInt(c.cacheableTokens)}, cost units ${fmtCost(c.costUnits)}).`,
         );
       }
+      if (c.stream) {
+        const st = c.stream;
+        out.push(
+          st.fromStep === null
+            ? `Group C stream: not used (ledger ${fmtInt(st.ledgerEntries)} entries, below autoAfterEntries).`
+            : `Group C stream: used from step ${st.fromStep}; ${fmtInt(st.snapshots)} snapshots; ledger ${fmtInt(st.ledgerEntries)} entries.`,
+        );
+      }
       if (c.unfinished) out.push('Group C: the project was not finished (a workstream of the approved plan was never delivered).');
       out.push('');
     }
@@ -155,7 +163,10 @@ export function renderReport(
   const eCompacted = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0);
   const hasXlong = tiersPresent.includes('xlong');
   const streamOn = meta.cStream !== undefined && meta.cStream !== 'off';
-  const ownOn = streamOn && meta.cStream!.includes('own outputs');
+  /** `--c-stream core|auto`: the core library's stream mode, not the bench prototype (`on`). */
+  const coreStream = streamOn && /^(core|auto)\b/.test(meta.cStream!);
+  const protoStream = streamOn && !coreStream;
+  const ownOn = protoStream && meta.cStream!.includes('own outputs');
   out.push(
     '## Caveats', '',
     '- Results come from a scripted fake model; only context size is measured.',
@@ -174,9 +185,11 @@ export function renderReport(
         : []),
     '- Wake counts (extra requests) for D, E and F depend on how often humans and bots @-mention each other in the scenario.',
     "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); " +
-      (streamOn
-        ? 'with --c-stream on every C stream segment counts as flagged cacheable, so this prefix rule alone decides for C too.'
-        : "in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give."),
+      (coreStream
+        ? 'in C a segment must also be flagged cacheable by the core, which flags every stream segment, so where C used the stream this prefix rule alone decides; the C upper-bound line is printed only for scenarios that never used it.'
+        : protoStream
+          ? 'with --c-stream on every C stream segment counts as flagged cacheable, so this prefix rule alone decides for C too.'
+          : "in C a segment must also be flagged cacheable by the core. The per-scenario C upper-bound line shows what caching the core's stable segments would give."),
     "- F's context is the shared pages (project, current plan, one per delivered workstream) plus the bot's own history: there is no chat thread.",
     "- In D and E reviewers get a reference to the deliverable, not its text (in E only the author's chat message); a real reviewer would fetch the content with an extra tool call, which is not counted.",
     "- C's lead reviews with the core's review context (the deliverable's text and the reviewed workstream's contracts, conventions, decisions, facts and failures) and replans with its planning context (every human message so far and the previous plan); the host passes the core a trigger with the task line, merged wakes and pending tool results.",
@@ -206,7 +219,17 @@ export function renderReport(
   }
   // C's board keeps human messages only when the directives section is on (default, all, or a list containing it).
   const directivesOn = meta.cPublic === undefined || meta.cPublic === 'default' || meta.cPublic === 'all' || meta.cPublic.split(',').includes('directives');
-  if (streamOn) {
+  if (coreStream) {
+    out.push(
+      "- C uses the core's long-project stream mode (--c-stream core, or auto from the request at which a scenario's ledger holds autoAfterEntries entries; before that C is exactly as without it): " +
+        "every request is the core's buildStream (a brief, or a review or planning request for the lead's review and replan steps), and after each scripted request the bench passes the bot's reply and tool-call lines, " +
+        "in E's author format (tool arguments and full deliverables), to recordOwnOutput, as D and E histories carry them. " +
+        "A snapshot carries the whole board, contracts retired by a replan, and every human message (older ones beyond snapshotHumanKeep folded to 160 characters); later requests append project-wide changes, item-level updates of the bot's memory, notes and part, its own output, and the trigger or review/planning body; " +
+        'once more than restreamTokens were appended since the snapshot, the next request is a new snapshot. The per-scenario stream line gives the step of the first streamed request and the snapshot count (each bot\'s first included). ' +
+        'The C miss causes (a)-(c) above apply only to what the stream does not restate.',
+    );
+  }
+  if (protoStream) {
     out.push(
       "- C runs the --c-stream prototype: the core is driven as without it, but each bot's request is an append-only stream assembled by the bench. " +
         'A snapshot (common, memory, workspace, a board with every convention, contract, decision, failure, workstream and human message in full, the projection) ' +

@@ -103,6 +103,24 @@ describe('renderReport', () => {
     expect(renderReport(all(), meta).split('\n')).toContain(plain);
   });
 
+  test('core stream mode: cacheable caveat names the core flags, the core caveat replaces the prototype one, and each scenario gets a stream line', () => {
+    const rows = all().map(r => (r.group !== 'C' ? r : { ...r, stream: r.scenario === 's1' ? { fromStep: 12, snapshots: 9, ledgerEntries: 412 } : { fromStep: null, snapshots: 0, ledgerEntries: 180 } }));
+    for (const cStream of ['core (restreamTokens 8000)', 'auto (restreamTokens 8000, autoAfterEntries 400)']) {
+      const md = renderReport(rows, { ...meta, cStream });
+      const lines = md.split('\n');
+      expect(lines).toContain(
+        "- Cacheable, in every group: the longest leading run of a request's segments identical to that bot's previous request (on a bot's first request, the fixed template only); in C a segment must also be flagged cacheable by the core, which flags every stream segment, so where C used the stream this prefix rule alone decides; the C upper-bound line is printed only for scenarios that never used it.",
+      );
+      expect(lines).toContain('Group C stream: used from step 12; 9 snapshots; ledger 412 entries.');
+      expect(lines).toContain('Group C stream: not used (ledger 180 entries, below autoAfterEntries).');
+      expect(md).toContain("- C uses the core's long-project stream mode");
+      expect(md).toContain('recordOwnOutput');
+      expect(md).not.toContain('- C runs the --c-stream prototype');
+    }
+    // the stream line is printed only when the metrics carry stream stats
+    expect(renderReport(all(), { ...meta, cStream: 'off' })).not.toContain('Group C stream:');
+  });
+
   test('caveats: one cacheable rule, F pages only, references for C/D/E reviewers, goal and constraints (final fixes)', () => {
     const lines = renderReport(all(), meta).split('\n');
     for (const l of [

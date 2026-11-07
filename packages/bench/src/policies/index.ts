@@ -19,6 +19,8 @@ export interface PolicyOptions {
   publicBoard?: PublicBoardSwitches;
   /** Group C: the `--c-stream on` prototype (append-only, scope-routed request text); absent means off. */
   stream?: { restreamTokens: number; own?: boolean };
+  /** Group C: the core library's stream mode (`--c-stream core` / `auto`); absent means the plain core methods. */
+  coreStream?: { mode: 'on' | 'auto'; restreamTokens: number; autoAfterEntries?: number };
 }
 
 export function createPolicy(group: Group, opts: PolicyOptions): Policy {
@@ -31,6 +33,7 @@ export function createPolicy(group: Group, opts: PolicyOptions): Policy {
       return projectPolicy({
         ...(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard }),
         ...(opts.stream === undefined ? {} : { stream: opts.stream }),
+        ...(opts.coreStream === undefined ? {} : { coreStream: opts.coreStream }),
       });
     case 'D':
       return delmPolicy();

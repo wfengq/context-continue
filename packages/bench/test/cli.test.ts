@@ -2,6 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { DEFAULT_STREAM_OPTIONS } from '@context-continue/core';
 import { LONG_IDS, main, SCENARIO_IDS, STANDARD_IDS, XLONG_IDS } from '../src/cli.js';
 
 const STANDARD = ['product-plan', 'flappy-bird', 'event-plan'];
@@ -285,14 +286,57 @@ describe('bench cli', () => {
       for (const f of ['results.json', 'report.md']) expect(readFileSync(join(on.out, 'T', f)).equals(readFileSync(join(explicitOff.out, 'T', f)))).toBe(true);
     });
 
-    test('bad values exit 2 without output; --restream-tokens needs --c-stream on', async () => {
+    test('core records restreamTokens and drives the core stream; non-C groups are unchanged; one parameter line and the core caveat', async () => {
+      const off = results((await go([])).out);
+      const core = await go(['--c-stream', 'core']);
+      expect(core.code).toBe(0);
+      const json = results(core.out);
+      expect(json.cStream).toEqual({ mode: 'core', restreamTokens: 8000 });
+      const md = report(core.out);
+      expect(md).toContain('- cStream: core (restreamTokens 8000)\n');
+      expect(md).toContain("- C uses the core's long-project stream mode");
+      expect(md).not.toContain('- C runs the --c-stream prototype');
+      expect(md).toMatch(/Group C stream: used from step 0; \d+ snapshots; ledger \d+ entries\./);
+      const notC = (x: { group?: string }) => x.group !== 'C';
+      expect(json.metrics.filter(notC)).toEqual(off.metrics.filter(notC));
+      expect(json.records.filter(notC)).toEqual(off.records.filter(notC));
+      const c = json.metrics.find((m: { group: string }) => m.group === 'C');
+      expect(c.upperBound).toBeUndefined();
+      expect(c.stream.fromStep).toBe(0);
+      const small = await go(['--c-stream', 'core', '--restream-tokens', '500'], 'C');
+      expect(results(small.out).cStream).toEqual({ mode: 'core', restreamTokens: 500 });
+    });
+
+    test('auto records autoAfterEntries (the core default, or --auto-after); below it C is exactly off', async () => {
+      const auto = await go(['--c-stream', 'auto'], 'C');
+      expect(auto.code).toBe(0);
+      expect(results(auto.out).cStream).toEqual({ mode: 'auto', restreamTokens: 8000, autoAfterEntries: DEFAULT_STREAM_OPTIONS.autoAfterEntries });
+      expect(report(auto.out)).toContain(`- cStream: auto (restreamTokens 8000, autoAfterEntries ${DEFAULT_STREAM_OPTIONS.autoAfterEntries})\n`);
+      const high = await go(['--c-stream', 'auto', '--auto-after', '1000000'], 'C');
+      expect(results(high.out).cStream).toEqual({ mode: 'auto', restreamTokens: 8000, autoAfterEntries: 1000000 });
+      const off = results((await go([], 'C')).out);
+      const { stream, ...rest } = results(high.out).metrics[0];
+      expect(rest).toEqual(off.metrics[0]);
+      expect(stream).toEqual({ fromStep: null, snapshots: 0, ledgerEntries: expect.any(Number) });
+      expect(results(high.out).records).toEqual(off.records);
+      expect(report(high.out)).toMatch(/Group C stream: not used \(ledger \d+ entries, below autoAfterEntries\)\./);
+      const low = await go(['--c-stream', 'auto', '--auto-after', '1', '--restream-tokens', '4000'], 'C');
+      const core = await go(['--c-stream', 'core', '--restream-tokens', '4000'], 'C');
+      expect(results(low.out).metrics).toEqual(results(core.out).metrics);
+    });
+
+    test('bad values exit 2 without output; --restream-tokens needs a stream mode; --auto-after needs auto; --c-stream-own needs on', async () => {
       const out = tmp();
       for (const extra of [['--c-stream', 'yes'], ['--c-stream', 'ON'], ['--c-stream', 'on', '--restream-tokens', '0'], ['--c-stream', 'on', '--restream-tokens', '1.5'],
         ['--c-stream', 'on', '--restream-tokens', 'x'], ['--restream-tokens', '4000'], ['--c-stream', 'off', '--restream-tokens', '4000'],
-        ['--c-stream-own', 'on'], ['--c-stream', 'off', '--c-stream-own', 'on'], ['--c-stream', 'off', '--c-stream-own', 'off'], ['--c-stream', 'on', '--c-stream-own', 'yes']]) {
+        ['--c-stream-own', 'on'], ['--c-stream', 'off', '--c-stream-own', 'on'], ['--c-stream', 'off', '--c-stream-own', 'off'], ['--c-stream', 'on', '--c-stream-own', 'yes'],
+        ['--c-stream', 'core', '--c-stream-own', 'on'], ['--c-stream', 'auto', '--c-stream-own', 'off'], ['--c-stream', 'CORE'],
+        ['--auto-after', '100'], ['--c-stream', 'on', '--auto-after', '100'], ['--c-stream', 'core', '--auto-after', '100'],
+        ['--c-stream', 'auto', '--auto-after', '0'], ['--c-stream', 'auto', '--auto-after', '2.5'], ['--c-stream', 'auto', '--auto-after', 'x'],
+        ['--c-stream', 'core', '--restream-tokens', '0']]) {
         const r = await run(['run', '--scenario', 'product-plan', '--group', 'C', '--out', out, ...extra]);
         expect(r.code, extra.join(' ')).toBe(2);
-        expect(r.err, extra.join(' ')).toMatch(/--c-stream|--restream-tokens|--c-stream-own/);
+        expect(r.err, extra.join(' ')).toMatch(/--c-stream|--restream-tokens|--c-stream-own|--auto-after/);
       }
       expect(readdirSync(out)).toEqual([]);
     });

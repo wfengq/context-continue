@@ -5,6 +5,7 @@ import {
   type Clock,
   type ContextBundle,
   type LedgerEntry,
+  type StreamBundle,
   type Project,
   type PublicBoardSwitches,
   type Wake,
@@ -128,9 +129,21 @@ async function latestDeliverableId(p: Project, workstreamId: string): Promise<st
  * decides, and no core-flagged upper bound is reported. With `stream.own` (`--c-stream-own on`, a
  * measurement variant) each scripted reply and its tool-call lines are appended to the author's
  * stream after its request, rendered as group E shows them to their author (`fmtBot` + `fmtOps`).
+ *
+ * With `coreStream` (`--c-stream core` / `auto`) the core's own long-project mode builds the text:
+ * the project is created with `stream: { mode, restreamTokens, autoAfterEntries }`, every request
+ * is `buildStream` (a brief, or a review / planning request for the lead's review and replan steps),
+ * and each scripted reply with its tool-call lines, in group E's author format, is passed to
+ * `recordOwnOutput` after its request. Cacheable is R-B19 as always (the core flags every stream
+ * segment cacheable). The upper bound is reported only when no request was streamed (`auto` below
+ * its threshold); `stream` stats give the step of the first streamed request and the snapshot count.
  */
 export function projectPolicy(
-  opts: { publicBoard?: PublicBoardSwitches; stream?: { restreamTokens: number; own?: boolean } } = {},
+  opts: {
+    publicBoard?: PublicBoardSwitches;
+    stream?: { restreamTokens: number; own?: boolean };
+    coreStream?: { mode: 'on' | 'auto'; restreamTokens: number; autoAfterEntries?: number };
+  } = {},
 ): Policy & { readonly project: Project | null } {
   let project: Project | null = null;
   /** Stream mode: the per-bot streams, the run's store, and the human chat entries read from it so far. */
@@ -141,6 +154,9 @@ export function projectPolicy(
   const ownVersions = new Map<string, number>();
   let nextSeq = 1;
   let coreErrors = 0;
+  /** `coreStream`: the step of the first streamed request, and the number of snapshot requests. */
+  let streamFrom: number | null = null;
+  let snapshots = 0;
   /** Wakes caught since the last time they were turned into requests. */
   let woken: Wake[] = [];
   /** Segment texts of each bot's previous brief (R-B19). */
@@ -163,20 +179,30 @@ export function projectPolicy(
   /** The trigger of a scripted step: the task line, merged wakes and pending tool results. */
   const manual = (botId: string, detail: string) => ({ reason: 'manual' as const, detail: withResults(botId, detail) });
 
-  const brief = (p: Project, botId: string, reason: Wake['reason'] | 'manual', detail: string): Promise<ContextBundle> =>
-    p.buildBrief(botId, { maxTokens: MAX_BRIEF_TOKENS, trigger: { reason, detail: withResults(botId, detail) } });
+  const brief = (p: Project, botId: string, reason: Wake['reason'] | 'manual', detail: string): Promise<StreamBundle> => {
+    const o = { maxTokens: MAX_BRIEF_TOKENS, trigger: { reason, detail: withResults(botId, detail) } };
+    return opts.coreStream ? p.buildStream(botId, o) : p.buildBrief(botId, o);
+  };
 
   /**
    * The request of a scripted step: the core's review context for a review of an existing
    * deliverable, its planning context for a replan, otherwise the brief. A review of a workstream
    * without a deliverable gets the brief; its submitReview then fails as a core error.
    */
-  async function stepRequest(p: Project, botId: string, step: Step, detail: string): Promise<{ b: ContextBundle; shape: 'brief' | 'context' }> {
+  async function stepRequest(p: Project, botId: string, step: Step, detail: string): Promise<{ b: StreamBundle; shape: 'brief' | 'context' }> {
+    const viaStream = (request: { kind: 'review'; deliverableId: string } | { kind: 'planning' }) =>
+      p.buildStream(botId, { maxTokens: MAX_BRIEF_TOKENS, trigger: manual(botId, detail), request });
     if (step.kind === 'review') {
       const id = await latestDeliverableId(p, step.deliverableOf);
-      if (id !== undefined) return { b: await p.buildReviewContext(id, { trigger: manual(botId, detail) }), shape: 'context' };
+      if (id !== undefined) {
+        const b = opts.coreStream ? await viaStream({ kind: 'review', deliverableId: id }) : await p.buildReviewContext(id, { trigger: manual(botId, detail) });
+        return { b, shape: 'context' };
+      }
     }
-    if (step.kind === 'replan') return { b: await p.buildPlanningContext({ trigger: manual(botId, detail) }), shape: 'context' };
+    if (step.kind === 'replan') {
+      const b = opts.coreStream ? await viaStream({ kind: 'planning' }) : await p.buildPlanningContext({ trigger: manual(botId, detail) });
+      return { b, shape: 'context' };
+    }
     return { b: await brief(p, botId, 'manual', detail), shape: 'brief' };
   }
 
@@ -209,8 +235,13 @@ export function projectPolicy(
    * brief; on a bot's first brief only the common segment (the analogue of the shared template).
    * The core-flagged total is kept as an upper bound for the report.
    */
-  async function send(ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', b: ContextBundle, shape: 'brief' | 'context' = 'brief') {
-    const segments: { text: string; cacheable: boolean; kind: string }[] = opts.stream ? await streamed(ctx, botId, b, shape) : b.segments;
+  async function send(ctx: RunContext, botId: string, step: number, kind: 'scripted' | 'extra', b: StreamBundle, shape: 'brief' | 'context' = 'brief') {
+    // A core stream bundle says whether it is a snapshot; an unstreamed one (auto below its threshold) does not.
+    if (b.snapshot !== undefined) {
+      streamFrom ??= step;
+      if (b.snapshot) snapshots++;
+    }
+    const segments: { text: string; cacheable: boolean; kind: string }[] = opts.stream ? await streamed(ctx, botId, b as ContextBundle, shape) : b.segments;
     const texts = segments.map(s => s.text);
     const inPrefix = prefixCacheable(prevTexts.get(botId) ?? null, texts, 1);
     prevTexts.set(botId, texts);
@@ -267,7 +298,15 @@ export function projectPolicy(
     ledger = { store, projectId: s.id };
     const employees = createEmployeeRegistry({ store });
     for (const e of s.employees) await employees.upsert({ botId: e.botId, persona: e.persona, skills: [...e.skills] });
-    const p = createProject({ projectId: s.id, store, employees, clock: benchClock(), newId, ...(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard }) });
+    const p = createProject({
+      projectId: s.id,
+      store,
+      employees,
+      clock: benchClock(),
+      newId,
+      ...(opts.publicBoard === undefined ? {} : { publicBoard: opts.publicBoard }),
+      ...(opts.coreStream === undefined ? {} : { stream: { ...opts.coreStream } }),
+    });
     project = p; // stream mode reads the board for setup requests too
     p.on('wake', e => void woken.push(...e.wakes));
     woken.push(...(await p.start({ goal: s.goal, constraints: [...s.constraints], lead: s.lead, by: s.owner })));
@@ -315,17 +354,31 @@ export function projectPolicy(
         const detail = [fmtTask(botId, step), ...merged].join('; ');
         const { b, shape } = await stepRequest(p, botId, step, detail);
         const out = await send(ctx, botId, index, 'scripted', b, shape);
-        // A measurement variant: the bot's own turn goes into its stream, in group E's author format.
-        if (opts.stream?.own) streams!.appendOwn(botId, [fmtBot(botId, out.reply), ...fmtOps(botId, out.ops, ownVersions, false, true, out.reply)].join('\n'));
+        // The bot's own turn goes into its stream, in group E's author format: the prototype's
+        // measurement variant, or the core stream through recordOwnOutput (a no-op before auto switches on).
+        if (opts.stream?.own || opts.coreStream) {
+          const own = [fmtBot(botId, out.reply), ...fmtOps(botId, out.ops, ownVersions, false, true, out.reply)].join('\n');
+          if (opts.coreStream) await p.recordOwnOutput(botId, own);
+          else streams!.appendOwn(botId, own);
+        }
         for (const op of out.ops) await runTool(p, ctx, botId, await coreOp(p, op));
       }
       await wakeRequests(p, ctx, index, index);
     },
     async finish() {
       const unfinished = project ? (await project.board()).workstreams.some(w => w.status !== 'delivered') : false;
+      const ledgerEntries = ledger ? await ledger.store.latestSeq(ledger.projectId) : 0;
       project?.dispose();
       // Stream mode flags every segment cacheable, so the core-flagged upper bound means nothing there.
-      return { compactions: 0, pauses: 0, coreErrors, unfinished, ...(opts.stream ? {} : { cacheableUpperBound: flaggedCacheable }) };
+      const streamed = opts.stream !== undefined || streamFrom !== null;
+      return {
+        compactions: 0,
+        pauses: 0,
+        coreErrors,
+        unfinished,
+        ...(streamed ? {} : { cacheableUpperBound: flaggedCacheable }),
+        ...(opts.coreStream ? { stream: { fromStep: streamFrom, snapshots, ledgerEntries } } : {}),
+      };
     },
   };
 }

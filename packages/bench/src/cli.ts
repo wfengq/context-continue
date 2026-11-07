@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { PublicBoardSwitches } from '@context-continue/core';
+import { DEFAULT_STREAM_OPTIONS, type PublicBoardSwitches } from '@context-continue/core';
 import { computeMetrics, type GroupMetrics } from './metrics.js';
 import { createPolicy } from './policies/index.js';
 import { renderReport, writeResults } from './report.js';
@@ -29,7 +29,7 @@ const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
-  '[--c-stream off|on] [--restream-tokens 8000] [--c-stream-own off|on] [--out results] [--stamp <s>]';
+  '[--c-stream off|on|core|auto] [--restream-tokens 8000] [--c-stream-own off|on] [--auto-after <n>] [--out results] [--stamp <s>]';
 
 interface Args {
   scenario: string;
@@ -73,13 +73,45 @@ function parseCPublic(raw: string): CPublic {
 }
 
 /**
- * Group C's stream prototype: off (default), or on with its restream budget; `own` (recorded only when
- * on) is the `--c-stream-own on` measurement variant that also appends each bot's own outputs.
+ * Group C's request text: off (default, the plain core methods); `on`, the bench's stream prototype,
+ * with its restream budget, `own` (recorded only when on) being the `--c-stream-own on` measurement
+ * variant that also appends each bot's own outputs; `core`, the core library's stream mode (always
+ * given the bot's own outputs); `auto`, the core's auto mode with its ledger-size threshold.
  */
-type CStream = { mode: 'off' } | { mode: 'on'; restreamTokens: number; own?: true };
+type CStream =
+  | { mode: 'off' }
+  | { mode: 'on'; restreamTokens: number; own?: true }
+  | { mode: 'core'; restreamTokens: number }
+  | { mode: 'auto'; restreamTokens: number; autoAfterEntries: number };
 
-const cStreamLine = (c: CStream): string =>
-  c.mode === 'off' ? 'off' : `on (restreamTokens ${c.restreamTokens}${c.own ? ', own outputs' : ''})`;
+const STREAM_MODES = ['off', 'on', 'core', 'auto'] as const;
+
+function cStreamLine(c: CStream): string {
+  switch (c.mode) {
+    case 'off':
+      return 'off';
+    case 'on':
+      return `on (restreamTokens ${c.restreamTokens}${c.own ? ', own outputs' : ''})`;
+    case 'core':
+      return `core (restreamTokens ${c.restreamTokens})`;
+    case 'auto':
+      return `auto (restreamTokens ${c.restreamTokens}, autoAfterEntries ${c.autoAfterEntries})`;
+  }
+}
+
+/** The policy options a `--c-stream` setting passes to group C. */
+function streamOpts(c: CStream) {
+  switch (c.mode) {
+    case 'off':
+      return {};
+    case 'on':
+      return { stream: { restreamTokens: c.restreamTokens, ...(c.own ? { own: true } : {}) } };
+    case 'core':
+      return { coreStream: { mode: 'on' as const, restreamTokens: c.restreamTokens } };
+    case 'auto':
+      return { coreStream: { mode: 'auto' as const, restreamTokens: c.restreamTokens, autoAfterEntries: c.autoAfterEntries } };
+  }
+}
 
 /** A scenario id names `scenarios/<id>.json`; anything ending in `.json` is a path (relative to cwd). */
 export function scenarioPath(idOrPath: string): string {
@@ -109,7 +141,7 @@ function parseArgs(argv: string[]): Args {
     if (seen.has(flag)) throw new UsageError(`${flag} is given more than once`);
     seen.set(flag, value);
   }
-  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--c-stream-own', '--out', '--stamp'];
+  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--c-stream-own', '--auto-after', '--out', '--stamp'];
   for (const flag of seen.keys()) if (!known.includes(flag)) throw new UsageError(`unknown flag ${flag}`);
   const scenario = seen.get('--scenario');
   const group = seen.get('--group');
@@ -123,20 +155,28 @@ function parseArgs(argv: string[]): Args {
   }
   const int = (n: number) => Number.isInteger(n) && n > 0;
   const streamMode = seen.get('--c-stream') ?? 'off';
-  if (streamMode !== 'off' && streamMode !== 'on') throw new UsageError(`--c-stream must be off or on, got "${streamMode}"`);
+  if (!(STREAM_MODES as readonly string[]).includes(streamMode)) throw new UsageError(`--c-stream must be off, on, core or auto, got "${streamMode}"`);
   const restream = seen.get('--restream-tokens');
-  if (restream !== undefined && streamMode !== 'on') throw new UsageError('--restream-tokens needs --c-stream on');
+  if (restream !== undefined && streamMode === 'off') throw new UsageError('--restream-tokens needs --c-stream on, core or auto');
   const own = seen.get('--c-stream-own');
-  if (own !== undefined && streamMode !== 'on') throw new UsageError('--c-stream-own needs --c-stream on');
+  if (own !== undefined && streamMode !== 'on') throw new UsageError('--c-stream-own needs --c-stream on (core and auto always carry own outputs)');
   if (own !== undefined && own !== 'off' && own !== 'on') throw new UsageError(`--c-stream-own must be off or on, got "${own}"`);
+  const autoAfter = seen.get('--auto-after');
+  if (autoAfter !== undefined && streamMode !== 'auto') throw new UsageError('--auto-after needs --c-stream auto');
+  const restreamTokens = () =>
+    number('--restream-tokens', restream ?? String(streamMode === 'on' ? DEFAULT_RESTREAM_TOKENS : DEFAULT_STREAM_OPTIONS.restreamTokens), int, 'a positive integer');
   const cStream: CStream =
     streamMode === 'off'
       ? { mode: 'off' }
-      : {
-          mode: 'on',
-          restreamTokens: number('--restream-tokens', restream ?? String(DEFAULT_RESTREAM_TOKENS), int, 'a positive integer'),
-          ...(own === 'on' ? { own: true as const } : {}),
-        };
+      : streamMode === 'on'
+        ? { mode: 'on', restreamTokens: restreamTokens(), ...(own === 'on' ? { own: true as const } : {}) }
+        : streamMode === 'core'
+          ? { mode: 'core', restreamTokens: restreamTokens() }
+          : {
+              mode: 'auto',
+              restreamTokens: restreamTokens(),
+              autoAfterEntries: number('--auto-after', autoAfter ?? String(DEFAULT_STREAM_OPTIONS.autoAfterEntries), int, 'a positive integer'),
+            };
   return {
     scenario,
     group,
@@ -185,7 +225,7 @@ export async function main(argv: string[]): Promise<number> {
     compactRatio: args.compactRatio,
     summaryTokens: args.summaryTokens,
     ...(args.cPublic.switches === undefined ? {} : { publicBoard: args.cPublic.switches }),
-    ...(args.cStream.mode === 'on' ? { stream: { restreamTokens: args.cStream.restreamTokens, ...(args.cStream.own ? { own: true } : {}) } } : {}),
+    ...streamOpts(args.cStream),
   };
   const records: CallRecord[] = [];
   const metrics: GroupMetrics[] = [];

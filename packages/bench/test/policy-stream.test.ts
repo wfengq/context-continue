@@ -8,6 +8,7 @@ import { fmtBot, fmtOps } from '../src/text.js';
 import { ScriptedModel, type ModelRequest } from '../src/model.js';
 import { loadScenario } from '../src/scenario.js';
 import { scenarioPath } from '../src/cli.js';
+import type { CallRecord } from '../src/types.js';
 
 const count = (s: string) => Math.ceil(s.length / 4);
 
@@ -417,6 +418,141 @@ describe('group C with --c-stream on', () => {
 
   test('the stream setting reaches group C only', () => {
     const opts = { window: 128000, compactRatio: 0.8, summaryTokens: 1500, stream: { restreamTokens: 8000 } };
+    for (const g of ['A', 'B', 'D', 'E', 'F'] as const) expect(createPolicy(g, opts).group).toBe(g);
+    expect(createPolicy('C', opts).group).toBe('C');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// group C on the core library's stream mode (--c-stream core / auto)
+// ---------------------------------------------------------------------------
+
+type CoreStream = { mode: 'on' | 'auto'; restreamTokens: number; autoAfterEntries?: number };
+
+/** Runs group C on the core stream, capturing every request the model sees. */
+async function runCore(id: string, coreStream: CoreStream) {
+  const s = loadScenario(scenarioPath(id));
+  const seen: ModelRequest[] = [];
+  const inner = new ScriptedModel(s.idleReply ?? 'Noted.');
+  const model = { complete: async (r: ModelRequest) => (seen.push(r), inner.complete(r)) };
+  const run = await runScenario(s, projectPolicy({ coreStream }), { model });
+  return { ...run, seen };
+}
+
+const shapeOf = (records: CallRecord[]) => records.map(r => [r.botId, r.kind, r.step]);
+
+describe('group C with --c-stream core', () => {
+  test('the core is driven exactly as without the stream: same requests, core errors and finish; no upper bound; stream stats reported', async () => {
+    for (const id of ['product-plan', 'flappy-bird', 'event-plan']) {
+      const off = await runC(id);
+      const core = await runCore(id, { mode: 'on', restreamTokens: 8000 });
+      expect(shapeOf(core.records), id).toEqual(shapeOf(off.records));
+      expect(core.stats.coreErrors, id).toBe(off.stats.coreErrors);
+      expect(core.stats.unfinished, id).toBe(off.stats.unfinished);
+      expect(core.stats.cacheableUpperBound, id).toBeUndefined();
+      expect(core.stats.stream?.fromStep, id).toBe(0);
+      const bots = new Set(core.records.map(r => r.botId)).size;
+      expect(core.stats.stream!.snapshots, id).toBeGreaterThanOrEqual(bots);
+      expect(core.stats.stream!.ledgerEntries, id).toBeGreaterThan(0);
+      expect(core.records.map(r => r.inputTokens), id).not.toEqual(off.records.map(r => r.inputTokens));
+    }
+  });
+
+  test('without a restream every request of a bot extends its previous one; the prefix is cacheable, the rest not; updates and own segments appear', async () => {
+    const { records, seen, stats } = await runCore('long-app', { mode: 'on', restreamTokens: 100_000_000 });
+    const prev = new Map<string, string[]>();
+    for (const [i, req] of seen.entries()) {
+      const t = req.segments.map(x => x.text);
+      const p = prev.get(req.botId);
+      if (p !== undefined) {
+        expect(isPrefix(p, t), `request ${i} of ${req.botId}`).toBe(true);
+        expect(req.segments.slice(0, p.length).every(x => x.cacheable)).toBe(true);
+        expect(req.segments.slice(p.length).some(x => x.cacheable)).toBe(false);
+        const uncached = records[i]!.segments!.filter(x => !x.cacheable).reduce((n, x) => n + x.tokens, 0);
+        expect(records[i]!.cacheableTokens).toBe(records[i]!.inputTokens - uncached);
+      }
+      prev.set(req.botId, t);
+    }
+    expect(stats.stream!.snapshots).toBe(prev.size);
+    const kinds = new Set(records.flatMap(r => r.segments!.map(x => x.kind)));
+    expect(kinds.has('updates')).toBe(true);
+    expect(kinds.has('own')).toBe(true);
+  });
+
+  test('review and replan steps are review and planning stream requests: their bodies are appended to the lead stream', async () => {
+    const s = loadScenario(scenarioPath('long-app'));
+    const { seen, records } = await runCore('long-app', { mode: 'on', restreamTokens: 100_000_000 });
+    let review = 0;
+    let planning = 0;
+    for (const [i, rec] of records.entries()) {
+      if (rec.kind !== 'scripted') continue;
+      const step = s.steps[rec.step]!;
+      const t = seen[i]!.segments.map(x => x.text);
+      if (step.kind === 'review' && t.some(x => x.includes('## Content to review'))) review++;
+      if (step.kind === 'replan' && t.at(-2)!.startsWith('# Plan the project')) planning++;
+    }
+    expect(review).toBeGreaterThan(0);
+    expect(planning).toBe(s.steps.filter(x => x.kind === 'replan').length);
+  });
+
+  test("each scripted reply and its tool-call lines (E's author format) are recorded with recordOwnOutput and open the author's next request", async () => {
+    const id = 'product-plan';
+    const s = loadScenario(scenarioPath(id));
+    const own = await runCore(id, { mode: 'on', restreamTokens: 1_000_000 });
+    const versions = new Map<string, number>();
+    let checked = 0;
+    for (const [i, rec] of own.records.entries()) {
+      if (rec.kind !== 'scripted') continue;
+      const out = scriptedOutput(s.steps[rec.step]!, rec.step);
+      const lines = [fmtBot(rec.botId, out.reply), ...fmtOps(rec.botId, out.ops, versions, false, true, out.reply)].join('\n');
+      const next = own.seen.slice(i + 1).find(r => r.botId === rec.botId);
+      if (next === undefined) continue;
+      expect(next.segments[own.seen[i]!.segments.length]!.text, `step ${rec.step}`).toBe(lines);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(5);
+  });
+
+  test('auto: below the threshold C is exactly off (requests and upper bound); from the first request it is exactly core', async () => {
+    const id = 'flappy-bird';
+    const off = await runC(id);
+    const never = await runCore(id, { mode: 'auto', restreamTokens: 8000, autoAfterEntries: 1_000_000 });
+    expect(never.records).toEqual(off.records);
+    expect(never.stats.cacheableUpperBound).toBe(off.stats.cacheableUpperBound);
+    expect(never.stats.stream).toEqual({ fromStep: null, snapshots: 0, ledgerEntries: expect.any(Number) });
+    const core = await runCore(id, { mode: 'on', restreamTokens: 8000 });
+    const always = await runCore(id, { mode: 'auto', restreamTokens: 8000, autoAfterEntries: 1 });
+    expect(always.records).toEqual(core.records);
+    expect(always.stats).toEqual(core.stats);
+  });
+
+  test('auto: requests before the switch are the off requests; the switch is reported and every later request is a stream request', async () => {
+    const id = 'long-app';
+    const off = await runC(id);
+    const full = await runCore(id, { mode: 'auto', restreamTokens: 8000, autoAfterEntries: 1_000_000 });
+    const at = Math.floor(full.stats.stream!.ledgerEntries / 2);
+    const auto = await runCore(id, { mode: 'auto', restreamTokens: 8000, autoAfterEntries: at });
+    const from = auto.stats.stream!.fromStep!;
+    expect(from).toBeGreaterThan(0);
+    expect(auto.stats.cacheableUpperBound).toBeUndefined();
+    expect(shapeOf(auto.records)).toEqual(shapeOf(off.records));
+    const first = auto.records.findIndex((r, i) => JSON.stringify(r) !== JSON.stringify(off.records[i]));
+    expect(auto.records[first]!.step).toBe(from);
+    expect(auto.records.slice(0, first)).toEqual(off.records.slice(0, first));
+    // from the switch on every request extends the bot's stream or is one of the reported snapshots
+    const prev = new Map<string, string[]>();
+    let fresh = 0;
+    for (const req of auto.seen.slice(first)) {
+      const t = req.segments.map(x => x.text);
+      const p = prev.get(req.botId);
+      if (p === undefined || !isPrefix(p, t)) fresh++;
+      prev.set(req.botId, t);
+    }
+    expect(fresh).toBe(auto.stats.stream!.snapshots);
+  });
+
+  test('the core stream setting reaches group C only', () => {
+    const opts = { window: 128000, compactRatio: 0.8, summaryTokens: 1500, coreStream: { mode: 'on' as const, restreamTokens: 8000 } };
     for (const g of ['A', 'B', 'D', 'E', 'F'] as const) expect(createPolicy(g, opts).group).toBe(g);
     expect(createPolicy('C', opts).group).toBe('C');
   });

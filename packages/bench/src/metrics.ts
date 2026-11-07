@@ -32,6 +32,8 @@ export interface GroupMetrics {
    * the cost units that would give. Shown as a caveat line, never in the tables (R-B19).
    */
   upperBound?: { cacheableTokens: number; costUnits: number };
+  /** Group C on the core stream only: see PolicyStats.stream. Shown as a per-scenario report line. */
+  stream?: { fromStep: number | null; snapshots: number; ledgerEntries: number };
 }
 
 /** Steps per growth-table bucket: 25 for standard and long, 100 for xlong. */
@@ -110,5 +112,6 @@ export function computeMetrics(
   if (stats.cacheableUpperBound !== undefined) {
     m.upperBound = { cacheableTokens: stats.cacheableUpperBound, costUnits: cost(stats.cacheableUpperBound) };
   }
+  if (stats.stream !== undefined) m.stream = { ...stats.stream };
   return m;
 }

@@ -78,4 +78,10 @@ export interface PolicyStats {
    * caches the core's stable segments (not only an identical prefix) could cache. Report caveat only.
    */
   cacheableUpperBound?: number;
+  /**
+   * Group C on the core stream (`--c-stream core|auto`) only: the step of the first streamed request
+   * (null when `auto` never switched on), the number of snapshot requests (each bot's first one
+   * included), and the ledger size at the end of the run.
+   */
+  stream?: { fromStep: number | null; snapshots: number; ledgerEntries: number };
 }
