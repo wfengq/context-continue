@@ -6,7 +6,7 @@ A shared, structured project context for teams of AI bots, plus a benchmark that
 
 When several bots work on one project in a group chat, each bot usually rereads the whole conversation on every turn. This repository tests a different idea: the project keeps a small **project board** (goal, conventions, workstreams, contracts, decisions, facts, failures) and each bot gets a **brief** — the part of the board that concerns it plus what changed since it last looked — alongside its own private notes and memory.
 
-> **Status: experimental.** All numbers below come from a scripted fake model. They measure how much context each approach sends, not how well the bots do the work.
+> **Status: experimental.** Most numbers below come from a scripted fake model and measure how much context each approach sends. One real-model check (below) asks a real model questions inside each group's context; it measures whether the key facts can be answered from that context, not how well the bots do the work.
 
 ## What is here
 
@@ -99,6 +99,27 @@ Why 75: the standard scenarios end with 42–44 ledger entries, so they stay on 
 
 Caveats for this table: the fake model measures context, not whether the bots use it; the stream includes the bots' own outputs (without them it would be cheaper); contracts retired by a replan stay visible in the stream on purpose (on the extra-long scenario core costs about 15% more than the prototype, mainly because of retired contracts), and the scenarios count them as facts bots still need; real cache expiry is not modelled, so a bot that idles longer than the provider keeps its cache pays for a full re-send; the bench writes fewer ledger entries per step than a host that logs every bot reply as chat, which would reach 75 sooner (on these scenarios even logging every scripted bot reply as chat would end at about 65 entries, just under 75; approximate). Details: [spec §5](docs/superpowers/specs/2026-11-06-core-stream-mode.md).
 
+### Real-model check (DeepSeek)
+
+The fake model only shows whether a fact is in the context. To check whether a real model can actually answer from it, every key fact has a question with string-graded answers (an old value after a requirement change counts as **stale**). The scripts run unchanged; at the first, middle and last moment a bot needs a fact, the bench sends that bot's exact context plus the question to a real model. A **no-context** row asks each question with no project context, to show how much can be guessed. One run on DeepSeek (`deepseek-flash`, temperature 0), C in long-project mode `auto`; total cost $0.53.
+
+| Group | Long: correct | Long: stale | Long: prompt tokens | Extra-long: correct | Extra-long: stale | Extra-long: prompt tokens |
+|---|---:|---:|---:|---:|---:|---:|
+| A single agent | 100.0% | 0.0% | 2,409,696 | 97.8% | 1.5% | 17,421,292 |
+| **C project board** | **97.7%** | **0.8%** | **618,074** | **97.0%** | **2.2%** | **1,637,258** |
+| D shared log | 97.0% | 1.5% | 1,022,267 | 97.0% | 1.5% | 9,174,292 |
+| E turn-taking chat | 98.5% | 0.0% | 928,219 | 95.6% | 2.2% | 7,280,089 |
+| no context | 18.2% | — | — | 35.6% | — | — |
+
+132 questions per group on the long scenarios, 135 on the extra-long one. Prompt tokens are the provider's count over all of a group's question requests, so they show how large each group's context is.
+
+- All four groups answer 95–100% correctly, 1–3 questions apart: one run cannot rank them. What it shows is that C's much smaller context does not make the real model answer worse.
+- On the extra-long scenario C gets the same score as D with about a fifth of D's tokens (4.4× fewer than E), and its questions cost 40% less than D's and 32% less than E's.
+- Without context the model gets 18% / 36% right (mostly conventions that follow industry defaults), so the questions do need the project.
+- Requirement changes are the weakest category in every group (85–100%), and every stale answer is a requirement change.
+
+Caveats: one run, one model; grading by strings; the real model only answers the inserted questions and does not drive the script. The question requests are sparse (a few moments per bot), so the provider's real cache hits are below the bench's prompt-cache estimate, most for C (69% real vs 95% estimated on the extra-long scenario), whose stream takes a new snapshot between distant questions; this does not measure the cache of a full scripted run. Details: [spec §5](docs/superpowers/specs/2026-11-07-real-model-probes.md), raw reports in [`docs/superpowers/runs`](docs/superpowers/runs).
+
 ## What we learned
 
 1. **Context per request stays small and grows slowly.** On the long scenarios C's median request is about 1.5k tokens and its largest about 3k; the largest requests in the other groups reach 14–27k. On the extra-long scenario C's median is about 4.2k and its largest about 6.7k, while the other groups grow with the history to 71k–190k. This matters for context-window limits, latency and long projects.
@@ -107,10 +128,11 @@ Caveats for this table: the fake model measures context, not whether the bots us
 4. **Putting project-wide facts on the shared board recovers visibility at a measured cost.** With everything on, C sees 96% of key facts, close to D and E, for about 57% more cost than with nothing on (long scenarios). The extra cost comes from a larger board being resent every time it changes; reordering for the cache does not remove it.
 5. **Some facts need the bots' cooperation.** Agreements that bots make only in chat, without recording them as contracts, never reach the board.
 6. **For long projects, an append-only stream beats rebuilding the brief.** In long-project mode (`auto`, switching at 75 ledger entries) C is cheaper than D and E on the long and extra-long scenarios (by 2–6% and about 70%) with 96.9% and 99.1% fact visibility (on the long scenarios auto's 96.9% is slightly below D and E, at 98.1% / 97.7%), and leaves the standard scenarios on the plain brief, where a stream would cost even more. Its requests are larger than the brief's (up to about 19k tokens on the extra-long scenario), still about a fifth of D's and E's.
+7. **A real model answers as well from C's context as from full histories.** On DeepSeek, C answers 97–98% of the key-fact questions correctly, within 1–3 questions of A, D and E, while sending a fifth of D's tokens on the extra-long scenario. The real-model check does not show C answering better, and it does not test real cache behaviour over a full run.
 
 ## Limitations
 
-- A scripted fake model: no task quality, no consistency conflicts, no real summarisation.
+- A scripted fake model: no task quality, no consistency conflicts, no real summarisation. The real-model check covers only answering questions about key facts, in one run on one model.
 - B and F approximate closed products from public descriptions; E approximates DS Bot from its source.
 - E's compaction is exercised only marginally: on the extra-long scenario E compacts once, only the lead, at step 1,006 with about 150 steps left, and its history passes the threshold by under 1%; nearly half of that history (about 46%) is the lead's own replans (measured with a diagnostic copy of the bench outside the repo; see spec §6.3). After compacting, the lead's visibility rests on the assumption that E's summary keeps every fact marker (without the markers it falls from 100% to 49% for the remaining steps; measured with a diagnostic copy of the bench outside the repo; see spec §6.3).
 - Only E models the context window. The other groups' figures assume an unlimited window: on the extra-long scenario A and B exceed 128,000 tokens and D reaches about 125k.
