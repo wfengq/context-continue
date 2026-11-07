@@ -303,6 +303,14 @@ describe('probe failures, stop and streaming', () => {
     expect(probeErrorMessage(new Error('HTTP 529 overloaded from api.anthropic.com'))).toBe('Error: HTTP 529 overloaded from api.anthropic.com');
   });
 
+  test('probeErrorMessage masks URL key query params and leaves dotted host names alone', () => {
+    const m = probeErrorMessage(new Error('GET https://example.com/v1?key=AIzaSyA-secret123&x=1 and ?api_key=k999 failed'));
+    expect(m).not.toMatch(/AIzaSyA-secret123|k999/);
+    expect(m).toContain('key=***&x=1');
+    const host = 'connect to my-bucket-name.s3-external.amazonaws.com failed';
+    expect(probeErrorMessage(new Error(host))).toBe(`Error: ${host}`);
+  });
+
   test('onProbe receives each record as it is made', async () => {
     const s = scenario();
     const streamed: ProbeRecord[] = [];

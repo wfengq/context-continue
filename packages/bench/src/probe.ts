@@ -41,8 +41,10 @@ export function probeErrorMessage(e: unknown): string {
     .replace(/((?:proxy-)?authorization|x-api-key|api[_-]?key|access[_-]?token|secret)(["']?\s*[:=]\s*["']?)(?:(?:bearer|basic|token)\s+)?[^\s"',}]+/gi, '$1$2***')
     // A scheme word followed by a credential anywhere: `bearer ghp_…`, `Basic dXNl…`.
     .replace(/\b(bearer|basic|token)\s+[^\s"',}]+/gi, '$1 ***')
-    // JWT-shaped strings: three base64url parts joined by dots.
-    .replace(/[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '***')
+    // URL query parameters that carry keys: `?key=…`, `&api_key=…`, `?access_token=…`.
+    .replace(/([?&](?:key|api[_-]?key|access[_-]?token|token)=)[^&#\s"']+/gi, '$1***')
+    // JWTs: three base64url parts joined by dots, the first a base64 JSON header ("eyJ"); host names stay.
+    .replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g, '***')
     // Well-known key prefixes.
     .replace(/\bsk-[A-Za-z0-9_-]+/g, 'sk-***')
     .replace(/\b(gh[pousr]_)[A-Za-z0-9]+/g, '$1***')
