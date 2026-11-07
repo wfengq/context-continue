@@ -1,14 +1,18 @@
-import { realpathSync } from 'node:fs';
+import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_STREAM_OPTIONS, type PublicBoardSwitches } from '@context-continue/core';
+import { CostGuardModel, DryRunModel, estimateProbes, priceFor, type ModelPrice } from './cost.js';
 import { computeMetrics, type GroupMetrics } from './metrics.js';
+import type { Model } from './model.js';
+import { AnthropicModel, DEFAULT_MAX_TOKENS, resolveApiKey } from './models/anthropic.js';
 import { createPolicy } from './policies/index.js';
-import { renderReport, writeResults } from './report.js';
+import type { ProbeSamples } from './probe.js';
+import { renderProbeEstimate, renderReport, writeResults, type ProbeSection } from './report.js';
 import { DEFAULT_RESTREAM_TOKENS } from './policies/stream.js';
 import { runScenario } from './runner.js';
 import { loadScenario } from './scenario.js';
-import type { CallRecord, Group, Scenario } from './types.js';
+import type { CallRecord, Group, ProbeRecord, Scenario } from './types.js';
 
 /** The standard scenarios (20–40 steps), in report order. */
 export const STANDARD_IDS = ['product-plan', 'flappy-bird', 'event-plan'] as const;
@@ -29,7 +33,31 @@ const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
-  '[--c-stream off|on|core|auto] [--restream-tokens 8000] [--c-stream-own off|on] [--auto-after <n>] [--out results] [--stamp <s>]';
+  '[--c-stream off|on|core|auto] [--restream-tokens 8000] [--c-stream-own off|on] [--auto-after <n>] [--out results] [--stamp <s>] ' +
+  '[--probes [--dry-run] [--max-cost <usd>] [--model claude-haiku-5-5] [--probe-groups A,C,D,E] [--probe-samples fml|all|<n>] [--max-probes <n>]]';
+
+/** Fact probes with a real model (spec 2026-11-07-real-model-probes); absent without --probes. */
+interface ProbeArgs {
+  model: string;
+  price: ModelPrice;
+  groups: Group[];
+  samples: ProbeSamples;
+  maxPerScenario: number | undefined;
+  dryRun: boolean;
+  /** Required for a real run. */
+  maxCost: number | undefined;
+}
+
+const DEFAULT_PROBE_GROUPS: Group[] = ['A', 'C', 'D', 'E'];
+const PROBE_FLAGS = ['--dry-run', '--max-cost', '--model', '--probe-groups', '--probe-samples', '--max-probes'];
+const BOOLEAN_FLAGS = ['--probes', '--dry-run'];
+
+/** What main uses from the outside world for probes; tests inject a fake fetch and environment. */
+export interface MainDeps {
+  fetch?: typeof fetch;
+  env?: Record<string, string | undefined>;
+  sleep?: (ms: number) => Promise<void>;
+}
 
 interface Args {
   scenario: string;
@@ -42,6 +70,7 @@ interface Args {
   cStream: CStream;
   out: string;
   stamp: string | undefined;
+  probes: ProbeArgs | undefined;
 }
 
 class UsageError extends Error {}
@@ -133,15 +162,22 @@ function parseArgs(argv: string[]): Args {
   const [command, ...rest] = argv;
   if (command !== 'run') throw new UsageError(command === undefined ? 'missing command' : `unknown command "${command}"`);
   const seen = new Map<string, string>();
-  for (let i = 0; i < rest.length; i += 2) {
+  for (let i = 0; i < rest.length; ) {
     const flag = rest[i]!;
-    const value = rest[i + 1];
     if (!flag.startsWith('--')) throw new UsageError(`unexpected argument "${flag}"`);
+    if (BOOLEAN_FLAGS.includes(flag)) {
+      if (seen.has(flag)) throw new UsageError(`${flag} is given more than once`);
+      seen.set(flag, '');
+      i += 1;
+      continue;
+    }
+    const value = rest[i + 1];
     if (value === undefined || value.startsWith('--')) throw new UsageError(`${flag} needs a value`);
     if (seen.has(flag)) throw new UsageError(`${flag} is given more than once`);
     seen.set(flag, value);
+    i += 2;
   }
-  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--c-stream-own', '--auto-after', '--out', '--stamp'];
+  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--c-stream-own', '--auto-after', '--out', '--stamp', '--probes', ...PROBE_FLAGS];
   for (const flag of seen.keys()) if (!known.includes(flag)) throw new UsageError(`unknown flag ${flag}`);
   const scenario = seen.get('--scenario');
   const group = seen.get('--group');
@@ -188,11 +224,46 @@ function parseArgs(argv: string[]): Args {
     cStream,
     out: seen.get('--out') ?? 'results',
     stamp,
+    probes: parseProbeArgs(seen, group === 'all' ? GROUPS : [group as Group]),
   };
 }
 
+function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArgs | undefined {
+  if (!seen.has('--probes')) {
+    const stray = PROBE_FLAGS.find(f => seen.has(f));
+    if (stray !== undefined) throw new UsageError(`${stray} needs --probes`);
+    return undefined;
+  }
+  const model = seen.get('--model') ?? 'claude-haiku-5-5';
+  let price: ModelPrice;
+  try {
+    price = priceFor(model);
+  } catch (e) {
+    throw new UsageError(`--model: ${(e as Error).message}`);
+  }
+  const rawGroups = seen.get('--probe-groups');
+  const groups = rawGroups === undefined ? DEFAULT_PROBE_GROUPS : (rawGroups.split(',') as Group[]);
+  const badGroup = groups.find(g => !GROUPS.includes(g));
+  if (badGroup !== undefined) throw new UsageError(`--probe-groups: unknown group "${badGroup}" in "${rawGroups}" (use a comma list of A..F)`);
+  if (new Set(groups).size !== groups.length) throw new UsageError(`--probe-groups: a group is repeated in "${rawGroups}"`);
+  const probed = GROUPS.filter(g => groups.includes(g) && runGroups.includes(g));
+  if (probed.length === 0) throw new UsageError(`--probe-groups ${groups.join(',')}: none of these groups is in this run (--group ${runGroups.length === 1 ? runGroups[0] : 'all'})`);
+  const rawSamples = seen.get('--probe-samples') ?? 'fml';
+  const samples: ProbeSamples =
+    rawSamples === 'fml' || rawSamples === 'all'
+      ? rawSamples
+      : number('--probe-samples', rawSamples, n => Number.isInteger(n) && n > 0, 'fml, all or a positive integer');
+  const rawMax = seen.get('--max-probes');
+  const maxPerScenario = rawMax === undefined ? undefined : number('--max-probes', rawMax, n => Number.isInteger(n) && n >= 0, 'a non-negative integer');
+  const dryRun = seen.has('--dry-run');
+  const rawCost = seen.get('--max-cost');
+  const maxCost = rawCost === undefined ? undefined : number('--max-cost', rawCost, n => n > 0, 'a positive number of US dollars');
+  if (!dryRun && maxCost === undefined) throw new UsageError('--probes sends paid requests: give --max-cost <usd> (or --dry-run for an estimate)');
+  return { model, price, groups: probed, samples, maxPerScenario, dryRun, maxCost };
+}
+
 /** Runs the bench; returns the process exit code. Errors go to stderr. */
-export async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[], deps: MainDeps = {}): Promise<number> {
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -220,6 +291,35 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const groups = args.group === 'all' ? GROUPS : [args.group as Group];
+  const dir = join(args.out, args.stamp ?? timestamp(new Date()));
+
+  // Probes: a dry run sends nothing; a real run needs the key (from the environment only) and a budget.
+  const pa = args.probes;
+  let probeModel: Model | undefined;
+  let guard: CostGuardModel | undefined;
+  if (pa !== undefined) {
+    if (pa.dryRun) probeModel = new DryRunModel();
+    else {
+      let key: string;
+      try {
+        key = resolveApiKey(deps.env ?? process.env).key;
+      } catch (e) {
+        process.stderr.write(`bench: ${(e as Error).message}\n`);
+        return 2;
+      }
+      const real = new AnthropicModel({
+        model: pa.model, apiKey: key, maxTokens: DEFAULT_MAX_TOKENS,
+        ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }), ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
+      });
+      guard = new CostGuardModel(real, pa.price, { maxCost: pa.maxCost!, maxTokens: DEFAULT_MAX_TOKENS });
+      probeModel = guard;
+      // Each finished probe is appended at once, so an interrupted paid run keeps what it bought.
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'probes.jsonl'), '');
+    }
+  }
+  const probeRecords: ProbeRecord[] = [];
+  const stopped: { scenario: string; group: Group; reason: string }[] = [];
   const opts = {
     window: args.window,
     compactRatio: args.compactRatio,
@@ -231,17 +331,49 @@ export async function main(argv: string[]): Promise<number> {
   const metrics: GroupMetrics[] = [];
   for (const s of scenarios) {
     for (const g of groups) {
-      const run = await runScenario(s, createPolicy(g, opts));
+      const probe =
+        pa !== undefined && pa.groups.includes(g)
+          ? {
+              model: probeModel!, samples: pa.samples,
+              ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
+              ...(pa.dryRun ? {} : { onProbe: (rec: ProbeRecord) => appendFileSync(join(dir, 'probes.jsonl'), JSON.stringify(rec) + '\n') }),
+            }
+          : undefined;
+      const run = await runScenario(s, createPolicy(g, opts), probe === undefined ? {} : { probe });
+      probeRecords.push(...(run.probes ?? []));
+      if (run.probeStopped !== undefined) stopped.push({ scenario: s.id, group: g, reason: run.probeStopped });
       records.push(...run.records);
       metrics.push(computeMetrics(g, s.id, run.records, run.stats, args.cacheRatio, s.tier ?? 'standard', (s.facts ?? []).map(f => f.id)));
     }
   }
 
   const params = { cacheRatio: args.cacheRatio, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, window: args.window };
-  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, cStream: cStreamLine(args.cStream), dsbotRef: 'f823773', tiers: Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'])) });
-  const dir = join(args.out, args.stamp ?? timestamp(new Date()));
-  writeResults(dir, { records, metrics, params, cPublic: args.cPublic.canonical, cStream: args.cStream }, report);
+  const tiers = Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'] as const));
+  const section: ProbeSection | undefined =
+    pa !== undefined && !pa.dryRun
+      ? {
+          model: pa.model, maxTokens: DEFAULT_MAX_TOKENS, thinking: 'disabled', temperature: 'not sent (model default)', samples: pa.samples,
+          ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
+          groups: pa.groups, maxCost: pa.maxCost!, price: pa.price, usage: guard!.spent.usage, cost: guard!.spent.cost, stopped, records: probeRecords,
+        }
+      : undefined;
+  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, cStream: cStreamLine(args.cStream), dsbotRef: 'f823773', tiers, ...(section === undefined ? {} : { probes: section }) });
+  writeResults(dir, { records, metrics, params, cPublic: args.cPublic.canonical, cStream: args.cStream, ...(section === undefined ? {} : { probes: section }) }, report);
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);
+  if (pa !== undefined && pa.dryRun) {
+    const est = estimateProbes(probeRecords, pa.price, DEFAULT_MAX_TOKENS);
+    const meta = { model: pa.model, maxTokens: DEFAULT_MAX_TOKENS, samples: pa.samples, groups: pa.groups, maxCost: pa.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
+    const md = renderProbeEstimate(est, meta, tiers);
+    writeFileSync(join(dir, 'probe-estimate.json'), JSON.stringify({ ...meta, price: pa.price, ...est }, null, 2) + '\n');
+    writeFileSync(join(dir, 'probe-estimate.md'), md);
+    process.stdout.write(md);
+    process.stdout.write(`bench: wrote ${join(dir, 'probe-estimate.json')} and ${join(dir, 'probe-estimate.md')}\n`);
+  } else if (section !== undefined) {
+    process.stdout.write(
+      `bench: ${section.records.length} probes, real cost $${section.cost.toFixed(4)} of --max-cost $${section.maxCost}` +
+        (stopped.length > 0 ? `; probing stopped (${stopped[0]!.reason})` : '') + '\n',
+    );
+  }
   return 0;
 }
 

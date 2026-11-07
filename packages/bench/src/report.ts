@@ -1,8 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_OPTIONS } from '@context-continue/core';
+import { usageCost, type ModelPrice, type ProbeEstimateRow } from './cost.js';
 import { growthBucket, nearestRank, type GroupMetrics } from './metrics.js';
-import type { CallRecord, Group, Tier } from './types.js';
+import type { ProbeSamples } from './probe.js';
+import type { CallRecord, Group, ModelUsage, ProbeRecord, ProbeVerdict, Tier } from './types.js';
 
 const ORDER: Group[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -69,7 +71,7 @@ function sumGroup(rows: GroupMetrics[], g: Group): GroupMetrics | undefined {
 
 export function renderReport(
   all: GroupMetrics[],
-  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; cStream?: string; dsbotRef: 'f823773'; tiers: Record<string, Tier> },
+  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; cStream?: string; dsbotRef: 'f823773'; tiers: Record<string, Tier>; probes?: ProbeSection },
 ): string {
   const out: string[] = [
     '> Results come from a scripted fake model: they measure context size only, not task quality.',
@@ -159,6 +161,7 @@ export function renderReport(
       return [s.contextMedian, s.contextP90, s.contextMax];
     }), '');
   }
+  if (meta.probes !== undefined) out.push(...renderProbeSection(meta.probes, tierOf));
   const eInRun = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario));
   const eCompacted = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0);
   const hasXlong = tiersPresent.includes('xlong');
@@ -254,13 +257,136 @@ export function renderReport(
 
 export function writeResults(
   dir: string,
-  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number>; cPublic?: string; cStream?: unknown },
+  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number>; cPublic?: string; cStream?: unknown; probes?: ProbeSection },
   report: string,
 ): void {
   mkdirSync(dir, { recursive: true });
   const params: Record<string, number> = {};
   for (const k of Object.keys(payload.params).sort()) params[k] = payload.params[k]!;
-  const json = JSON.stringify({ params, ...(payload.cPublic === undefined ? {} : { cPublic: payload.cPublic }), ...(payload.cStream === undefined ? {} : { cStream: payload.cStream }), metrics: payload.metrics, records: payload.records }, null, 2) + '\n';
+  const json = JSON.stringify({ params, ...(payload.cPublic === undefined ? {} : { cPublic: payload.cPublic }), ...(payload.cStream === undefined ? {} : { cStream: payload.cStream }), metrics: payload.metrics, records: payload.records, ...(payload.probes === undefined ? {} : { probes: payload.probes }) }, null, 2) + '\n';
   writeFileSync(join(dir, 'results.json'), json);
   writeFileSync(join(dir, 'report.md'), report);
+}
+
+/** The fact-probe results of a real run, as results.json's `probes` section and the report's input. */
+export interface ProbeSection {
+  model: string;
+  maxTokens: number;
+  thinking: 'disabled';
+  temperature: string;
+  samples: ProbeSamples;
+  maxPerScenario?: number;
+  groups: Group[];
+  maxCost: number;
+  price: ModelPrice;
+  /** Real usage and cost over every probe request (as the provider reported it). */
+  usage: ModelUsage;
+  cost: number;
+  /** One entry per scenario-group run in which probing was stopped (cost guard, or a fatal API error). */
+  stopped: { scenario: string; group: Group; reason: string }[];
+  records: ProbeRecord[];
+}
+
+const VERDICTS: ProbeVerdict[] = ['correct', 'stale', 'wrong', 'error'];
+const usd = (n: number): string => `$${n.toFixed(4)}`;
+/** A fact's category is its id prefix (change-, conv-, contract-, fail-). */
+const categoryOf = (factId: string): string => factId.split('-')[0] ?? factId;
+
+function verdictCells(recs: ProbeRecord[]): string[] {
+  return [fmtInt(recs.length), ...VERDICTS.map(v => pct(recs.filter(r => r.verdict === v).length, recs.length))];
+}
+
+function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): string[] {
+  const groups = ORDER.filter(g => p.records.some(r => r.group === g));
+  const out: string[] = [
+    '## Fact probes (real model)', '',
+    `Model ${p.model}; max_tokens ${p.maxTokens}; thinking ${p.thinking}; temperature ${p.temperature}; each question asked once (samples ${p.samples}` +
+      `${p.maxPerScenario === undefined ? '' : `, at most ${p.maxPerScenario} per scenario`}); groups ${p.groups.join(', ')}. ` +
+      'A probe sends the scripted request exactly as the group sent it, plus one uncached question segment; answers are graded by strings only ' +
+      '(stale: an old answer appears; wrong: neither expected nor old; error: the request failed or the probe never fired).',
+    '',
+  ];
+  if (p.stopped.length > 0) {
+    out.push(`Probing stopped: ${p.stopped[0]!.reason} (in ${p.stopped.map(x => `${x.scenario}/${x.group}`).join(', ')}).`, '');
+  }
+  out.push('Answers per group and fact category (%):', '');
+  out.push('| Group | Category | Probes | Correct | Stale | Wrong | Error |', '|---|---|---|---|---|---|---|');
+  for (const g of groups) {
+    const mine = p.records.filter(r => r.group === g);
+    for (const c of [...new Set(mine.map(r => categoryOf(r.factId)))].sort()) {
+      out.push(`| ${g} | ${c} | ${verdictCells(mine.filter(r => categoryOf(r.factId) === c)).join(' | ')} |`);
+    }
+    out.push(`| ${g} | all | ${verdictCells(mine).join(' | ')} |`);
+  }
+  out.push('', 'Answers per group and tier (%):', '');
+  out.push('| Group | Tier | Probes | Correct | Stale | Wrong | Error |', '|---|---|---|---|---|---|---|');
+  for (const g of groups) {
+    for (const t of ['standard', 'long', 'xlong'] as const) {
+      const mine = p.records.filter(r => r.group === g && tierOf(r.scenario) === t);
+      if (mine.length > 0) out.push(`| ${g} | ${t} | ${verdictCells(mine).join(' | ')} |`);
+    }
+  }
+  const sumUsage = (recs: ProbeRecord[]): ModelUsage =>
+    recs.reduce<ModelUsage>((a, r) => (r.usage === undefined ? a : {
+      inputTokens: a.inputTokens + r.usage.inputTokens, cacheWriteTokens: a.cacheWriteTokens + r.usage.cacheWriteTokens,
+      cacheReadTokens: a.cacheReadTokens + r.usage.cacheReadTokens, outputTokens: a.outputTokens + r.usage.outputTokens,
+    }), { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 });
+  const costOf = (recs: ProbeRecord[]) => recs.reduce((n, r) => (r.usage === undefined ? n : n + usageCost(p.price, r.usage)), 0);
+  out.push('', `Real usage and cost (tokens as the provider counted them; prices: ${p.price.source}):`, '');
+  out.push('| Group | Requests | Input (uncached) | Cache write | Cache read | Output | Cost |', '|---|---|---|---|---|---|---|');
+  const row = (label: string, recs: ProbeRecord[]) => {
+    const u = sumUsage(recs);
+    return `| ${label} | ${fmtInt(recs.filter(r => r.usage !== undefined).length)} | ${fmtInt(u.inputTokens)} | ${fmtInt(u.cacheWriteTokens)} | ${fmtInt(u.cacheReadTokens)} | ${fmtInt(u.outputTokens)} | ${usd(costOf(recs))} |`;
+  };
+  for (const g of groups) out.push(row(g, p.records.filter(r => r.group === g)));
+  out.push(row('Total', p.records));
+  out.push('', `Total real cost ${usd(p.cost)} of --max-cost ${usd(p.maxCost)}.`, '');
+  out.push(
+    "R-B19 comparison for probe requests (requests with reported usage only). Estimated: the bench's token count (an approximation of the model's tokenizer) and its R-B19 cacheable tokens; " +
+      'real: prompt tokens = uncached + cache write + cache read, as reported. Real cache reads also depend on what earlier probes wrote within the cache lifetime and on the minimum cacheable length.',
+    '',
+  );
+  out.push('| Group | Est. input | Est. cacheable | Est. cacheable % | Real prompt | Real cache read | Real cache read % | Real cache write |', '|---|---|---|---|---|---|---|---|');
+  for (const g of groups) {
+    const recs = p.records.filter(r => r.group === g && r.usage !== undefined);
+    const estIn = recs.reduce((n, r) => n + r.inputTokens, 0);
+    const estC = recs.reduce((n, r) => n + r.cacheableTokens, 0);
+    const u = sumUsage(recs);
+    const prompt = u.inputTokens + u.cacheWriteTokens + u.cacheReadTokens;
+    out.push(`| ${g} | ${fmtInt(estIn)} | ${fmtInt(estC)} | ${pct(estC, estIn)} | ${fmtInt(prompt)} | ${fmtInt(u.cacheReadTokens)} | ${pct(u.cacheReadTokens, prompt)} | ${fmtInt(u.cacheWriteTokens)} |`);
+  }
+  out.push('');
+  return out;
+}
+
+/** The dry-run estimate as Markdown (printed and written as probe-estimate.md). */
+export function renderProbeEstimate(
+  est: { rows: ProbeEstimateRow[]; total: Omit<ProbeEstimateRow, 'scenario' | 'group'> },
+  meta: { model: string; maxTokens: number; samples: ProbeSamples; groups: Group[]; maxCost: number | null; maxPerScenario?: number },
+  tiers: Record<string, Tier>,
+): string {
+  const cells = (x: Omit<ProbeEstimateRow, 'scenario' | 'group'>) =>
+    [fmtInt(x.probes), fmtInt(x.inputTokens), fmtInt(x.cacheableTokens), fmtInt(x.outputTokens), usd(x.costLow), usd(x.costHigh)].join(' | ');
+  const out = [
+    '# Probe dry run (no requests sent)', '',
+    `Model ${meta.model}; max_tokens ${meta.maxTokens}; samples ${meta.samples}${meta.maxPerScenario === undefined ? '' : `; at most ${meta.maxPerScenario} probes per scenario`}; groups ${meta.groups.join(', ')}.`,
+    '',
+    "Tokens are the bench's count (defaultCountTokens: about 4 characters, or 1 CJK character, per token), an approximation of the model's real tokenizer, " +
+      'which may count noticeably more. Low: every R-B19 cacheable token is a cache read; high: every one is a cache write. Output is counted at max_tokens (its upper bound).',
+    '',
+    '| Scenario | Tier | Group | Probes | Input tokens | Cacheable | Output (max) | Cost low | Cost high |',
+    '|---|---|---|---|---|---|---|---|---|',
+    ...est.rows.map(r => `| ${r.scenario} | ${tiers[r.scenario] ?? 'standard'} | ${r.group} | ${cells(r)} |`),
+    `| Total | | | ${cells(est.total)} |`,
+    '',
+  ];
+  if (meta.maxCost !== null) {
+    out.push(
+      est.total.costHigh <= meta.maxCost
+        ? `--max-cost ${usd(meta.maxCost)}: the high estimate fits.`
+        : `--max-cost ${usd(meta.maxCost)}: the high estimate does not fit; the cost guard would stop probing early.`,
+      '',
+    );
+  }
+  return out.join('\n');
 }

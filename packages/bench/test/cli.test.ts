@@ -1,9 +1,9 @@
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { DEFAULT_STREAM_OPTIONS } from '@context-continue/core';
-import { LONG_IDS, main, SCENARIO_IDS, STANDARD_IDS, XLONG_IDS } from '../src/cli.js';
+import { LONG_IDS, main, SCENARIO_IDS, scenarioPath, STANDARD_IDS, XLONG_IDS, type MainDeps } from '../src/cli.js';
 
 const STANDARD = ['product-plan', 'flappy-bird', 'event-plan'];
 const LONG = ['long-app', 'long-event'];
@@ -11,16 +11,20 @@ const XLONG = ['xlong-product'];
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'bench-cli-'));
 
-/** Runs main with stderr captured. */
-async function run(argv: string[]): Promise<{ code: number; err: string }> {
+/** Runs main with stderr (and stdout) captured. */
+async function run(argv: string[], deps?: MainDeps): Promise<{ code: number; err: string; out: string }> {
   let err = '';
+  let stdout = '';
   const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
     err += String(chunk);
     return true;
   });
-  const quiet = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const quiet = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    stdout += String(chunk);
+    return true;
+  });
   try {
-    return { code: await main(argv), err };
+    return { code: await main(argv, deps), err, out: stdout };
   } finally {
     spy.mockRestore();
     quiet.mockRestore();
@@ -340,5 +344,156 @@ describe('bench cli', () => {
       }
       expect(readdirSync(out)).toEqual([]);
     });
+  });
+});
+
+describe('bench cli: fact probes', () => {
+  const KEY = 'sk-ant-api03-TOPSECRETKEYVALUE';
+
+  /** flappy-bird with probes on two facts, written to a scratch file. */
+  function probeScenario(): string {
+    const s = JSON.parse(readFileSync(scenarioPath('flappy-bird'), 'utf8'));
+    s.facts[0].probe = { question: 'What hitbox size did the team agree?', expect: ['12x12'], reject: ['10x10'] };
+    s.facts[2].probe = { question: 'How does the player flap on mobile?', expect: ['tap'] };
+    const path = join(tmp(), 'flappy-probes.json');
+    writeFileSync(path, JSON.stringify(s));
+    return path;
+  }
+
+  /** A fetch stub answering every request "12x12 tap" with fixed usage; records each request body. */
+  function stubFetch(usage = { input_tokens: 100, cache_creation_input_tokens: 600, cache_read_input_tokens: 0, output_tokens: 5 }) {
+    const bodies: { headers: Record<string, string>; body: { messages: { content: { text: string; cache_control?: unknown }[] }[] } }[] = [];
+    const fetch = (async (_url: unknown, init: RequestInit) => {
+      bodies.push({ headers: init.headers as Record<string, string>, body: JSON.parse(init.body as string) });
+      return new Response(JSON.stringify({ content: [{ type: 'text', text: '12x12, tap' }], stop_reason: 'end_turn', usage }), { status: 200 });
+    }) as typeof globalThis.fetch;
+    return { fetch, bodies };
+  }
+
+  const files = (dir: string) => readdirSync(dir).sort();
+  const read = (dir: string, f: string) => readFileSync(join(dir, f), 'utf8');
+
+  test('--probes --dry-run sends nothing, prints and writes the estimate, and leaves results.json and report.md as without probes', async () => {
+    const path = probeScenario();
+    const plain = tmp();
+    const dry = tmp();
+    expect((await run(['run', '--scenario', path, '--group', 'all', '--out', plain, '--stamp', 'S'])).code).toBe(0);
+    const { fetch, bodies } = stubFetch();
+    const r = await run(['run', '--scenario', path, '--group', 'all', '--out', dry, '--stamp', 'S', '--probes', '--dry-run'], { fetch, env: {} });
+    expect(r.code).toBe(0);
+    expect(bodies).toHaveLength(0);
+    for (const f of ['results.json', 'report.md']) expect(read(join(dry, 'S'), f)).toBe(read(join(plain, 'S'), f));
+    expect(files(join(dry, 'S'))).toEqual(['probe-estimate.json', 'probe-estimate.md', 'report.md', 'results.json']);
+    const est = JSON.parse(read(join(dry, 'S'), 'probe-estimate.json'));
+    expect(est.model).toBe('claude-haiku-5-5');
+    expect(est.groups).toEqual(['A', 'C', 'D', 'E']);
+    expect([...new Set(est.rows.map((x: { group: string }) => x.group))]).toEqual(['A', 'C', 'D', 'E']);
+    // fml on two facts: at most 3 opportunities each.
+    for (const row of est.rows) expect(row.probes).toBeGreaterThan(0);
+    expect(est.total.probes).toBe(est.rows.reduce((n: number, x: { probes: number }) => n + x.probes, 0));
+    expect(est.total.costHigh).toBeGreaterThan(est.total.costLow);
+    expect(r.out).toContain('Probe dry run');
+    expect(r.out).toContain('approximation');
+    expect(read(join(dry, 'S'), 'probe-estimate.md')).toContain('| Total |');
+  }, 60_000);
+
+  test('a real run records probes in results.json, probes.jsonl and the report; scripted results are unchanged; the key appears nowhere', async () => {
+    const path = probeScenario();
+    const plain = tmp();
+    const out = tmp();
+    expect((await run(['run', '--scenario', path, '--group', 'all', '--out', plain, '--stamp', 'S'])).code).toBe(0);
+    const { fetch, bodies } = stubFetch();
+    const r = await run(['run', '--scenario', path, '--group', 'all', '--out', out, '--stamp', 'S', '--probes', '--max-cost', '5', '--probe-groups', 'A,C'],
+      { fetch, env: { ANTHROPIC_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies.every(b => b.headers['x-api-key'] === KEY)).toBe(true);
+    // Every probe request ends with the uncached question and has a breakpoint on a cacheable block.
+    for (const b of bodies) {
+      const content = b.body.messages[0]!.content;
+      expect(content[content.length - 1]!.text).toMatch(/^Question: /);
+      expect(content[content.length - 1]!.cache_control).toBeUndefined();
+    }
+    const dir = join(out, 'S');
+    const json = JSON.parse(read(dir, 'results.json'));
+    const plainJson = JSON.parse(read(join(plain, 'S'), 'results.json'));
+    const { probes, ...rest } = json;
+    expect(rest).toEqual(plainJson);
+    expect(probes.model).toBe('claude-haiku-5-5');
+    expect(probes.groups).toEqual(['A', 'C']);
+    expect(probes.records).toHaveLength(bodies.length);
+    expect(probes.records.every((p: { verdict: string }) => p.verdict === 'correct')).toBe(true);
+    expect(probes.usage.cacheWriteTokens).toBe(600 * bodies.length);
+    expect(probes.cost).toBeCloseTo(bodies.length * (100 * 0.1 + 600 * 0.125 + 5 * 0.5) / 1e6, 10);
+    const lines = read(dir, 'probes.jsonl').trim().split('\n').map(l => JSON.parse(l));
+    expect(lines).toEqual(probes.records);
+    const report = read(dir, 'report.md');
+    expect(report).toContain('## Fact probes (real model)');
+    expect(report).toMatch(/\| A \| contract \| \d+ \| 100\.0 \| 0\.0 \| 0\.0 \| 0\.0 \|/);
+    expect(report).toContain('R-B19');
+    for (const f of files(dir)) expect(read(dir, f)).not.toContain('TOPSECRETKEYVALUE');
+    expect(r.out + r.err).not.toContain('TOPSECRETKEYVALUE');
+  }, 60_000);
+
+  test('--max-cost stops probing before the budget is passed and still writes every finished probe', async () => {
+    const path = probeScenario();
+    const out = tmp();
+    // $0.10 of output per probe.
+    const { fetch, bodies } = stubFetch({ input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 200_000 });
+    const r = await run(['run', '--scenario', path, '--group', 'all', '--out', out, '--stamp', 'S', '--probes', '--max-cost', '0.25'],
+      { fetch, env: { ANTHROPIC_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    expect(bodies).toHaveLength(3);
+    const json = JSON.parse(read(join(out, 'S'), 'results.json'));
+    expect(json.probes.records).toHaveLength(3);
+    expect(json.probes.cost).toBeCloseTo(0.3, 10);
+    expect(json.probes.stopped.length).toBeGreaterThan(0);
+    expect(json.probes.stopped[0].reason).toMatch(/--max-cost 0.25 reached/);
+    expect(read(join(out, 'S'), 'report.md')).toMatch(/Probing stopped/);
+  }, 60_000);
+
+  test('usage errors exit 2 without output or requests', async () => {
+    const out = tmp();
+    const { fetch, bodies } = stubFetch();
+    const base = ['run', '--scenario', 'flappy-bird', '--group', 'all', '--out', out];
+    const cases: [string[], RegExp][] = [
+      [['--probes'], /--max-cost/],
+      [['--dry-run'], /needs --probes/],
+      [['--max-cost', '1'], /needs --probes/],
+      [['--model', 'claude-haiku-5-5'], /needs --probes/],
+      [['--probes', '--dry-run', '--model', 'gpt-x'], /no price for model "gpt-x"/],
+      [['--probes', '--dry-run', '--probe-groups', 'A,Z'], /--probe-groups/],
+      [['--probes', '--dry-run', '--probe-groups', 'A,A'], /--probe-groups/],
+      [['--probes', '--dry-run', '--probe-samples', '0'], /--probe-samples/],
+      [['--probes', '--dry-run', '--probe-samples', 'some'], /--probe-samples/],
+      [['--probes', '--dry-run', '--max-probes', '-1'], /--max-probes/],
+      [['--probes', '--max-cost', '0'], /--max-cost/],
+      [['--probes', '--max-cost', 'lots'], /--max-cost/],
+      [['--probes', '--probes', '--dry-run'], /more than once/],
+    ];
+    for (const [extra, msg] of cases) {
+      const r = await run([...base, ...extra], { fetch, env: { ANTHROPIC_API_KEY: KEY } });
+      expect(r.code, extra.join(' ')).toBe(2);
+      expect(r.err, extra.join(' ')).toMatch(msg);
+    }
+    const onlyB = await run(['run', '--scenario', 'flappy-bird', '--group', 'B', '--out', out, '--probes', '--dry-run'], { fetch, env: {} });
+    expect(onlyB.code).toBe(2);
+    expect(onlyB.err).toMatch(/--probe-groups/);
+    const noKey = await run([...base, '--probes', '--max-cost', '1'], { fetch, env: {} });
+    expect(noKey.code).toBe(2);
+    expect(noKey.err).toMatch(/ANTHROPIC_API_KEY is not set/);
+    expect(bodies).toHaveLength(0);
+    expect(readdirSync(out)).toEqual([]);
+  });
+
+  test('BENCH_PROXY_INJECTS_API_KEY=1 sends a placeholder key when ANTHROPIC_API_KEY is absent', async () => {
+    const path = probeScenario();
+    const out = tmp();
+    const { fetch, bodies } = stubFetch();
+    const r = await run(['run', '--scenario', path, '--group', 'A', '--out', out, '--stamp', 'S', '--probes', '--max-cost', '1', '--max-probes', '1'],
+      { fetch, env: { BENCH_PROXY_INJECTS_API_KEY: '1' } });
+    expect(r.code, r.err).toBe(0);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]!.headers['x-api-key']).toBe('proxy-injected');
   });
 });

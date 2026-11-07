@@ -12,8 +12,9 @@ written in the scenario, and bots that are woken without a scripted step answer 
 reply ("Noted."). The bench therefore measures **context size and request counts only**. It does
 not measure task quality or consistency conflicts; those need a real model.
 
-**A real model adapter is not implemented.** The `Model` interface in `src/model.ts` is the place
-to add one later. The bench makes no network or model calls.
+The scripted run never calls a real model and makes no network calls. Only the optional fact
+probes (`--probes`, below) send requests to a real model (`src/models/anthropic.ts`); they are kept
+apart from the scripted run and never change its records or metrics.
 
 Groups B (Grok Bot style) and F (Dots + Space style) are approximations built from public
 descriptions; group E approximates DS Bot at commit `f823773`. Group A (one agent) also stands for
@@ -114,10 +115,57 @@ ignored by git.
 | `--auto-after <n>` | the core default (`DEFAULT_STREAM_OPTIONS.autoAfterEntries`) | With `--c-stream auto` only (a usage error otherwise): the core's `stream.autoAfterEntries`, the ledger size at which a scenario switches to the stream; a positive integer |
 | `--out <dir>` | `results` | Output directory, relative to the current working directory |
 | `--stamp <s>` | UTC time `YYYYMMDDTHHmmssZ` | Name of the run's subdirectory |
+| `--probes` | off | Fact probes with a real model (below). Takes no value. The flags below need it (a usage error otherwise) |
+| `--dry-run` | off | With `--probes`: send nothing; print the estimate and write `probe-estimate.json` and `probe-estimate.md` |
+| `--max-cost <usd>` | required for a real run | With `--probes`: budget in US dollars; probing stops before the probe that would pass it |
+| `--model <id>` | `claude-haiku-5-5` | With `--probes`: the probe model; it must have a price in `PRICES` (`src/cost.ts`) |
+| `--probe-groups <list>` | `A,C,D,E` | With `--probes`: comma list of the groups to probe (those also in `--group`) |
+| `--probe-samples <fml\|all\|n>` | `fml` | With `--probes`: which opportunities of a fact are asked: first, middle and last; all; or n evenly spaced |
+| `--max-probes <n>` | no cap | With `--probes`: at most n probes per scenario and group (last samples of every fact first) |
 
 Each flag may be given once. `--stamp` must be a plain name (letters, digits, `_`, `.`, `-`, not only
 dots). Output is deterministic: two runs with the same inputs and `--stamp` produce byte-identical files.
 An invalid scenario, group or flag value prints a message on stderr and exits with a non-zero code (2 for usage errors such as a bad `--c-public`).
+
+### Fact probes with a real model (`--probes`)
+
+A fact with a `probe` (a question, `expect` strings and optional `reject` strings: the old answer)
+is asked at sampled opportunities: after a scripted request of a bot in the fact's audience, the
+probe model receives that request exactly as the group sent it plus one uncached question segment.
+Its answer is graded by strings only: a `reject` hit is **stale**, else an `expect` hit is
+**correct**, else **wrong**; a failed request is **error**. Probes never enter the scripted run:
+without `--probes` every output is byte-identical, and with it `records` and `metrics` are the same.
+
+```sh
+# Estimate first: no requests, no key needed.
+pnpm -C packages/bench bench run --scenario long --group all --probes --dry-run
+# Real run: the key comes from the environment only.
+ANTHROPIC_API_KEY=... pnpm -C packages/bench bench run --scenario long --group all --probes --max-cost 2
+```
+
+- **Key.** Read only from `ANTHROPIC_API_KEY`. If the environment's network proxy injects the key
+  instead, set `BENCH_PROXY_INJECTS_API_KEY=1`: requests then carry the placeholder `proxy-injected`
+  for the proxy to replace. Without either, a real run exits 2 before sending anything. The key is
+  never logged or written; error messages are masked (`probeErrorMessage`).
+- **Requests** (`src/models/anthropic.ts`, Messages API over Node's `fetch`, `anthropic-version:
+  2026-10-21`): one user message with one text block per segment; a `cache_control` breakpoint
+  (5-minute) on the last block of each run of cacheable segments (the R-B19 prefix), at most four;
+  `max_tokens` 200; thinking disabled. No `temperature` is sent: Claude Haiku 5.5 rejects
+  non-default sampling values, so answers use the model default and are not deterministic; each
+  question is asked once. 408/409/429/5xx/529 and network errors are retried up to four times with
+  backoff (`retry-after`, else 1, 2, 4, 8 s); 401/402/403/404 stop probing for the rest of the run.
+- **Cost** (`src/cost.ts`): `PRICES` holds `claude-haiku-5-5` ($0.10 input, $0.125 cache write,
+  $0.01 cache read, $0.50 output per million tokens for prompts up to 100K tokens; $0.50 / $0.625 /
+  $0.05 / $2.50 above). The dry run counts tokens with the bench's `defaultCountTokens`, an
+  approximation of the model's tokenizer, and gives a low (cacheable tokens read) and a high
+  (cacheable tokens written) estimate with output at `max_tokens`. In a real run the cost guard adds
+  the real cost so far to 1.5 times the next probe's high estimate and stops probing (`ProbeStop`)
+  before it would pass `--max-cost`; the scripted run then finishes and every result is written.
+- **Output.** Each finished probe is appended to `probes.jsonl` as it completes. `results.json`
+  gains a `probes` section (settings, prices, real usage and cost, stops, every probe record) and
+  `report.md` a "Fact probes" section: answers per group and fact category and per group and tier,
+  real usage and cost per group, and the R-B19 comparison (estimated cacheable tokens against real
+  cache reads and writes).
 
 ### Group C on the core stream (`--c-stream core` / `auto`)
 
