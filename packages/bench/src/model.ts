@@ -1,4 +1,4 @@
-import type { ToolCall } from './types.js';
+import type { ModelUsage, ToolCall } from './types.js';
 
 export interface ModelRequest {
   botId: string;
@@ -8,7 +8,8 @@ export interface ModelRequest {
 }
 
 export interface Model {
-  complete(r: ModelRequest): Promise<{ reply: string; ops: ToolCall[] }>;
+  /** `usage` is what a real model's provider reports; fake models leave it out. */
+  complete(r: ModelRequest): Promise<{ reply: string; ops: ToolCall[]; usage?: ModelUsage }>;
 }
 
 /** Fake model: replays the script, and answers every extra request with `idleReply`. */

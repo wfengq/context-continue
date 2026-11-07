@@ -1,8 +1,9 @@
 import { defaultCountTokens } from '@context-continue/core';
 import { ScriptedModel, type Model } from './model.js';
+import { gradeAnswer, probeQuestion, scheduleProbes, type ProbeOptions } from './probe.js';
 import { DEFAULT_IDLE_REPLY } from './scenario.js';
 import { planLines } from './text.js';
-import type { CallRecord, Group, PolicyStats, Scenario, Step, ToolCall } from './types.js';
+import type { CallRecord, Group, PolicyStats, ProbeRecord, Scenario, Step, ToolCall } from './types.js';
 
 /** The fixed instruction every group puts first in every request. */
 export const BASE_TEMPLATE =
@@ -64,10 +65,14 @@ export function scriptedOutput(step: Step, index: number): { reply: string; ops:
 export async function runScenario(
   s: Scenario,
   policy: Policy,
-  opts: { model?: Model } = {},
-): Promise<{ records: CallRecord[]; stats: PolicyStats }> {
+  opts: { model?: Model; probe?: ProbeOptions & { model: Model } } = {},
+): Promise<{ records: CallRecord[]; stats: PolicyStats; probes?: ProbeRecord[] }> {
   const model = opts.model ?? new ScriptedModel(s.idleReply ?? DEFAULT_IDLE_REPLY);
   const records: CallRecord[] = [];
+  // Probes by step (in schedule order); each fires once, after the first scripted request of its step.
+  const probesAt = new Map<number, string[]>();
+  for (const p of opts.probe ? scheduleProbes(s, opts.probe) : []) probesAt.set(p.step, [...(probesAt.get(p.step) ?? []), p.factId]);
+  const probes: ProbeRecord[] = [];
   const counted = new Map<string, number>();
   const count = (text: string): number => {
     let n = counted.get(text);
@@ -130,10 +135,30 @@ export async function runScenario(
         }
       }
       records.push(record);
-      return model.complete({ botId, segments: segments.map(g => ({ text: g.text, cacheable: g.cacheable })), scripted });
+      const sent = segments.map(g => ({ text: g.text, cacheable: g.cacheable }));
+      const out = await model.complete({ botId, segments: sent, scripted });
+      const due = kind === 'scripted' ? probesAt.get(step) : undefined;
+      if (due !== undefined && opts.probe) {
+        probesAt.delete(step);
+        for (const factId of due) {
+          const probe = s.facts!.find(f => f.id === factId)!.probe!;
+          const question = { text: probeQuestion(probe.question), cacheable: false };
+          // The probe model sees the group's request exactly as sent, plus the question; its answer never enters the run.
+          const answer = await opts.probe.model.complete({ botId, segments: [...sent, question], scripted: null });
+          const rec: ProbeRecord = {
+            group: policy.group, scenario: s.id, step, botId, factId, question: probe.question,
+            answer: answer.reply, verdict: gradeAnswer(probe, answer.reply),
+            inputTokens: inputTokens + count(question.text), cacheableTokens,
+          };
+          if (answer.usage !== undefined) rec.usage = answer.usage;
+          probes.push(rec);
+        }
+      }
+      return out;
     },
   };
 
   for (const [i, step] of s.steps.entries()) await policy.onStep(step, i, ctx);
-  return { records, stats: await policy.finish() };
+  const stats = await policy.finish();
+  return opts.probe ? { records, stats, probes } : { records, stats };
 }

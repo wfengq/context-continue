@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { toolDefinitions, type PlanInput } from '@context-continue/core';
 import { z } from 'zod';
+import { normaliseAnswer } from './probe.js';
 import { isDeliverableArgs } from './text.js';
 import type { Scenario, Step } from './types.js';
 
@@ -37,6 +38,8 @@ const stepSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('replan'), plan: planSchema }),
 ]);
 
+const nonBlank = z.string().refine(v => v.trim().length > 0, 'must not be blank');
+
 const scenarioSchema = z.object({
   id: z.string().min(1),
   goal: z.string(),
@@ -56,6 +59,11 @@ const scenarioSchema = z.object({
     marker: z.string().min(1),
     step: z.number().int(),
     audience: z.array(z.string().min(1)).min(1),
+    probe: z.object({
+      question: nonBlank,
+      expect: z.array(nonBlank).min(1),
+      reject: z.array(nonBlank).optional(),
+    }).optional(),
   })).optional(),
   steps: z.array(stepSchema),
 });
@@ -153,6 +161,10 @@ export function validateScenario(raw: unknown): Scenario {
     if (step === undefined) bad(`step ${f.step} does not exist (scenario has ${s.steps.length} steps)`);
     else if (!stepText(step).includes(f.marker)) bad(`step ${f.step} text does not contain marker "${f.marker}"`);
     for (const a of f.audience) if (a !== '*' && !botIds.has(a)) bad(`audience "${a}" is not an employee or "*"`);
+    // A reject string inside an expect string would grade every correct answer 'stale'.
+    for (const r of f.probe?.reject ?? [])
+      for (const e of f.probe!.expect)
+        if (normaliseAnswer(e).includes(normaliseAnswer(r))) bad(`probe reject "${r}" is contained in expect "${e}"`);
   }
 
   if (problems.length > 0) throw new Error(`Invalid scenario "${s.id}":\n${problems.join('\n')}`);

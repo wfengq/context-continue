@@ -25,6 +25,46 @@ export interface Fact {
   step: number;
   /** Employees who need to know it, or ["*"] for all of them. */
   audience: string[];
+  /** Optional question for a real model (spec 2026-11-07-real-model-probes); graded by strings only. */
+  probe?: FactProbe;
+}
+
+export interface FactProbe {
+  question: string;
+  /** The answer must contain one of these (case-insensitive, "×" read as "x", whitespace collapsed). */
+  expect: string[];
+  /** Old answers: containing one of these grades the answer 'stale', even when an expect string is also there. */
+  reject?: string[];
+}
+
+export type ProbeVerdict = 'correct' | 'stale' | 'wrong';
+
+/** Token usage a real model reports for one request; absent for fake models. */
+export interface ModelUsage {
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+}
+
+/**
+ * One probe request: the scripted request of `step` (its exact segments, as the group sent them)
+ * plus a question segment, sent to the probe model after that request. Kept apart from CallRecord.
+ */
+export interface ProbeRecord {
+  group: Group;
+  scenario: string;
+  step: number;
+  /** The scripted request's botId (group A: its single agent). */
+  botId: string;
+  factId: string;
+  question: string;
+  answer: string;
+  verdict: ProbeVerdict;
+  /** Counted like CallRecord, including the uncached question segment. */
+  inputTokens: number;
+  cacheableTokens: number;
+  usage?: ModelUsage;
 }
 
 /** 'standard' is 20–40 steps, 'long' 150–300, 'xlong' 1,000–1,500. */
