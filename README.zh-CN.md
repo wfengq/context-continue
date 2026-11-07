@@ -1,5 +1,7 @@
 # context-continue
 
+[![CI](https://github.com/wfengq/context-continue/actions/workflows/ci.yml/badge.svg)](https://github.com/wfengq/context-continue/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 [English](README.md)
 
 为多个 AI Bot 协作同一个项目提供共享的结构化项目上下文，并附带一套评测，把它与现有多 Bot 产品共享上下文的方式做对比。
@@ -7,6 +9,28 @@
 多个 Bot 在群聊里做同一个项目时，通常每个 Bot 每一轮都要重读整段对话。本仓库验证另一种做法：项目维护一块小的**项目板**（目标、约定、工作块、接口约定、决定、事实、失败记录），每个 Bot 拿到一份**简报**——项目板中与它有关的部分，加上它上次之后的变化——以及它自己的私有笔记和记忆。
 
 > **状态：实验中。** 下面的大部分数字来自脚本化的假模型，衡量各方案发送了多少上下文。另有一次真模型检验（见下文）：在各组的上下文里向真模型提问，衡量关键事实能否从上下文中答出，不衡量 Bot 把事情做得好不好。
+
+## 一览
+
+在一个超长项目（1,154 步、8 个 Bot）上，用本仓库的评测测得：
+
+- 按缓存加权的输入计，**比共享日志（D）和轮流群聊（E）便宜约 70%**（长项目模式 `auto`）。
+- **请求保持很小：** 中位数约 9.8k token、最大约 19k；D 为 47k / 125k，E 为 41k / 102k。
+- **真模型答得一样好：** 在各组上下文里就关键事实各问 135 个问题，DeepSeek 从 C 的上下文答对 97.0%，与 D（97.0%）、E（95.6%）相当，而 token 不到 D 的 1/5。
+
+在短项目（20–40 步）上，普通简报比 D、E 贵；核心库只在项目变长后（账本 75 条）才切换到流。详情与局限见下文。
+
+```ts
+import { createEmployeeRegistry, createProject, sqliteStore } from '@context-continue/core';
+
+const store = sqliteStore('project.sqlite');
+const project = createProject({ projectId: 'demo', store, employees: createEmployeeRegistry({ store }), stream: { mode: 'auto' } });
+// ……启动项目、批准计划，然后对每个被叫醒的 Bot：
+const bundle = await project.buildStream('art', { maxTokens: 20_000, trigger: { reason: 'assigned', detail: 'go' } });
+// bundle.segments → 交给模型；模型回答后调用 project.recordOwnOutput('art', reply)
+```
+
+尚未发布到 npm；安装、完整示例与 API 见 [`packages/core`](packages/core/README.md)。
 
 ## 仓库内容
 

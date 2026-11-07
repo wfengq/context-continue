@@ -1,16 +1,49 @@
 {
   "name": "@context-continue/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Shared, structured project context for teams of AI bots: a project board, per-bot briefs and an append-only long-project stream, built for prompt caching.",
+  "license": "MIT",
   "type": "module",
-  "exports": "./dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wfengq/context-continue.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/wfengq/context-continue/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/wfengq/context-continue/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "llm",
+    "context",
+    "prompt-caching",
+    "memory",
+    "bots"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22.5"
   },
+  "sideEffects": false,
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm build && pnpm test"
   },
   "dependencies": {
     "zod": "4.6.7"

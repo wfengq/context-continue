@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Benchmark is deterministic
+        run: |
+          pnpm -C packages/bench bench run --scenario standard --group all --out /tmp/b1 --stamp T
+          pnpm -C packages/bench bench run --scenario standard --group all --out /tmp/b2 --stamp T
+          diff -r /tmp/b1/T /tmp/b2/T

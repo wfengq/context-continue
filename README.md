@@ -1,5 +1,7 @@
 # context-continue
 
+[![CI](https://github.com/wfengq/context-continue/actions/workflows/ci.yml/badge.svg)](https://github.com/wfengq/context-continue/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 [中文](README.zh-CN.md)
 
 A shared, structured project context for teams of AI bots, plus a benchmark that compares it with the ways multi-bot products share context today.
@@ -7,6 +9,28 @@ A shared, structured project context for teams of AI bots, plus a benchmark that
 When several bots work on one project in a group chat, each bot usually rereads the whole conversation on every turn. This repository tests a different idea: the project keeps a small **project board** (goal, conventions, workstreams, contracts, decisions, facts, failures) and each bot gets a **brief** — the part of the board that concerns it plus what changed since it last looked — alongside its own private notes and memory.
 
 > **Status: experimental.** Most numbers below come from a scripted fake model and measure how much context each approach sends. One real-model check (below) asks a real model questions inside each group's context; it measures whether the key facts can be answered from that context, not how well the bots do the work.
+
+## At a glance
+
+On an extra-long project (1,154 steps, 8 bots), measured with the bench in this repository:
+
+- **About 70% cheaper** than a shared log (D) or a turn-taking group chat (E), by prompt-cache-weighted input (long-project mode, `auto`).
+- **Requests stay small:** median about 9.8k tokens and at most about 19k, against D's 47k / 125k and E's 41k / 102k.
+- **Same answers from a real model:** asked 135 questions about key facts inside each group's context, DeepSeek answers 97.0% correctly from C's context, the same as from D's (97.0%) and E's (95.6%), with under a fifth of D's tokens.
+
+On short projects (20–40 steps) the plain brief costs more than D and E; the core switches to the stream only once a project grows (at 75 ledger entries). Details and caveats below.
+
+```ts
+import { createEmployeeRegistry, createProject, sqliteStore } from '@context-continue/core';
+
+const store = sqliteStore('project.sqlite');
+const project = createProject({ projectId: 'demo', store, employees: createEmployeeRegistry({ store }), stream: { mode: 'auto' } });
+// ... start the project, approve a plan, then for each woken bot:
+const bundle = await project.buildStream('art', { maxTokens: 20_000, trigger: { reason: 'assigned', detail: 'go' } });
+// bundle.segments → your model; project.recordOwnOutput('art', reply) after it answers
+```
+
+Not on npm yet; see [`packages/core`](packages/core/README.md) for install, the full example and the API.
 
 ## What is here
 
