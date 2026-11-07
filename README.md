@@ -113,12 +113,12 @@ The fake model only shows whether a fact is in the context. To check whether a r
 
 132 questions per group on the long scenarios, 135 on the extra-long one. Prompt tokens are the provider's count over all of a group's question requests, so they show how large each group's context is.
 
-- All four groups answer 95–100% correctly, 1–3 questions apart: one run cannot rank them. What it shows is that C's much smaller context does not make the real model answer worse.
-- On the extra-long scenario C gets the same score as D with about a fifth of D's tokens (4.4× fewer than E), and its questions cost 40% less than D's and 32% less than E's.
+- All four groups answer 95–100% correctly, at most 4 questions apart (C within 0–3 of each): one run cannot rank them. What it shows is that C's much smaller context does not make the real model answer worse.
+- On the extra-long scenario C gets the same score as D with under a fifth of D's tokens (about 1/4.4 of E's), and its questions cost 40% less than D's and 32% less than E's. A, whose one history is almost all cache hits, costs about the same as C there and the least on the long scenarios ($0.0201 vs C's $0.0249).
 - Without context the model gets 18% / 36% right (mostly conventions that follow industry defaults), so the questions do need the project.
-- Requirement changes are the weakest category in every group (85–100%), and every stale answer is a requirement change.
+- On the extra-long scenario requirement changes are the weakest category in every group (85–91%); on both, every stale answer is a requirement change.
 
-Caveats: one run, one model; grading by strings; the real model only answers the inserted questions and does not drive the script. The question requests are sparse (a few moments per bot), so the provider's real cache hits are below the bench's prompt-cache estimate, most for C (69% real vs 95% estimated on the extra-long scenario), whose stream takes a new snapshot between distant questions; this does not measure the cache of a full scripted run. Details: [spec §5](docs/superpowers/specs/2026-11-07-real-model-probes.md), raw reports in [`docs/superpowers/runs`](docs/superpowers/runs).
+Caveats: one run, one model; grading by strings; the real model only answers the inserted questions and does not drive the script. The question requests are sparse (a few moments per bot), so the provider's real cache hits are below the bench's prompt-cache estimate, most for C (69% real vs 95% estimated on the extra-long scenario), partly because its stream takes a new snapshot between distant questions; this does not measure the cache of a full scripted run. Details: [spec §5](docs/superpowers/specs/2026-11-07-real-model-probes.md), raw reports in [`docs/superpowers/runs`](docs/superpowers/runs).
 
 ## What we learned
 
@@ -128,7 +128,7 @@ Caveats: one run, one model; grading by strings; the real model only answers the
 4. **Putting project-wide facts on the shared board recovers visibility at a measured cost.** With everything on, C sees 96% of key facts, close to D and E, for about 57% more cost than with nothing on (long scenarios). The extra cost comes from a larger board being resent every time it changes; reordering for the cache does not remove it.
 5. **Some facts need the bots' cooperation.** Agreements that bots make only in chat, without recording them as contracts, never reach the board.
 6. **For long projects, an append-only stream beats rebuilding the brief.** In long-project mode (`auto`, switching at 75 ledger entries) C is cheaper than D and E on the long and extra-long scenarios (by 2–6% and about 70%) with 96.9% and 99.1% fact visibility (on the long scenarios auto's 96.9% is slightly below D and E, at 98.1% / 97.7%), and leaves the standard scenarios on the plain brief, where a stream would cost even more. Its requests are larger than the brief's (up to about 19k tokens on the extra-long scenario), still about a fifth of D's and E's.
-7. **A real model answers as well from C's context as from full histories.** On DeepSeek, C answers 97–98% of the key-fact questions correctly, within 1–3 questions of A, D and E, while sending a fifth of D's tokens on the extra-long scenario. The real-model check does not show C answering better, and it does not test real cache behaviour over a full run.
+7. **A real model answers as well from C's context as from full histories.** On DeepSeek, C answers 97–98% of the key-fact questions correctly, within 0–3 questions of A, D and E, while sending under a fifth of D's tokens on the extra-long scenario. The real-model check does not show C answering better, and it does not test real cache behaviour over a full run.
 
 ## Limitations
 
