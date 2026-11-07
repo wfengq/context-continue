@@ -109,7 +109,7 @@ export class AnthropicModel implements Model {
 
   async complete(r: ModelRequest): Promise<{ reply: string; ops: ToolCall[]; usage: ModelUsage }> {
     if (this.fatal !== undefined) throw new ProbeStop(this.fatal);
-    const body = JSON.stringify(buildMessagesBody(this.o.model, this.o.maxTokens ?? DEFAULT_MAX_TOKENS, r.segments));
+    const body = JSON.stringify(buildMessagesBody(this.o.model, r.maxTokens ?? this.o.maxTokens ?? DEFAULT_MAX_TOKENS, r.segments));
     const url = `${(this.o.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '')}/v1/messages`;
     const maxRetries = this.o.maxRetries ?? 4;
     for (let attempt = 0; ; attempt++) {

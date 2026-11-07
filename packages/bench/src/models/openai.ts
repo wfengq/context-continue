@@ -102,11 +102,13 @@ export class OpenAIModel implements Model {
 
   async complete(r: ModelRequest): Promise<{ reply: string; ops: ToolCall[]; usage: ModelUsage }> {
     if (this.fatal !== undefined) throw new ProbeStop(this.fatal);
-    const body = JSON.stringify(buildChatBody(this.o.model, this.o.maxTokens ?? 200, r.segments, this.o.thinking));
+    const body = JSON.stringify(buildChatBody(this.o.model, r.maxTokens ?? this.o.maxTokens ?? 200, r.segments, this.o.thinking));
     const url = chatCompletionsUrl(this.o.baseUrl);
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (this.o.apiKey !== undefined) headers.authorization = `Bearer ${this.o.apiKey}`;
     const maxRetries = this.o.maxRetries ?? 4;
+    // Replay requests neither count toward nor reset the run of rejected problem requests.
+    const counts = r.purpose !== 'replay';
     for (let attempt = 0; ; attempt++) {
       let res: Response;
       try {
@@ -123,7 +125,7 @@ export class OpenAIModel implements Model {
         throw new ProbeStop(this.fatal);
       }
       if (res.ok) {
-        this.rejects = 0;
+        if (counts) this.rejects = 0;
         let j: ChatResponse;
         try {
           j = (await res.json()) as ChatResponse;
@@ -150,7 +152,9 @@ export class OpenAIModel implements Model {
         this.fatal = msg;
         throw new ProbeStop(msg);
       }
-      if (res.status === 400 || res.status === 422) {
+      if (!counts) {
+        // A replay request fails alone: no stop, counter untouched.
+      } else if (res.status === 400 || res.status === 422) {
         if (++this.rejects >= MAX_CONSECUTIVE_REJECTS) {
           const hint = (this.o.thinking ?? 'disabled') === 'disabled' ? '; if the server rejects the unknown `thinking` field, retry with --thinking omit' : '';
           this.fatal = `OpenAI-compatible server rejected the request ${MAX_CONSECUTIVE_REJECTS} times in a row (${msg})${hint}`;

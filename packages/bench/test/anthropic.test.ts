@@ -278,3 +278,23 @@ describe('CostGuardModel', () => {
     expect(m.n).toBe(0);
   });
 });
+
+describe('per-request max_tokens and purpose', () => {
+  const sent = (c: { init: RequestInit }) => JSON.parse(String(c.init.body)) as { max_tokens: number };
+  test('the body takes r.maxTokens; without it the adapter default (200)', async () => {
+    const s = stubFetch([okResponse('a'), okResponse('b'), okResponse('c')]);
+    const m = new AnthropicModel({ model: 'claude-haiku-5-5', apiKey: KEY, fetch: s.fetch, sleep: noSleep });
+    await m.complete({ ...request([seg('q', false)]), maxTokens: 16, purpose: 'replay' });
+    await m.complete(request([seg('q', false)]));
+    await new AnthropicModel({ model: 'claude-haiku-5-5', apiKey: KEY, maxTokens: 50, fetch: s.fetch, sleep: noSleep }).complete(request([seg('q', false)]));
+    expect(s.calls.map(c => sent(c).max_tokens)).toEqual([16, 200, 50]);
+  });
+  test('the guard estimates output at r.maxTokens, and its stop message says requests', async () => {
+    // High estimates: 200 tokens x $0.5/MTok x 1.5 = $0.00015 and 16 tokens x ... = $0.000012; the budget sits between them.
+    const g2 = new CostGuardModel({ async complete() { return { reply: 'x', ops: [] }; } }, priceFor('claude-haiku-5-5'), { maxCost: 0.00005, maxTokens: 200, count: () => 0 });
+    await expect(g2.complete(request([seg('q', false)]))).rejects.toThrow(/requests/);
+    await expect(g2.complete({ ...request([seg('q', false)]), maxTokens: 16 })).rejects.toThrow(ProbeStop); // sticky
+    const g3 = new CostGuardModel({ async complete() { return { reply: 'x', ops: [] }; } }, priceFor('claude-haiku-5-5'), { maxCost: 0.00005, maxTokens: 200, count: () => 0 });
+    await expect(g3.complete({ ...request([seg('q', false)]), maxTokens: 16 })).resolves.toMatchObject({ reply: 'x' });
+  });
+});

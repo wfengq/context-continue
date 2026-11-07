@@ -185,3 +185,41 @@ describe('customPrice', () => {
     expect(g2.spent.usage.outputTokens).toBe(7);
   });
 });
+
+describe('per-request max_tokens and purpose', () => {
+  const sent = (c: { init: RequestInit }) => JSON.parse(String(c.init.body)) as { max_tokens: number };
+  test('the body takes r.maxTokens; without it the adapter default (200)', async () => {
+    const s = stubFetch([chat('a'), chat('b')]);
+    const m = model(s.fetch);
+    await m.complete({ ...request(), maxTokens: 16, purpose: 'replay' });
+    await m.complete(request());
+    expect(s.calls.map(c => sent(c).max_tokens)).toEqual([16, 200]);
+  });
+  test('five replay 400s each fail alone; the problem-request count then starts from 1', async () => {
+    const s = stubFetch([...Array.from({ length: 5 }, () => err(400, 'too long')), err(400, 'bad'), err(400, 'bad'), err(400, 'bad')]);
+    const m = model(s.fetch);
+    for (let i = 0; i < 5; i++) {
+      const e = await m.complete({ ...request(), purpose: 'replay', maxTokens: 16 }).catch(x => x);
+      expect(e).toBeInstanceOf(Error);
+      expect(e).not.toBeInstanceOf(ProbeStop);
+    }
+    // Replay rejects did not count: it takes three problem rejects to stop.
+    for (let i = 0; i < 2; i++) expect(await m.complete(request()).catch(x => x)).not.toBeInstanceOf(ProbeStop);
+    expect(await m.complete(request()).catch(x => x)).toBeInstanceOf(ProbeStop);
+  });
+  test('a replay 400 between problem 400s does not reset the count, and a replay success does not either', async () => {
+    const s = stubFetch([err(400, 'bad'), err(400, 'bad'), chat('ok'), err(400, 'bad')]);
+    const m = model(s.fetch);
+    await m.complete(request()).catch(() => {});
+    await m.complete(request()).catch(() => {});
+    await m.complete({ ...request(), purpose: 'replay' });
+    expect(await m.complete(request()).catch(x => x)).toBeInstanceOf(ProbeStop);
+  });
+  test('the guard estimates output at r.maxTokens and says requests when it stops', async () => {
+    const inner = { async complete() { return { reply: 'x', ops: [] }; } };
+    // customPrice(0, 0, 1000): output $1000/MTok, so 200 tokens x 1.5 = $0.30 and 16 tokens x 1.5 = $0.024.
+    const mk = () => new CostGuardModel(inner, customPrice(0, 0, 1000), { maxCost: 0.1, maxTokens: 200, count: () => 0 });
+    await expect(mk().complete(request())).rejects.toThrow(/requests/);
+    await expect(mk().complete({ ...request(), maxTokens: 16 })).resolves.toMatchObject({ reply: 'x' });
+  });
+});

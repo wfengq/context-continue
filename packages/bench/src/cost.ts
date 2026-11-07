@@ -142,9 +142,9 @@ export class CostGuardModel implements Model {
       inputTokens += n;
       if (s.cacheable) cacheableTokens += n;
     }
-    const next = estimateProbeCost(this.price, { inputTokens, cacheableTokens }, this.opts.maxTokens, this.margin).high * this.margin;
+    const next = estimateProbeCost(this.price, { inputTokens, cacheableTokens }, r.maxTokens ?? this.opts.maxTokens, this.margin).high * this.margin;
     if (this.spent.cost + next > this.opts.maxCost) {
-      this.stopped = `--max-cost ${this.opts.maxCost} reached: spent $${this.spent.cost.toFixed(4)} on ${this.spent.requests} probes, next probe estimated at up to $${next.toFixed(4)}`;
+      this.stopped = `--max-cost ${this.opts.maxCost} reached: spent $${this.spent.cost.toFixed(4)} on ${this.spent.requests} requests, next request estimated at up to $${next.toFixed(4)}`;
       throw new ProbeStop(this.stopped);
     }
     let out: Awaited<ReturnType<Model['complete']>>;

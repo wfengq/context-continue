@@ -5,6 +5,10 @@ export interface ModelRequest {
   segments: { text: string; cacheable: boolean }[];
   /** The step's scripted output for a scripted request; null for an extra request. */
   scripted: { reply: string; ops: ToolCall[] } | null;
+  /** Output cap for this request; defaults to the adapter's `maxTokens`. */
+  maxTokens?: number;
+  /** What the request is for (default 'probe'). A failed 'replay' request never counts toward a stop. */
+  purpose?: 'probe' | 'replay';
 }
 
 export interface Model {
