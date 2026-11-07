@@ -488,7 +488,7 @@
         "marketing"
       ],
       "probe": {
-        "question": "How soon must a talk video be published, and how is it titled?",
+        "question": "How must a talk video be titled?",
         "expect": [
           "S-nn Speaker"
         ]

@@ -705,7 +705,7 @@ export function generateLongEvent(): Scenario {
     ],
   });
   b.fact('contract-video-7d', 'CONTRACT-VIDEO-7D', ['production', 'marketing'], {
-    question: 'How soon must a talk video be published, and how is it titled?',
+    question: 'How must a talk video be titled?',
     expect: ['S-nn Speaker'],
   });
   b.work('production', 'recordings', 'Re-planning the AV for recordings instead of a stream.', [
