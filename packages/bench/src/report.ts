@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_OPTIONS } from '@context-continue/core';
-import { usageCost, type ModelPrice, type ProbeEstimateRow } from './cost.js';
+import { usageCost, type ModelPrice, type ProbeEstimateRow, type ReplayEstimateRow } from './cost.js';
 import { growthBucket, nearestRank, type GroupMetrics } from './metrics.js';
 import type { ProbeSamples } from './probe.js';
 import type { CallRecord, Group, ModelUsage, ProbeRecord, ProbeVerdict, Tier } from './types.js';
@@ -71,13 +71,17 @@ function sumGroup(rows: GroupMetrics[], g: Group): GroupMetrics | undefined {
 
 export function renderReport(
   all: GroupMetrics[],
-  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; cStream?: string; dsbotRef: 'f823773'; tiers: Record<string, Tier>; probes?: ProbeSection },
+  meta: { scenarios: string[]; params: Record<string, number>; cPublic?: string; cStream?: string; dsbotRef: 'f823773'; tiers: Record<string, Tier>; probes?: ProbeSection; replay?: ReplaySection },
 ): string {
   const out: string[] = [
     '> Results come from a scripted fake model: they measure context size only, not task quality.',
-    ...(meta.probes === undefined
+    ...(meta.probes === undefined && meta.replay === undefined
       ? []
-      : [`> The fact-probe section used a real model (${meta.probes.provider === undefined ? 'anthropic' : 'openai-compatible'}, ${meta.probes.model}); everything else is still scripted.`]),
+      : meta.replay === undefined
+        ? [`> The fact-probe section used a real model (${meta.probes!.provider === undefined ? 'anthropic' : 'openai-compatible'}, ${meta.probes!.model}); everything else is still scripted.`]
+        : [
+            `> The ${meta.probes === undefined ? 'replay section' : 'fact-probe and replay sections'} used a real model (${meta.replay.provider === undefined ? 'anthropic' : 'openai-compatible'}, ${meta.replay.model}); everything else is still scripted.`,
+          ]),
     '',
     '# Context bench report',
     '',
@@ -164,7 +168,8 @@ export function renderReport(
       return [s.contextMedian, s.contextP90, s.contextMax];
     }), '');
   }
-  if (meta.probes !== undefined) out.push(...renderProbeSection(meta.probes, tierOf));
+  if (meta.probes !== undefined) out.push(...renderProbeSection(meta.probes, tierOf, meta.replay !== undefined));
+  if (meta.replay !== undefined) out.push(...renderReplaySection(meta.replay, tierOf, meta.scenarios));
   const eInRun = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario));
   const eCompacted = all.some(r => r.group === 'E' && meta.scenarios.includes(r.scenario) && r.compactions > 0);
   const hasXlong = tiersPresent.includes('xlong');
@@ -175,9 +180,9 @@ export function renderReport(
   const ownOn = protoStream && meta.cStream!.includes('own outputs');
   out.push(
     '## Caveats', '',
-    meta.probes === undefined
+    meta.probes === undefined && meta.replay === undefined
       ? '- Results come from a scripted fake model; only context size is measured.'
-      : '- Results come from a scripted fake model; only context size is measured, except the fact-probe section, which used a real model.',
+      : `- Results come from a scripted fake model; only context size is measured, except the ${meta.replay === undefined ? 'fact-probe section, which used' : meta.probes === undefined ? 'replay section, which used' : 'fact-probe and replay sections, which used'} a real model.`,
     '- Quality and consistency conflicts: needs a real model, not measured.',
     `- E approximates DS Bot ${meta.dsbotRef}.`,
     '- B and F approximate Grok Bot and Dots + Space from public descriptions.',
@@ -262,13 +267,13 @@ export function renderReport(
 
 export function writeResults(
   dir: string,
-  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number>; cPublic?: string; cStream?: unknown; probes?: ProbeSection },
+  payload: { records: CallRecord[]; metrics: GroupMetrics[]; params: Record<string, number>; cPublic?: string; cStream?: unknown; probes?: ProbeSection; replay?: ReplaySection },
   report: string,
 ): void {
   mkdirSync(dir, { recursive: true });
   const params: Record<string, number> = {};
   for (const k of Object.keys(payload.params).sort()) params[k] = payload.params[k]!;
-  const json = JSON.stringify({ params, ...(payload.cPublic === undefined ? {} : { cPublic: payload.cPublic }), ...(payload.cStream === undefined ? {} : { cStream: payload.cStream }), metrics: payload.metrics, records: payload.records, ...(payload.probes === undefined ? {} : { probes: payload.probes }) }, null, 2) + '\n';
+  const json = JSON.stringify({ params, ...(payload.cPublic === undefined ? {} : { cPublic: payload.cPublic }), ...(payload.cStream === undefined ? {} : { cStream: payload.cStream }), metrics: payload.metrics, records: payload.records, ...(payload.probes === undefined ? {} : { probes: payload.probes }), ...(payload.replay === undefined ? {} : { replay: payload.replay }) }, null, 2) + '\n';
   writeFileSync(join(dir, 'results.json'), json);
   writeFileSync(join(dir, 'report.md'), report);
 }
@@ -307,7 +312,7 @@ function verdictCells(recs: ProbeRecord[]): string[] {
   return [fmtInt(recs.length), ...VERDICTS.map(v => pct(recs.filter(r => r.verdict === v).length, recs.length))];
 }
 
-function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): string[] {
+function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier, replayOn = false): string[] {
   const groups = [...ORDER, 'none' as const].filter(g => p.records.some(r => r.group === g));
   const out: string[] = [
     '## Fact probes (real model)', '',
@@ -326,8 +331,8 @@ function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): stri
   }
   if (p.stopped.length > 0) {
     out.push(
-      `Probing stopped: ${p.stopped[0]!.reason} (in ${p.stopped.map(x => `${x.scenario}/${x.group}`).join(', ')}). ` +
-        'Probes are sent in run order (scenario by scenario, groups in order), so the groups and scenarios after the stop lost their probes first: ' +
+      `${replayOn ? 'Real-model requests stopped' : 'Probing stopped'}: ${p.stopped[0]!.reason} (in ${p.stopped.map(x => `${x.scenario}/${x.group}`).join(', ')}). ` +
+        `${replayOn ? 'Replay requests and probes' : 'Probes'} are sent in run order (scenario by scenario, groups in order), so the groups and scenarios after the stop lost their ${replayOn ? 'requests' : 'probes'} first: ` +
         'their percentages are not comparable with the others; compare the raw probe counts.',
       '',
     );
@@ -408,6 +413,145 @@ export function renderProbeEstimate(
       est.total.costHigh <= meta.maxCost
         ? `--max-cost ${usd(meta.maxCost)}: the high estimate fits.`
         : `--max-cost ${usd(meta.maxCost)}: the high estimate does not fit; the cost guard would stop probing early.`,
+      '',
+    );
+  }
+  return out.join('\n');
+}
+
+/** One scenario x group of a replay run, as results.json's `replay.groups` entry (no per-request records). */
+export interface ReplayGroupRow {
+  scenario: string;
+  group: Group;
+  /** Replayed requests (including failed ones). */
+  requests: number;
+  errors: number;
+  usage: ModelUsage;
+  cost: number;
+  /** Cache read / (uncached + cache write + cache read) in percent; null without reported prompt tokens. */
+  realCacheReadPct: number | null;
+  /** The bench's R-B19 cacheable share of the group's input tokens in percent; null without input. */
+  estCacheablePct: number | null;
+  estCostUnits: number;
+  /** Every request of this scenario and group was replayed and the real-model requests were not stopped. */
+  complete: boolean;
+}
+
+/** The replay results of a real run, as results.json's `replay` section and the report's input. Never holds the key or the full base URL. */
+export interface ReplaySection {
+  model: string;
+  provider?: 'openai';
+  /** Host (with port) of --base-url; never the full URL or its query. */
+  baseUrlHost?: string;
+  maxTokens: number;
+  price: ModelPrice;
+  maxCost: number;
+  /** Real cost and usage of the replay requests alone (what the group rows sum to). */
+  cost: number;
+  usage: ModelUsage;
+  /** One entry per scenario-group run in which real-model requests were stopped; absent when none was. */
+  stopped?: { scenario: string; group: Group; reason: string }[];
+  groups: ReplayGroupRow[];
+}
+
+const signed = (n: number): string => {
+  const t = n.toFixed(1);
+  return t === '-0.0' || t === '0.0' ? '0.0' : n > 0 ? `+${t}` : t;
+};
+/** (x - ref) / ref in percent with a sign; n/a without a reference. */
+const diffPct = (x: number, ref: number): string => (ref === 0 ? 'n/a' : signed(((x - ref) / ref) * 100));
+
+function renderReplaySection(p: ReplaySection, tierOf: (sc: string) => Tier, scenarios: string[]): string[] {
+  const out: string[] = [
+    '## Replay on a real model', '',
+    `${p.provider === undefined ? '' : `Provider openai-compatible (host ${p.baseUrlHost}); `}Model ${p.model}; max_tokens ${p.maxTokens}. ` +
+      'Every request a group made, scripted and extra, was also sent once, in order, to this model with the segments exactly as the group sent them; its answers were discarded and never entered the project. ' +
+      `Prices: ${p.price.source}.`,
+    '',
+    '- Groups share a short fixed template at the start (a few hundred tokens), so a group run later may get slightly more cache hits.',
+    "- The real model's answers do not change the project: this measures cost, cache and answers to the probes, not the quality of the work.",
+    "- The provider's cache is best effort (DeepSeek does not guarantee hits); that variation is part of the real result, and each configuration ran once.",
+    '- Replay output is cut to 16 tokens, so the output part of the real cost is too low; the input part is what this measures.',
+    '',
+  ];
+  if (p.stopped !== undefined && p.stopped.length > 0) {
+    out.push(
+      `Real-model requests stopped: ${p.stopped[0]!.reason} (in ${p.stopped.map(x => `${x.scenario}/${x.group}`).join(', ')}). ` +
+        'The scripted run went on; groups after the stop sent no replay requests. Groups marked incomplete below are left out of the comparison tables.',
+      '',
+    );
+  }
+  out.push(
+    '| Scenario | Group | Requests | Errors | Input (uncached) | Cache write | Cache read | Output | Real cost | Real cache read % | Est. cacheable % | Est. cost units | Complete |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+  );
+  const nz = (v: number | null): string => (v === null ? 'n/a' : v.toFixed(1));
+  for (const r of p.groups) {
+    out.push(
+      `| ${r.scenario} | ${r.group} | ${fmtInt(r.requests)} | ${fmtInt(r.errors)} | ${fmtInt(r.usage.inputTokens)} | ${fmtInt(r.usage.cacheWriteTokens)} | ${fmtInt(r.usage.cacheReadTokens)} | ${fmtInt(r.usage.outputTokens)} | ${usd(r.cost)} | ${nz(r.realCacheReadPct)} | ${nz(r.estCacheablePct)} | ${fmtCost(r.estCostUnits)} | ${r.complete ? 'yes' : 'no'} |`,
+    );
+  }
+  out.push('', `Total replay cost ${usd(p.cost)} of --max-cost ${usd(p.maxCost)}.`, '');
+  const tiersPresent = (['standard', 'long', 'xlong'] as const).filter(t => scenarios.some(sc => tierOf(sc) === t));
+  for (const t of tiersPresent) {
+    out.push(`Group C against D and E, ${t} scenarios (negative: C is cheaper). Only scenarios where both groups are complete count:`, '');
+    out.push('| Reference | Scenarios | Real cost C | Real cost ref | Real diff % | Est. units C | Est. units ref | Est. diff % |', '|---|---|---|---|---|---|---|---|');
+    const skipped: string[] = [];
+    for (const ref of ['D', 'E'] as const) {
+      const used: string[] = [];
+      let c = { cost: 0, units: 0 };
+      let d = { cost: 0, units: 0 };
+      for (const sc of scenarios.filter(x => tierOf(x) === t)) {
+        const rc = p.groups.find(r => r.scenario === sc && r.group === 'C');
+        const rr = p.groups.find(r => r.scenario === sc && r.group === ref);
+        if (rc === undefined || rr === undefined) {
+          skipped.push(`${sc} vs ${ref}: group ${rc === undefined ? 'C' : ref} is not in this run`);
+        } else if (!rc.complete || !rr.complete) {
+          skipped.push(`${sc} vs ${ref}: group ${[!rc.complete ? 'C' : '', !rr.complete ? ref : ''].filter(x => x !== '').join(' and ')} incomplete (real-model requests stopped before every request was replayed)`);
+        } else {
+          used.push(sc);
+          c = { cost: c.cost + rc.cost, units: c.units + rc.estCostUnits };
+          d = { cost: d.cost + rr.cost, units: d.units + rr.estCostUnits };
+        }
+      }
+      out.push(
+        used.length === 0
+          ? `| ${ref} | none | n/a | n/a | n/a | n/a | n/a | n/a |`
+          : `| ${ref} | ${used.join(', ')} | ${usd(c.cost)} | ${usd(d.cost)} | ${diffPct(c.cost, d.cost)} | ${fmtCost(c.units)} | ${fmtCost(d.units)} | ${diffPct(c.units, d.units)} |`,
+      );
+    }
+    out.push('');
+    if (skipped.length > 0) out.push(...skipped.map(x => `Skipped: ${x}.`), '');
+  }
+  return out;
+}
+
+/** The `--dry-run --replay` estimate as Markdown (printed and written as replay-estimate.md). */
+export function renderReplayEstimate(
+  est: { rows: ReplayEstimateRow[]; total: Omit<ReplayEstimateRow, 'scenario' | 'group'> },
+  meta: { model: string; provider?: 'openai'; baseUrlHost?: string; maxTokens: number; maxCost: number | null },
+  tiers: Record<string, Tier>,
+): string {
+  const cells = (x: Omit<ReplayEstimateRow, 'scenario' | 'group'>) =>
+    [fmtInt(x.requests), fmtInt(x.inputTokens), fmtInt(x.cacheableTokens), fmtInt(x.outputTokens), usd(x.costLow), usd(x.costHigh)].join(' | ');
+  const out = [
+    '# Replay dry run (no requests sent)', '',
+    `${meta.provider === undefined ? '' : `Provider openai-compatible (host ${meta.baseUrlHost}); `}Model ${meta.model}; max_tokens ${meta.maxTokens}; every request of every selected group is replayed once.`,
+    '',
+    "Tokens are the bench's count (defaultCountTokens: about 4 characters, or 1 CJK character, per token), an approximation of the model's real tokenizer, " +
+      `which may count noticeably more. Low: every R-B19 cacheable token is a cache read; high: every one is ${meta.provider === undefined ? 'a cache write' : 'at the input price'}. Output is counted at max_tokens (its upper bound).`,
+    '',
+    '| Scenario | Tier | Group | Requests | Input tokens | Cacheable | Output (max) | Cost low | Cost high |',
+    '|---|---|---|---|---|---|---|---|---|',
+    ...est.rows.map(r => `| ${r.scenario} | ${tiers[r.scenario] ?? 'standard'} | ${r.group} | ${cells(r)} |`),
+    `| Total | | | ${cells(est.total)} |`,
+    '',
+  ];
+  if (meta.maxCost !== null) {
+    out.push(
+      est.total.costHigh <= meta.maxCost
+        ? `--max-cost ${usd(meta.maxCost)}: the high estimate fits.`
+        : `--max-cost ${usd(meta.maxCost)}: the high estimate does not fit; the cost guard would stop real-model requests early.`,
       '',
     );
   }

@@ -2,18 +2,18 @@ import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_STREAM_OPTIONS, type PublicBoardSwitches } from '@context-continue/core';
-import { CostGuardModel, customPrice, DryRunModel, estimateProbes, priceFor, type ModelPrice } from './cost.js';
+import { CostGuardModel, customPrice, DryRunModel, estimateProbes, estimateReplay, priceFor, usageCost, type ModelPrice } from './cost.js';
 import { computeMetrics, type GroupMetrics } from './metrics.js';
 import type { Model } from './model.js';
 import { AnthropicModel, DEFAULT_MAX_TOKENS, resolveApiKey } from './models/anthropic.js';
 import { baseUrlHost, DEFAULT_API_KEY_ENV, OpenAIModel, type ThinkingMode } from './models/openai.js';
 import { createPolicy } from './policies/index.js';
 import { runControl, type ProbeSamples } from './probe.js';
-import { renderProbeEstimate, renderReport, writeResults, type ProbeSection } from './report.js';
+import { renderProbeEstimate, renderReplayEstimate, renderReport, writeResults, type ProbeSection, type ReplayGroupRow, type ReplaySection } from './report.js';
 import { DEFAULT_RESTREAM_TOKENS } from './policies/stream.js';
-import { runScenario } from './runner.js';
+import { REPLAY_MAX_TOKENS, runScenario } from './runner.js';
 import { loadScenario } from './scenario.js';
-import type { CallRecord, Group, ProbeRecord, Scenario } from './types.js';
+import type { CallRecord, Group, ModelUsage, ProbeRecord, ReplayRecord, Scenario } from './types.js';
 
 /** The standard scenarios (20–40 steps), in report order. */
 export const STANDARD_IDS = ['product-plan', 'flappy-bird', 'event-plan'] as const;
@@ -35,10 +35,22 @@ const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
   '[--c-stream off|on|core|auto] [--restream-tokens 8000] [--c-stream-own off|on] [--auto-after <n>] [--out results] [--stamp <s>] ' +
-  '[--probes [--dry-run] [--max-cost <usd>] [--provider anthropic|openai] [--model claude-haiku-5-5] [--base-url <url>] [--api-key-env <NAME>] [--price <input>,<cacheRead>,<output>] [--probe-groups A,C,D,E] [--probe-samples fml|all|<n>] [--thinking disabled|omit] [--max-probes <n>] [--no-probe-control]]';
+  '[--probes] [--replay] (either one: [--dry-run] [--max-cost <usd>] [--provider anthropic|openai] [--model claude-haiku-5-5] [--base-url <url>] [--api-key-env <NAME>] [--price <input>,<cacheRead>,<output>] [--thinking disabled|omit]) ' +
+  '(--probes only: [--probe-groups A,C,D,E] [--probe-samples fml|all|<n>] [--max-probes <n>] [--no-probe-control])';
 
-/** Fact probes with a real model (spec 2026-11-07-real-model-probes); absent without --probes. */
-interface ProbeArgs {
+/** The fact-probe options (spec 2026-11-07-real-model-probes); present only with --probes. */
+interface ProbeOpts {
+  groups: Group[];
+  /** Groups named in --probe-groups that this run does not include. */
+  dropped: Group[];
+  samples: ProbeSamples;
+  maxPerScenario: number | undefined;
+  /** Also ask each probed fact once with no project context (group "none"); on unless --no-probe-control. */
+  control: boolean;
+}
+
+/** Real-model settings, shared by --probes and --replay (spec 2026-11-07-real-model-replay); absent with neither. */
+interface RealArgs {
   provider: 'anthropic' | 'openai';
   /** --provider openai only: the server's base URL (used for requests, never recorded) and its host. */
   baseUrl: string | undefined;
@@ -49,21 +61,20 @@ interface ProbeArgs {
   thinking: ThinkingMode;
   model: string;
   price: ModelPrice;
-  groups: Group[];
-  /** Groups named in --probe-groups that this run does not include. */
-  dropped: Group[];
-  samples: ProbeSamples;
-  maxPerScenario: number | undefined;
   dryRun: boolean;
-  /** Also ask each probed fact once with no project context (group "none"); on unless --no-probe-control. */
-  control: boolean;
   /** Required for a real run. */
   maxCost: number | undefined;
+  /** Also send every request of every selected group to the model (output capped at REPLAY_MAX_TOKENS). */
+  replay: boolean;
+  probe: ProbeOpts | undefined;
 }
 
 const DEFAULT_PROBE_GROUPS: Group[] = ['A', 'C', 'D', 'E'];
-const PROBE_FLAGS = ['--dry-run', '--max-cost', '--provider', '--model', '--base-url', '--api-key-env', '--price', '--probe-groups', '--probe-samples', '--thinking', '--max-probes', '--no-probe-control'];
-const BOOLEAN_FLAGS = ['--probes', '--dry-run', '--no-probe-control'];
+/** Usable with --probes or --replay. */
+const REAL_FLAGS = ['--dry-run', '--max-cost', '--provider', '--model', '--base-url', '--api-key-env', '--price', '--thinking'];
+/** Usable with --probes only. */
+const PROBE_ONLY_FLAGS = ['--probe-groups', '--probe-samples', '--max-probes', '--no-probe-control'];
+const BOOLEAN_FLAGS = ['--probes', '--replay', '--dry-run', '--no-probe-control'];
 
 /** What main uses from the outside world for probes; tests inject a fake fetch and environment. */
 export interface MainDeps {
@@ -83,7 +94,7 @@ interface Args {
   cStream: CStream;
   out: string;
   stamp: string | undefined;
-  probes: ProbeArgs | undefined;
+  real: RealArgs | undefined;
 }
 
 class UsageError extends Error {}
@@ -190,7 +201,7 @@ function parseArgs(argv: string[]): Args {
     seen.set(flag, value);
     i += 2;
   }
-  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--c-stream-own', '--auto-after', '--out', '--stamp', '--probes', ...PROBE_FLAGS];
+  const known = ['--scenario', '--group', '--window', '--compact-ratio', '--summary-tokens', '--cache-ratio', '--c-public', '--c-stream', '--restream-tokens', '--c-stream-own', '--auto-after', '--out', '--stamp', '--probes', '--replay', ...REAL_FLAGS, ...PROBE_ONLY_FLAGS];
   for (const flag of seen.keys()) if (!known.includes(flag)) throw new UsageError(`unknown flag ${flag}`);
   const scenario = seen.get('--scenario');
   const group = seen.get('--group');
@@ -237,14 +248,18 @@ function parseArgs(argv: string[]): Args {
     cStream,
     out: seen.get('--out') ?? 'results',
     stamp,
-    probes: parseProbeArgs(seen, group === 'all' ? GROUPS : [group as Group]),
+    real: parseRealArgs(seen, group === 'all' ? GROUPS : [group as Group]),
   };
 }
 
-function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArgs | undefined {
-  if (!seen.has('--probes')) {
-    const stray = PROBE_FLAGS.find(f => seen.has(f));
-    if (stray !== undefined) throw new UsageError(`${stray} needs --probes`);
+function parseRealArgs(seen: Map<string, string>, runGroups: Group[]): RealArgs | undefined {
+  const probes = seen.has('--probes');
+  const replay = seen.has('--replay');
+  const strayProbe = PROBE_ONLY_FLAGS.find(f => seen.has(f));
+  if (!probes && strayProbe !== undefined) throw new UsageError(`${strayProbe} needs --probes`);
+  if (!probes && !replay) {
+    const stray = REAL_FLAGS.find(f => seen.has(f));
+    if (stray !== undefined) throw new UsageError(`${stray} needs --probes or --replay`);
     return undefined;
   }
   const provider = seen.get('--provider') ?? 'anthropic';
@@ -283,26 +298,29 @@ function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArg
     price = customPrice(nums[0]!, nums[1]!, nums[2]!);
   }
   const apiKeyEnv = seen.get('--api-key-env') ?? DEFAULT_API_KEY_ENV;
-  const rawGroups = seen.get('--probe-groups');
-  const groups = rawGroups === undefined ? DEFAULT_PROBE_GROUPS : (rawGroups.split(',') as Group[]);
-  const badGroup = groups.find(g => !GROUPS.includes(g));
-  if (badGroup !== undefined) throw new UsageError(`--probe-groups: unknown group "${badGroup}" in "${rawGroups}" (use a comma list of A..F)`);
-  if (new Set(groups).size !== groups.length) throw new UsageError(`--probe-groups: a group is repeated in "${rawGroups}"`);
-  const probed = GROUPS.filter(g => groups.includes(g) && runGroups.includes(g));
-  if (probed.length === 0) throw new UsageError(`--probe-groups ${groups.join(',')}: none of these groups is in this run (--group ${runGroups.length === 1 ? runGroups[0] : 'all'})`);
-  const rawSamples = seen.get('--probe-samples') ?? 'fml';
-  const samples: ProbeSamples =
-    rawSamples === 'fml' || rawSamples === 'all'
-      ? rawSamples
-      : number('--probe-samples', rawSamples, n => Number.isInteger(n) && n > 0, 'fml, all or a positive integer');
-  const rawMax = seen.get('--max-probes');
-  const maxPerScenario = rawMax === undefined ? undefined : number('--max-probes', rawMax, n => Number.isInteger(n) && n >= 0, 'a non-negative integer');
+  let probe: ProbeOpts | undefined;
+  if (probes) {
+    const rawGroups = seen.get('--probe-groups');
+    const groups = rawGroups === undefined ? DEFAULT_PROBE_GROUPS : (rawGroups.split(',') as Group[]);
+    const badGroup = groups.find(g => !GROUPS.includes(g));
+    if (badGroup !== undefined) throw new UsageError(`--probe-groups: unknown group "${badGroup}" in "${rawGroups}" (use a comma list of A..F)`);
+    if (new Set(groups).size !== groups.length) throw new UsageError(`--probe-groups: a group is repeated in "${rawGroups}"`);
+    const probed = GROUPS.filter(g => groups.includes(g) && runGroups.includes(g));
+    if (probed.length === 0) throw new UsageError(`--probe-groups ${groups.join(',')}: none of these groups is in this run (--group ${runGroups.length === 1 ? runGroups[0] : 'all'})`);
+    const rawSamples = seen.get('--probe-samples') ?? 'fml';
+    const samples: ProbeSamples =
+      rawSamples === 'fml' || rawSamples === 'all'
+        ? rawSamples
+        : number('--probe-samples', rawSamples, n => Number.isInteger(n) && n > 0, 'fml, all or a positive integer');
+    const rawMax = seen.get('--max-probes');
+    const maxPerScenario = rawMax === undefined ? undefined : number('--max-probes', rawMax, n => Number.isInteger(n) && n >= 0, 'a non-negative integer');
+    probe = { groups: probed, dropped: groups.filter(g => !runGroups.includes(g)), samples, maxPerScenario, control: !seen.has('--no-probe-control') };
+  }
   const dryRun = seen.has('--dry-run');
   const rawCost = seen.get('--max-cost');
   const maxCost = rawCost === undefined ? undefined : number('--max-cost', rawCost, n => n > 0, 'a positive number of US dollars');
-  if (!dryRun && maxCost === undefined) throw new UsageError('--probes sends paid requests: give --max-cost <usd> (or --dry-run for an estimate)');
-  const dropped = groups.filter(g => !runGroups.includes(g));
-  return { provider, thinking, baseUrl, baseUrlHost: host, apiKeyEnv, model, price, groups: probed, dropped, samples, maxPerScenario, dryRun, control: !seen.has('--no-probe-control'), maxCost };
+  if (!dryRun && maxCost === undefined) throw new UsageError(`${probes ? '--probes' : '--replay'} sends paid requests: give --max-cost <usd> (or --dry-run for an estimate)`);
+  return { provider, thinking, baseUrl, baseUrlHost: host, apiKeyEnv, model, price, dryRun, maxCost, replay, probe };
 }
 
 /** Runs the bench; returns the process exit code. Errors go to stderr. */
@@ -336,28 +354,31 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   const groups = args.group === 'all' ? GROUPS : [args.group as Group];
   const dir = join(args.out, args.stamp ?? timestamp(new Date()));
 
-  // Probes: a dry run sends nothing; a real run needs the key (from the environment only) and a budget.
-  const pa = args.probes;
+  // Real-model requests (probes and/or replay): a dry run sends nothing; a real run needs the key (from the environment only) and a budget.
+  const ra = args.real;
+  const pa = ra?.probe;
   if (pa !== undefined && pa.dropped.length > 0) {
     process.stderr.write(`bench: note: --probe-groups: ${pa.dropped.join(', ')} not in this run (--group ${args.group}); probing ${pa.groups.join(', ')}\n`);
   }
   if (pa !== undefined && !scenarios.some(s => (s.facts ?? []).some(f => f.probe !== undefined))) {
     process.stderr.write('bench: note: --probes: no fact in these scenarios has a probe; nothing will be probed\n');
   }
+  const realRun = ra !== undefined && !ra.dryRun;
+  const dryReplay = ra !== undefined && ra.dryRun && ra.replay;
   let probeModel: Model | undefined;
   let guard: CostGuardModel | undefined;
-  if (pa !== undefined) {
-    if (pa.dryRun) probeModel = new DryRunModel();
+  if (ra !== undefined) {
+    if (ra.dryRun) probeModel = new DryRunModel();
     else {
       const injected = {
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }), ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
       };
       let real: Model;
-      if (pa.provider === 'openai') {
-        const raw = (deps.env ?? process.env)[pa.apiKeyEnv];
+      if (ra.provider === 'openai') {
+        const raw = (deps.env ?? process.env)[ra.apiKeyEnv];
         const key = raw === undefined || raw.trim() === '' ? undefined : raw;
-        if (key === undefined) process.stderr.write(`bench: note: ${pa.apiKeyEnv} is not set; sending no Authorization header\n`);
-        real = new OpenAIModel({ model: pa.model, baseUrl: pa.baseUrl!, ...(key === undefined ? {} : { apiKey: key }), maxTokens: DEFAULT_MAX_TOKENS, thinking: pa.thinking, ...injected });
+        if (key === undefined) process.stderr.write(`bench: note: ${ra.apiKeyEnv} is not set; sending no Authorization header\n`);
+        real = new OpenAIModel({ model: ra.model, baseUrl: ra.baseUrl!, ...(key === undefined ? {} : { apiKey: key }), maxTokens: DEFAULT_MAX_TOKENS, thinking: ra.thinking, ...injected });
       } else {
         let key: string;
         try {
@@ -366,17 +387,25 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
           process.stderr.write(`bench: ${(e as Error).message}\n`);
           return 2;
         }
-        real = new AnthropicModel({ model: pa.model, apiKey: key, maxTokens: DEFAULT_MAX_TOKENS, ...injected });
+        real = new AnthropicModel({ model: ra.model, apiKey: key, maxTokens: DEFAULT_MAX_TOKENS, ...injected });
       }
-      guard = new CostGuardModel(real, pa.price, { maxCost: pa.maxCost!, maxTokens: DEFAULT_MAX_TOKENS });
+      // One guard for probes and replay: its budget and its stop cover every real-model request.
+      guard = new CostGuardModel(real, ra.price, { maxCost: ra.maxCost!, maxTokens: DEFAULT_MAX_TOKENS });
       probeModel = guard;
-      // Each finished probe is appended at once, so an interrupted paid run keeps what it bought.
+      // Each finished probe or replayed request is appended at once, so an interrupted paid run keeps what it bought.
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'probes.jsonl'), '');
+      if (pa !== undefined) writeFileSync(join(dir, 'probes.jsonl'), '');
+      if (ra.replay) writeFileSync(join(dir, 'replay.jsonl'), '');
     }
   }
   const probeRecords: ProbeRecord[] = [];
   const stopped: { scenario: string; group: Group | 'none'; reason: string }[] = [];
+  const replayRows: ReplayGroupRow[] = [];
+  const replayUsage = (recs: ReplayRecord[]): ModelUsage =>
+    recs.reduce<ModelUsage>((a, r) => (r.usage === undefined ? a : {
+      inputTokens: a.inputTokens + r.usage.inputTokens, cacheWriteTokens: a.cacheWriteTokens + r.usage.cacheWriteTokens,
+      cacheReadTokens: a.cacheReadTokens + r.usage.cacheReadTokens, outputTokens: a.outputTokens + r.usage.outputTokens,
+    }), { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 });
   const opts = {
     window: args.window,
     compactRatio: args.compactRatio,
@@ -392,7 +421,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
       const c = await runControl(s, {
         model: probeModel!, samples: pa.samples,
         ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
-        ...(pa.dryRun ? {} : { onProbe: (rec: ProbeRecord) => appendFileSync(join(dir, 'probes.jsonl'), JSON.stringify(rec) + '\n') }),
+        ...(ra!.dryRun ? {} : { onProbe: (rec: ProbeRecord) => appendFileSync(join(dir, 'probes.jsonl'), JSON.stringify(rec) + '\n') }),
       });
       probeRecords.push(...c.records);
       if (c.stopped !== undefined) stopped.push({ scenario: s.id, group: 'none', reason: c.stopped });
@@ -403,44 +432,102 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
           ? {
               model: probeModel!, samples: pa.samples,
               ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
-              ...(pa.dryRun ? {} : { onProbe: (rec: ProbeRecord) => appendFileSync(join(dir, 'probes.jsonl'), JSON.stringify(rec) + '\n') }),
+              ...(ra!.dryRun ? {} : { onProbe: (rec: ProbeRecord) => appendFileSync(join(dir, 'probes.jsonl'), JSON.stringify(rec) + '\n') }),
             }
           : undefined;
-      const run = await runScenario(s, createPolicy(g, opts), probe === undefined ? {} : { probe });
+      const replay =
+        realRun && ra.replay
+          ? { model: guard!, onReplay: (rec: ReplayRecord) => appendFileSync(join(dir, 'replay.jsonl'), JSON.stringify(rec) + '\n') }
+          : undefined;
+      const run = await runScenario(s, createPolicy(g, opts), { ...(probe === undefined ? {} : { probe }), ...(replay === undefined ? {} : { replay }) });
       probeRecords.push(...(run.probes ?? []));
-      if (run.probeStopped !== undefined) stopped.push({ scenario: s.id, group: g, reason: run.probeStopped });
+      // probeStopped is also set when a replay request stopped the real model; realStopped is the one to report with --replay.
+      const stop = ra?.replay ? run.realStopped : run.probeStopped;
+      if (stop !== undefined) stopped.push({ scenario: s.id, group: g, reason: stop });
       records.push(...run.records);
-      metrics.push(computeMetrics(g, s.id, run.records, run.stats, args.cacheRatio, s.tier ?? 'standard', (s.facts ?? []).map(f => f.id)));
+      const m = computeMetrics(g, s.id, run.records, run.stats, args.cacheRatio, s.tier ?? 'standard', (s.facts ?? []).map(f => f.id));
+      metrics.push(m);
+      if (run.replay !== undefined) {
+        const usage = replayUsage(run.replay);
+        const prompt = usage.inputTokens + usage.cacheWriteTokens + usage.cacheReadTokens;
+        replayRows.push({
+          scenario: s.id, group: g, requests: run.replay.length, errors: run.replay.filter(r => r.error !== undefined).length, usage,
+          cost: run.replay.reduce((n, r) => (r.usage === undefined ? n : n + usageCost(ra!.price, r.usage)), 0),
+          realCacheReadPct: prompt === 0 ? null : (usage.cacheReadTokens / prompt) * 100,
+          estCacheablePct: m.inputTokens === 0 ? null : (m.cacheableTokens / m.inputTokens) * 100,
+          estCostUnits: m.costUnits,
+          // A group is complete only if every one of its requests was replayed and real-model requests were never stopped in it.
+          complete: run.realStopped === undefined && run.replay.length === run.records.length,
+        });
+      }
     }
   }
 
   const params = { cacheRatio: args.cacheRatio, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, window: args.window };
   const tiers = Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'] as const));
+  const replayTotal = replayUsage(replayRows.map(r => ({ usage: r.usage }) as ReplayRecord));
+  const replayCost = replayRows.reduce((n, r) => n + r.cost, 0);
   const section: ProbeSection | undefined =
-    pa !== undefined && !pa.dryRun
+    pa !== undefined && !ra!.dryRun
       ? {
-          model: pa.model, ...(pa.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: pa.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS,
-          thinking: pa.provider === 'openai' && pa.thinking === 'omit' ? ('not sent' as const) : ('disabled' as const), temperature: pa.provider === 'openai' ? '0' : 'not sent (model default)', samples: pa.samples,
+          model: ra!.model, ...(ra!.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: ra!.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS,
+          thinking: ra!.provider === 'openai' && ra!.thinking === 'omit' ? ('not sent' as const) : ('disabled' as const), temperature: ra!.provider === 'openai' ? '0' : 'not sent (model default)', samples: pa.samples,
           ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
-          groups: pa.groups, control: pa.control, maxCost: pa.maxCost!, price: pa.price, usage: guard!.spent.usage, cost: guard!.spent.cost, stopped, records: probeRecords,
+          // With --replay the guard also paid for the replay requests: the probe totals are what is left.
+          groups: pa.groups, control: pa.control, maxCost: ra!.maxCost!, price: ra!.price,
+          usage: ra!.replay
+            ? {
+                inputTokens: guard!.spent.usage.inputTokens - replayTotal.inputTokens, cacheWriteTokens: guard!.spent.usage.cacheWriteTokens - replayTotal.cacheWriteTokens,
+                cacheReadTokens: guard!.spent.usage.cacheReadTokens - replayTotal.cacheReadTokens, outputTokens: guard!.spent.usage.outputTokens - replayTotal.outputTokens,
+              }
+            : guard!.spent.usage,
+          cost: ra!.replay ? guard!.spent.cost - replayCost : guard!.spent.cost, stopped, records: probeRecords,
         }
       : undefined;
-  const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, cStream: cStreamLine(args.cStream), dsbotRef: 'f823773', tiers, ...(section === undefined ? {} : { probes: section }) });
-  writeResults(dir, { records, metrics, params, cPublic: args.cPublic.canonical, cStream: args.cStream, ...(section === undefined ? {} : { probes: section }) }, report);
+  const replaySection: ReplaySection | undefined =
+    realRun && ra.replay
+      ? {
+          model: ra.model, ...(ra.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: ra.baseUrlHost! } : {}), maxTokens: REPLAY_MAX_TOKENS,
+          price: ra.price, maxCost: ra.maxCost!, cost: replayCost, usage: replayTotal,
+          ...(stopped.some(x => x.group !== 'none') ? { stopped: stopped.filter((x): x is { scenario: string; group: Group; reason: string } => x.group !== 'none') } : {}),
+          groups: replayRows,
+        }
+      : undefined;
+  const report = renderReport(metrics, {
+    scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, cStream: cStreamLine(args.cStream), dsbotRef: 'f823773', tiers,
+    ...(section === undefined ? {} : { probes: section }), ...(replaySection === undefined ? {} : { replay: replaySection }),
+  });
+  writeResults(dir, { records, metrics, params, cPublic: args.cPublic.canonical, cStream: args.cStream, ...(section === undefined ? {} : { probes: section }), ...(replaySection === undefined ? {} : { replay: replaySection }) }, report);
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);
-  if (pa !== undefined && pa.dryRun) {
-    const est = estimateProbes(probeRecords, pa.price, DEFAULT_MAX_TOKENS);
-    const meta = { model: pa.model, ...(pa.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: pa.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS, samples: pa.samples, groups: [...pa.groups, ...(pa.control ? ['none' as const] : [])], maxCost: pa.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
-    const md = renderProbeEstimate(est, meta, tiers);
-    writeFileSync(join(dir, 'probe-estimate.json'), JSON.stringify({ ...meta, price: pa.price, ...est }, null, 2) + '\n');
-    writeFileSync(join(dir, 'probe-estimate.md'), md);
-    process.stdout.write(md);
-    process.stdout.write(`bench: wrote ${join(dir, 'probe-estimate.json')} and ${join(dir, 'probe-estimate.md')}\n`);
-  } else if (section !== undefined) {
-    process.stdout.write(
-      `bench: ${section.records.length} probes, real cost $${section.cost.toFixed(4)} of --max-cost $${section.maxCost}` +
-        (stopped.length > 0 ? `; probing stopped (${stopped[0]!.reason})` : '') + '\n',
-    );
+  if (ra !== undefined && ra.dryRun) {
+    const base = { model: ra.model, ...(ra.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: ra.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS };
+    if (pa !== undefined) {
+      const est = estimateProbes(probeRecords, ra.price, DEFAULT_MAX_TOKENS);
+      const meta = { ...base, samples: pa.samples, groups: [...pa.groups, ...(pa.control ? ['none' as const] : [])], maxCost: ra.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
+      const md = renderProbeEstimate(est, meta, tiers);
+      writeFileSync(join(dir, 'probe-estimate.json'), JSON.stringify({ ...meta, price: ra.price, ...est }, null, 2) + '\n');
+      writeFileSync(join(dir, 'probe-estimate.md'), md);
+      process.stdout.write(md);
+      process.stdout.write(`bench: wrote ${join(dir, 'probe-estimate.json')} and ${join(dir, 'probe-estimate.md')}\n`);
+    }
+    if (dryReplay) {
+      const est = estimateReplay(records, ra.price, REPLAY_MAX_TOKENS);
+      const meta = { ...base, maxTokens: REPLAY_MAX_TOKENS, maxCost: ra.maxCost ?? null };
+      const md = renderReplayEstimate(est, meta, tiers);
+      writeFileSync(join(dir, 'replay-estimate.json'), JSON.stringify({ ...meta, price: ra.price, ...est }, null, 2) + '\n');
+      writeFileSync(join(dir, 'replay-estimate.md'), md);
+      process.stdout.write(md);
+      process.stdout.write(`bench: wrote ${join(dir, 'replay-estimate.json')} and ${join(dir, 'replay-estimate.md')}\n`);
+    }
+  } else if (section !== undefined || replaySection !== undefined) {
+    const stopClause = stopped.length > 0 ? `; ${ra!.replay ? 'real-model requests' : 'probing'} stopped (${stopped[0]!.reason})` : '';
+    if (section !== undefined) {
+      process.stdout.write(`bench: ${section.records.length} probes, real cost $${section.cost.toFixed(4)} of --max-cost $${section.maxCost}${replaySection === undefined ? stopClause : ''}\n`);
+    }
+    if (replaySection !== undefined) {
+      const n = replaySection.groups.reduce((x, r) => x + r.requests, 0);
+      process.stdout.write(`bench: ${n} replayed requests, real cost $${replaySection.cost.toFixed(4)} of --max-cost $${replaySection.maxCost}${stopClause}\n`);
+    }
   }
   return 0;
 }

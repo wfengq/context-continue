@@ -115,11 +115,12 @@ ignored by git.
 | `--auto-after <n>` | the core default (`DEFAULT_STREAM_OPTIONS.autoAfterEntries`) | With `--c-stream auto` only (a usage error otherwise): the core's `stream.autoAfterEntries`, the ledger size at which a scenario switches to the stream; a positive integer |
 | `--out <dir>` | `results` | Output directory, relative to the current working directory |
 | `--stamp <s>` | UTC time `YYYYMMDDTHHmmssZ` | Name of the run's subdirectory |
-| `--probes` | off | Fact probes with a real model (below). Takes no value. The flags below need it (a usage error otherwise) |
-| `--dry-run` | off | With `--probes`: send nothing; print the estimate and write `probe-estimate.json` and `probe-estimate.md` |
-| `--max-cost <usd>` | required for a real run | With `--probes`: budget in US dollars; probing stops before the next probe's estimate would pass it (one probe can overshoot by the difference between its estimate and its real cost) |
-| `--provider <anthropic\|openai>` | `anthropic` | With `--probes`: the API. `openai` is any OpenAI-compatible Chat Completions server (below) |
-| `--model <id>` | `claude-haiku-5-5` | With `--probes`: the probe model. With `anthropic` it must have a price in `PRICES` (`src/cost.ts`); with `openai` it is required and any name is accepted |
+| `--probes` | off | Fact probes with a real model (below). Takes no value. `--probe-groups`, `--probe-samples`, `--max-probes` and `--no-probe-control` need it (a usage error otherwise) |
+| `--replay` | off | Also send every request of every selected group to a real model (below). Takes no value. Combinable with `--probes`; the real-model flags below work with either |
+| `--dry-run` | off | With `--probes` or `--replay`: send nothing; print the estimate and write `probe-estimate.*` and/or `replay-estimate.*` |
+| `--max-cost <usd>` | required for a real run | With `--probes` or `--replay`: budget in US dollars; real-model requests stop before the next probe's estimate would pass it (one probe can overshoot by the difference between its estimate and its real cost) |
+| `--provider <anthropic\|openai>` | `anthropic` | With `--probes` or `--replay`: the API. `openai` is any OpenAI-compatible Chat Completions server (below) |
+| `--model <id>` | `claude-haiku-5-5` | With `--probes` or `--replay`: the model. With `anthropic` it must have a price in `PRICES` (`src/cost.ts`); with `openai` it is required and any name is accepted |
 | `--base-url <url>` | none | `--provider openai` only, required: `http` or `https`; requests go to `<url>/chat/completions` (trailing slashes removed). Only its host (and port) is recorded |
 | `--api-key-env <NAME>` | `OPENAI_API_KEY` | `--provider openai` only: the environment variable holding the key. If unset, a stderr note is printed and no `Authorization` header is sent |
 | `--price <in>,<hit>,<out>` | none | `--provider openai` only, required: USD per million tokens, three non-negative numbers (input cache miss, input cache hit, output); 0 is allowed |
@@ -216,6 +217,45 @@ pnpm -C packages/bench bench run --scenario long --group all --probes --provider
 
 `results.json` and the report record the provider, model, the `--base-url` host (never the full URL
 or its query), and the prices; the key appears nowhere.
+
+### Replaying a whole project on a real model (`--replay`)
+
+The probes ask a few questions at a few moments. `--replay` instead sends **every request** each
+selected group makes (scripted and extra, in run order, segments exactly as recorded) to a real
+model with `max_tokens` 16, and measures real usage, real cost and the real cache hit rate against
+the bench's own R-B19 estimate. The answers are discarded: the scripted run, `records` and the
+metrics are the same as without `--replay`. The groups replayed are those `--group` selects.
+
+- Flags: `--replay` with the real-model flags (`--provider`, `--model`, `--base-url`,
+  `--api-key-env`, `--price`, `--thinking`, `--dry-run`, `--max-cost`). `--max-cost` is required for
+  a real run. The probe-only flags still need `--probes`; with both `--probes` and `--replay` one cost
+  guard covers both and probes follow their step's replay request.
+- Estimate first: `--dry-run --replay` sends nothing and writes `replay-estimate.json` and
+  `replay-estimate.md` (requests, input and cacheable tokens, low and high cost per scenario and group).
+- A real run appends each request to `<out>/<stamp>/replay.jsonl`, adds a `replay` section to
+  `results.json` (no per-request records; no key, only the base-URL host) and a "Replay on a real
+  model" section to the report: one row per scenario and group, and per tier the real cost and
+  estimated cost units of C against D and E. A group the guard stopped before every request was
+  replayed is marked incomplete and left out of those comparisons, with the reason.
+- A single failing request (400/422, refusal) is recorded as that request's error and does not stop
+  the replay; 401/402/403/404, exhausted retries and the cost guard stop all real-model requests.
+- Limits: output is cut to 16 tokens, so the output cost is understated; the provider's cache is best
+  effort and each configuration runs once; groups share a short fixed template.
+
+DeepSeek (prices in USD per 1M tokens: cache miss, cache hit, output):
+
+```sh
+export DEEPSEEK_API_KEY=...
+D="--provider openai --base-url https://api.deepseek.com --model deepseek-flash --api-key-env DEEPSEEK_API_KEY --price 0.15,0.003,0.6"
+# Estimate (no requests):
+pnpm -C packages/bench bench run --scenario long --group all --replay --dry-run $D --out results --stamp replay-est
+# Long tier, one run: --group all replays all six groups (B and F too; run A, C, D, E singly with --group <g> to skip them):
+pnpm -C packages/bench bench run --scenario long --group all --replay $D --max-cost 2 --out results --stamp replay-long
+# Extra-long tier: one command per group; they can run in parallel:
+for g in C D E; do
+  pnpm -C packages/bench bench run --scenario xlong --group $g --replay $D --max-cost 8 --out results --stamp replay-xlong-$g &
+done; wait
+```
 
 ### Group C on the core stream (`--c-stream core` / `auto`)
 

@@ -207,7 +207,7 @@ describe('per-request max_tokens and purpose', () => {
     for (let i = 0; i < 2; i++) expect(await m.complete(request()).catch(x => x)).not.toBeInstanceOf(ProbeStop);
     expect(await m.complete(request()).catch(x => x)).toBeInstanceOf(ProbeStop);
   });
-  test('a replay 400 between problem 400s does not reset the count, and a replay success does not either', async () => {
+  test('a replay success between problem 400s does not reset the count', async () => {
     const s = stubFetch([err(400, 'bad'), err(400, 'bad'), chat('ok'), err(400, 'bad')]);
     const m = model(s.fetch);
     await m.complete(request()).catch(() => {});

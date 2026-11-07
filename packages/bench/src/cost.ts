@@ -1,7 +1,7 @@
 import { defaultCountTokens } from '@context-continue/core';
 import type { Model, ModelRequest } from './model.js';
 import { ProbeStop } from './probe.js';
-import type { ModelUsage, ProbeRecord, ToolCall } from './types.js';
+import type { CallRecord, Group, ModelUsage, ProbeRecord, ToolCall } from './types.js';
 
 /** USD per million tokens. `cacheWrite` is the 5-minute cache write (the only TTL the adapter uses). */
 export interface Rates {
@@ -210,6 +210,53 @@ export function estimateProbes(records: ProbeRecord[], price: ModelPrice, maxTok
     rows,
     total: {
       probes: sum(x => x.probes), inputTokens: sum(x => x.inputTokens), cacheableTokens: sum(x => x.cacheableTokens),
+      outputTokens: sum(x => x.outputTokens), costLow: sum(x => x.costLow), costHigh: sum(x => x.costHigh),
+    },
+  };
+}
+
+export interface ReplayEstimateRow {
+  scenario: string;
+  group: Group;
+  requests: number;
+  /** Bench token counts (defaultCountTokens), an approximation of the model's tokenizer. */
+  inputTokens: number;
+  cacheableTokens: number;
+  /** max_tokens per request: the output's upper bound. */
+  outputTokens: number;
+  costLow: number;
+  costHigh: number;
+}
+
+/**
+ * The `--dry-run --replay` estimate: every recorded request of a scenario and group is replayed once
+ * (output capped at `maxTokens`), priced like a probe (see estimateProbeCost); rows in run order, and the total.
+ */
+export function estimateReplay(
+  records: CallRecord[],
+  price: ModelPrice,
+  maxTokens: number,
+): { rows: ReplayEstimateRow[]; total: Omit<ReplayEstimateRow, 'scenario' | 'group'> } {
+  const rows: ReplayEstimateRow[] = [];
+  for (const r of records) {
+    let row = rows.find(x => x.scenario === r.scenario && x.group === r.group);
+    if (row === undefined) {
+      row = { scenario: r.scenario, group: r.group, requests: 0, inputTokens: 0, cacheableTokens: 0, outputTokens: 0, costLow: 0, costHigh: 0 };
+      rows.push(row);
+    }
+    const e = estimateProbeCost(price, r, maxTokens);
+    row.requests++;
+    row.inputTokens += r.inputTokens;
+    row.cacheableTokens += r.cacheableTokens;
+    row.outputTokens += maxTokens;
+    row.costLow += e.low;
+    row.costHigh += e.high;
+  }
+  const sum = (f: (x: ReplayEstimateRow) => number) => rows.reduce((n, x) => n + f(x), 0);
+  return {
+    rows,
+    total: {
+      requests: sum(x => x.requests), inputTokens: sum(x => x.inputTokens), cacheableTokens: sum(x => x.cacheableTokens),
       outputTokens: sum(x => x.outputTokens), costLow: sum(x => x.costLow), costHigh: sum(x => x.costHigh),
     },
   };

@@ -9,7 +9,7 @@ const ws = (id: string, owner: string) => ({ id, title: id, brief: `do ${id}`, o
 
 function scenario(): Scenario {
   const steps: unknown[] = [{ kind: 'human', text: 'Board is 12×12 now (CHANGE-BOARD), was 10x10.' }];
-  for (let i = 0; i < 6; i++) steps.push({ kind: 'work', botId: i % 2 === 0 ? 'art' : 'logic', workstreamId: i % 2 === 0 ? 'art' : 'logic', reply: `r${i}` });
+  for (let i = 0; i < 6; i++) steps.push({ kind: 'work', botId: i % 2 === 0 ? 'art' : 'logic', workstreamId: i % 2 === 0 ? 'art' : 'logic', reply: i === 2 ? 'r2 CHANGE-LATE' : `r${i}` });
   return validateScenario({
     id: 'r', goal: 'g', constraints: [], owner: 'human', lead: 'pm',
     employees: ['pm', 'art', 'logic'].map(botId => ({ botId, persona: 'p', skills: [] })),
@@ -18,6 +18,9 @@ function scenario(): Scenario {
     facts: [{
       id: 'change-board', marker: 'CHANGE-BOARD', step: 0, audience: ['art'],
       probe: { question: 'What is the board size?', expect: ['12x12'], reject: ['10x10'] },
+    }, {
+      id: 'change-late', marker: 'CHANGE-LATE', step: 3, audience: ['*'],
+      probe: { question: 'What is the late change?', expect: ['late'] },
     }],
   });
 }
@@ -78,20 +81,25 @@ describe('runScenario replay', () => {
     expect(Object.keys(withReplay).sort()).toEqual(['records', 'replay', 'stats']);
   });
 
-  test('a replay call precedes the probe of the same step', async () => {
+  test('a step\'s replay precedes every probe of that step', async () => {
     const s = scenario();
     const log: string[] = [];
     const rp = new Recorder(r => log.push(`replay:${r.segments[1]!.text}`));
-    const pr = new Recorder(() => log.push('probe'));
-    const out = await runScenario(s, policy(), {
-      replay: { model: rp },
-      probe: { model: pr },
+    const pr = new Recorder(r => log.push(`probe:${r.segments[1]!.text}`));
+    const out = await runScenario(s, policy(), { replay: { model: rp }, probe: { model: pr } });
+    const probeLogs = log.filter(l => l.startsWith('probe:'));
+    expect(probeLogs).toHaveLength(out.probes!.length);
+    expect(out.probes!.length).toBeGreaterThan(1);
+    // At least one step carries two probes (both facts), so "every probe" is exercised.
+    const perStep = new Map<string, number>();
+    for (const l of probeLogs) perStep.set(l, (perStep.get(l) ?? 0) + 1);
+    expect([...perStep.values()].some(n => n >= 2)).toBe(true);
+    log.forEach((l, i) => {
+      if (!l.startsWith('probe:')) return;
+      const first = log.indexOf(`replay:${l.slice('probe:'.length)}`);
+      expect(first).toBeGreaterThanOrEqual(0);
+      expect(first).toBeLessThan(i);
     });
-    expect(out.probes!.length).toBeGreaterThan(0);
-    const at = log.indexOf('probe');
-    expect(log[at - 1]).toMatch(/^replay:step /);
-    expect(log.filter(l => l === 'probe')).toHaveLength(out.probes!.length);
-    expect(log.slice(0, at).length).toBeGreaterThan(0);
   });
 
   test('a plain replay error is recorded (masked, with usage) and the run continues', async () => {
@@ -131,6 +139,8 @@ describe('runScenario replay', () => {
     // The step-1 probe fired before the stop; none after it.
     expect(pr.requests).toHaveLength(1);
     expect(out.probes!.every(p => p.verdict === 'error' && p.error === 'not fired')).toBe(false);
+    // The second fact's probes would all come after the stop: no record exists for it, not even "not fired".
+    expect(out.probes!.some(p => p.factId === 'change-late')).toBe(false);
   });
 
   test('onReplay is called once per request; ProbeStop from it stops, other errors propagate', async () => {
