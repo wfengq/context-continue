@@ -599,3 +599,125 @@ describe('bench cli: fact probes', () => {
     expect(bodies.every(b => b.headers['x-api-key'] === 'proxy-injected')).toBe(true);
   });
 });
+
+describe('bench cli: openai-compatible probes', () => {
+  const KEY = 'sk-deepseek-TOPSECRETKEYVALUE';
+  const BASE = 'https://api.deepseek.com/v1?token=URLSECRET';
+  const scenario = (): string => {
+    const s = JSON.parse(readFileSync(scenarioPath('flappy-bird'), 'utf8'));
+    for (const f of s.facts) delete f.probe;
+    s.facts[0].probe = { question: 'What hitbox size did the team agree?', expect: ['12x12'], reject: ['10x10'] };
+    const path = join(tmp(), 'flappy-probes.json');
+    writeFileSync(path, JSON.stringify(s));
+    return path;
+  };
+  const stub = () => {
+    const calls: { url: string; headers: Record<string, string>; body: { model: string; messages: { content: string }[] } }[] = [];
+    const fetch = (async (url: unknown, init: RequestInit) => {
+      calls.push({ url: String(url), headers: init.headers as Record<string, string>, body: JSON.parse(init.body as string) });
+      return new Response(JSON.stringify({ choices: [{ message: { content: '12x12' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 5, prompt_cache_hit_tokens: 600, prompt_cache_miss_tokens: 400 } }), { status: 200 });
+    }) as typeof globalThis.fetch;
+    return { fetch, calls };
+  };
+  const base = (out: string) => ['run', '--scenario', scenario(), '--group', 'A', '--out', out, '--stamp', 'S', '--probes'];
+  const oa = ['--provider', 'openai', '--base-url', BASE, '--model', 'deepseek-chat', '--api-key-env', 'DEEPSEEK_API_KEY', '--price', '0.28,0.028,0.42'];
+
+  test('a real run: bearer key, usage and cost from the user price, only the host recorded, key and URL query nowhere', async () => {
+    const out = tmp();
+    const { fetch, calls } = stub();
+    const r = await run([...base(out), ...oa, '--max-cost', '1'], { fetch, env: { DEEPSEEK_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls[0]!.url).toBe('https://api.deepseek.com/v1/chat/completions?token=URLSECRET');
+    expect(calls[0]!.headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(calls[0]!.body.model).toBe('deepseek-chat');
+    const dir = join(out, 'S');
+    const json = JSON.parse(readFileSync(join(dir, 'results.json'), 'utf8'));
+    expect(json.probes.provider).toBe('openai');
+    expect(json.probes.baseUrlHost).toBe('api.deepseek.com');
+    expect(json.probes.usage.cacheWriteTokens).toBe(0);
+    expect(json.probes.cost).toBeCloseTo(calls.length * (400 * 0.28 + 600 * 0.028 + 5 * 0.42) / 1e6, 10);
+    const report = readFileSync(join(dir, 'report.md'), 'utf8');
+    expect(report).toContain('Provider openai-compatible (host api.deepseek.com)');
+    expect(report).toContain('the user is responsible');
+    for (const f of readdirSync(dir)) {
+      const text = readFileSync(join(dir, f), 'utf8');
+      expect(text, f).not.toContain(KEY);
+      expect(text, f).not.toContain('URLSECRET');
+      expect(text, f).not.toContain('/v1');
+    }
+    expect(r.out + r.err).not.toContain(KEY);
+  });
+
+  test('no key variable: one stderr note naming it, and no Authorization header', async () => {
+    const { fetch, calls } = stub();
+    const r = await run([...base(tmp()), ...oa, '--max-cost', '1'], { fetch, env: {}, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    expect(r.err.match(/DEEPSEEK_API_KEY is not set/g)).toHaveLength(1);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(Object.keys(calls[0]!.headers).map(k => k.toLowerCase())).not.toContain('authorization');
+  });
+
+  test('a local server with zero prices; the default key variable is OPENAI_API_KEY', async () => {
+    const { fetch, calls } = stub();
+    const r = await run([...base(tmp()), '--provider', 'openai', '--base-url', 'http://localhost:11434/v1', '--model', 'qwen', '--price', '0,0,0', '--max-cost', '1'],
+      { fetch, env: { OPENAI_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    expect(calls[0]!.url).toBe('http://localhost:11434/v1/chat/completions');
+    expect(calls[0]!.headers.authorization).toBe(`Bearer ${KEY}`);
+  });
+
+  test('the dry run needs the openai flags, sends nothing, and records the host', async () => {
+    const out = tmp();
+    const { fetch, calls } = stub();
+    const r = await run([...base(out), ...oa, '--dry-run'], { fetch, env: {} });
+    expect(r.code, r.err).toBe(0);
+    expect(calls).toHaveLength(0);
+    const est = JSON.parse(readFileSync(join(out, 'S', 'probe-estimate.json'), 'utf8'));
+    expect(est.baseUrlHost).toBe('api.deepseek.com');
+    expect(JSON.stringify(est)).not.toContain('URLSECRET');
+    expect(est.total.costHigh).toBeGreaterThanOrEqual(est.total.costLow);
+  });
+
+  test('usage errors exit 2 before any request', async () => {
+    const { fetch, calls } = stub();
+    const cases: { args: string[]; err: RegExp }[] = [
+      { args: ['--price', '1,2,3', '--max-cost', '1'], err: /--price needs --provider openai/ },
+      { args: ['--base-url', 'http://x', '--max-cost', '1'], err: /--base-url needs --provider openai/ },
+      { args: ['--provider', 'openai', '--model', 'm', '--price', '1,1,1', '--max-cost', '1'], err: /needs --base-url/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--price', '1,1,1', '--max-cost', '1'], err: /needs --model/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--max-cost', '1'], err: /needs --price/ },
+      { args: ['--provider', 'openai', '--base-url', 'ftp://x', '--model', 'm', '--price', '1,1,1', '--max-cost', '1'], err: /--base-url/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,1', '--max-cost', '1'], err: /--price must be/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,-1,1', '--max-cost', '1'], err: /--price must be/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,x,1', '--max-cost', '1'], err: /--price must be/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,,1', '--max-cost', '1'], err: /--price must be/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,1,1'], err: /--max-cost/ },
+      { args: ['--provider', 'nope', '--max-cost', '1'], err: /--provider must be/ },
+    ];
+    for (const c of cases) {
+      const r = await run([...base(tmp()), ...c.args], { fetch, env: { OPENAI_API_KEY: KEY, ANTHROPIC_API_KEY: KEY } });
+      expect(r.code, c.args.join(' ')).toBe(2);
+      expect(r.err, c.args.join(' ')).toMatch(c.err);
+    }
+    expect(calls).toHaveLength(0);
+    // The provider flags need --probes.
+    const stray = await run(['run', '--scenario', 'flappy-bird', '--group', 'A', '--out', tmp(), '--provider', 'openai'], { fetch, env: {} });
+    expect(stray.code).toBe(2);
+    expect(stray.err).toMatch(/--provider needs --probes/);
+  });
+
+  test('a fatal status stops probing and is reported without the key', async () => {
+    const out = tmp();
+    let n = 0;
+    const fetch = (async () => {
+      n++;
+      return new Response(JSON.stringify({ error: { message: `invalid key ${KEY}` } }), { status: 401 });
+    }) as typeof globalThis.fetch;
+    const r = await run([...base(out), ...oa, '--max-cost', '1'], { fetch, env: { DEEPSEEK_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    expect(n).toBe(1);
+    const dir = join(out, 'S');
+    for (const f of readdirSync(dir)) expect(readFileSync(join(dir, f), 'utf8'), f).not.toContain(KEY);
+  });
+});

@@ -18,6 +18,23 @@ export interface ModelPrice {
   long: Rates;
   longPromptAbove: number;
   source: string;
+  /** True for a user-supplied rate card: no cache-write premium, so the high estimate prices cacheable tokens at the input rate. */
+  cacheAsInputHigh?: boolean;
+}
+
+/**
+ * A rate card from `--price <input>,<cacheRead>,<output>` (USD per million tokens): one tier (no
+ * long-prompt card) and no cache-write premium (cache write 0; such providers report no writes).
+ */
+export function customPrice(input: number, cacheRead: number, output: number): ModelPrice {
+  const rates: Rates = { input, cacheWrite: 0, cacheRead, output };
+  return {
+    short: rates,
+    long: rates,
+    longPromptAbove: Number.MAX_SAFE_INTEGER,
+    source: `user-supplied via --price: $${input} input (cache miss), $${cacheRead} input (cache hit), $${output} output per MTok; the user is responsible for these prices`,
+    cacheAsInputHigh: true,
+  };
 }
 
 /**
@@ -72,7 +89,7 @@ export function estimateProbeCost(
     (t.cacheableTokens * cacheRate + (t.inputTokens - t.cacheableTokens) * r.input + maxTokens * r.output) / 1e6;
   const lo = ratesFor(p, t.inputTokens);
   const hi = ratesFor(p, t.inputTokens * margin);
-  return { low: price(lo, lo.cacheRead), high: price(hi, hi.cacheWrite) };
+  return { low: price(lo, lo.cacheRead), high: price(hi, p.cacheAsInputHigh === true ? hi.input : hi.cacheWrite) };
 }
 
 /** Sums the real usage a model reports and its cost. */

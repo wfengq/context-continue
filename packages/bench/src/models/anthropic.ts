@@ -76,10 +76,10 @@ export interface AnthropicOptions {
   timeoutMs?: number;
 }
 
-const realSleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+export const realSleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 /** Backoff before retry `attempt` (0-based): retry-after seconds if given (at most 60 s), else 1 s x 2^attempt (at most 30 s). */
-function backoff(attempt: number, retryAfter: string | null): number {
+export function backoff(attempt: number, retryAfter: string | null): number {
   const s = retryAfter === null ? NaN : Number(retryAfter);
   if (Number.isFinite(s) && s >= 0) return Math.min(s * 1000, 60_000);
   return Math.min(1000 * 2 ** attempt, 30_000);

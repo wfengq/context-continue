@@ -2,10 +2,11 @@ import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_STREAM_OPTIONS, type PublicBoardSwitches } from '@context-continue/core';
-import { CostGuardModel, DryRunModel, estimateProbes, priceFor, type ModelPrice } from './cost.js';
+import { CostGuardModel, customPrice, DryRunModel, estimateProbes, priceFor, type ModelPrice } from './cost.js';
 import { computeMetrics, type GroupMetrics } from './metrics.js';
 import type { Model } from './model.js';
 import { AnthropicModel, DEFAULT_MAX_TOKENS, resolveApiKey } from './models/anthropic.js';
+import { baseUrlHost, DEFAULT_API_KEY_ENV, OpenAIModel } from './models/openai.js';
 import { createPolicy } from './policies/index.js';
 import { runControl, type ProbeSamples } from './probe.js';
 import { renderProbeEstimate, renderReport, writeResults, type ProbeSection } from './report.js';
@@ -34,10 +35,16 @@ const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
   '[--c-stream off|on|core|auto] [--restream-tokens 8000] [--c-stream-own off|on] [--auto-after <n>] [--out results] [--stamp <s>] ' +
-  '[--probes [--dry-run] [--max-cost <usd>] [--model claude-haiku-5-5] [--probe-groups A,C,D,E] [--probe-samples fml|all|<n>] [--max-probes <n>] [--no-probe-control]]';
+  '[--probes [--dry-run] [--max-cost <usd>] [--provider anthropic|openai] [--model claude-haiku-5-5] [--base-url <url>] [--api-key-env <NAME>] [--price <input>,<cacheRead>,<output>] [--probe-groups A,C,D,E] [--probe-samples fml|all|<n>] [--max-probes <n>] [--no-probe-control]]';
 
 /** Fact probes with a real model (spec 2026-11-07-real-model-probes); absent without --probes. */
 interface ProbeArgs {
+  provider: 'anthropic' | 'openai';
+  /** --provider openai only: the server's base URL (used for requests, never recorded) and its host. */
+  baseUrl: string | undefined;
+  baseUrlHost: string | undefined;
+  /** --provider openai only: the environment variable holding the key. */
+  apiKeyEnv: string;
   model: string;
   price: ModelPrice;
   groups: Group[];
@@ -53,7 +60,7 @@ interface ProbeArgs {
 }
 
 const DEFAULT_PROBE_GROUPS: Group[] = ['A', 'C', 'D', 'E'];
-const PROBE_FLAGS = ['--dry-run', '--max-cost', '--model', '--probe-groups', '--probe-samples', '--max-probes', '--no-probe-control'];
+const PROBE_FLAGS = ['--dry-run', '--max-cost', '--provider', '--model', '--base-url', '--api-key-env', '--price', '--probe-groups', '--probe-samples', '--max-probes', '--no-probe-control'];
 const BOOLEAN_FLAGS = ['--probes', '--dry-run', '--no-probe-control'];
 
 /** What main uses from the outside world for probes; tests inject a fake fetch and environment. */
@@ -238,13 +245,38 @@ function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArg
     if (stray !== undefined) throw new UsageError(`${stray} needs --probes`);
     return undefined;
   }
-  const model = seen.get('--model') ?? 'claude-haiku-5-5';
+  const provider = seen.get('--provider') ?? 'anthropic';
+  if (provider !== 'anthropic' && provider !== 'openai') throw new UsageError(`--provider must be anthropic or openai, got "${provider}"`);
+  let model: string;
   let price: ModelPrice;
-  try {
-    price = priceFor(model);
-  } catch (e) {
-    throw new UsageError(`--model: ${(e as Error).message}`);
+  let baseUrl: string | undefined;
+  let host: string | undefined;
+  if (provider === 'anthropic') {
+    for (const f of ['--price', '--base-url', '--api-key-env']) if (seen.has(f)) throw new UsageError(`${f} needs --provider openai`);
+    model = seen.get('--model') ?? 'claude-haiku-5-5';
+    try {
+      price = priceFor(model);
+    } catch (e) {
+      throw new UsageError(`--model: ${(e as Error).message}`);
+    }
+  } else {
+    for (const f of ['--base-url', '--model', '--price']) if (!seen.has(f)) throw new UsageError(`--provider openai needs ${f}`);
+    model = seen.get('--model')!;
+    baseUrl = seen.get('--base-url')!;
+    try {
+      host = baseUrlHost(baseUrl);
+    } catch (e) {
+      throw new UsageError(`--base-url: ${(e as Error).message}`);
+    }
+    const rawPrice = seen.get('--price')!;
+    const parts = rawPrice.split(',');
+    const nums = parts.map(x => Number(x));
+    if (parts.length !== 3 || parts.some((x, i) => x.trim() === '' || !Number.isFinite(nums[i]!) || nums[i]! < 0)) {
+      throw new UsageError(`--price must be three non-negative numbers <input>,<cache-hit>,<output> (USD per million tokens), got "${rawPrice}"`);
+    }
+    price = customPrice(nums[0]!, nums[1]!, nums[2]!);
   }
+  const apiKeyEnv = seen.get('--api-key-env') ?? DEFAULT_API_KEY_ENV;
   const rawGroups = seen.get('--probe-groups');
   const groups = rawGroups === undefined ? DEFAULT_PROBE_GROUPS : (rawGroups.split(',') as Group[]);
   const badGroup = groups.find(g => !GROUPS.includes(g));
@@ -264,7 +296,7 @@ function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArg
   const maxCost = rawCost === undefined ? undefined : number('--max-cost', rawCost, n => n > 0, 'a positive number of US dollars');
   if (!dryRun && maxCost === undefined) throw new UsageError('--probes sends paid requests: give --max-cost <usd> (or --dry-run for an estimate)');
   const dropped = groups.filter(g => !runGroups.includes(g));
-  return { model, price, groups: probed, dropped, samples, maxPerScenario, dryRun, control: !seen.has('--no-probe-control'), maxCost };
+  return { provider, baseUrl, baseUrlHost: host, apiKeyEnv, model, price, groups: probed, dropped, samples, maxPerScenario, dryRun, control: !seen.has('--no-probe-control'), maxCost };
 }
 
 /** Runs the bench; returns the process exit code. Errors go to stderr. */
@@ -311,17 +343,25 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   if (pa !== undefined) {
     if (pa.dryRun) probeModel = new DryRunModel();
     else {
-      let key: string;
-      try {
-        key = resolveApiKey(deps.env ?? process.env).key;
-      } catch (e) {
-        process.stderr.write(`bench: ${(e as Error).message}\n`);
-        return 2;
-      }
-      const real = new AnthropicModel({
-        model: pa.model, apiKey: key, maxTokens: DEFAULT_MAX_TOKENS,
+      const injected = {
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }), ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
-      });
+      };
+      let real: Model;
+      if (pa.provider === 'openai') {
+        const raw = (deps.env ?? process.env)[pa.apiKeyEnv];
+        const key = raw === undefined || raw.trim() === '' ? undefined : raw;
+        if (key === undefined) process.stderr.write(`bench: note: ${pa.apiKeyEnv} is not set; sending no Authorization header\n`);
+        real = new OpenAIModel({ model: pa.model, baseUrl: pa.baseUrl!, ...(key === undefined ? {} : { apiKey: key }), maxTokens: DEFAULT_MAX_TOKENS, ...injected });
+      } else {
+        let key: string;
+        try {
+          key = resolveApiKey(deps.env ?? process.env).key;
+        } catch (e) {
+          process.stderr.write(`bench: ${(e as Error).message}\n`);
+          return 2;
+        }
+        real = new AnthropicModel({ model: pa.model, apiKey: key, maxTokens: DEFAULT_MAX_TOKENS, ...injected });
+      }
       guard = new CostGuardModel(real, pa.price, { maxCost: pa.maxCost!, maxTokens: DEFAULT_MAX_TOKENS });
       probeModel = guard;
       // Each finished probe is appended at once, so an interrupted paid run keeps what it bought.
@@ -373,7 +413,8 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   const section: ProbeSection | undefined =
     pa !== undefined && !pa.dryRun
       ? {
-          model: pa.model, maxTokens: DEFAULT_MAX_TOKENS, thinking: 'disabled', temperature: 'not sent (model default)', samples: pa.samples,
+          model: pa.model, ...(pa.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: pa.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS,
+          thinking: pa.provider === 'openai' ? ('not sent' as const) : ('disabled' as const), temperature: pa.provider === 'openai' ? '0' : 'not sent (model default)', samples: pa.samples,
           ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
           groups: pa.groups, control: pa.control, maxCost: pa.maxCost!, price: pa.price, usage: guard!.spent.usage, cost: guard!.spent.cost, stopped, records: probeRecords,
         }
@@ -383,7 +424,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);
   if (pa !== undefined && pa.dryRun) {
     const est = estimateProbes(probeRecords, pa.price, DEFAULT_MAX_TOKENS);
-    const meta = { model: pa.model, maxTokens: DEFAULT_MAX_TOKENS, samples: pa.samples, groups: [...pa.groups, ...(pa.control ? ['none' as const] : [])], maxCost: pa.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
+    const meta = { model: pa.model, ...(pa.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: pa.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS, samples: pa.samples, groups: [...pa.groups, ...(pa.control ? ['none' as const] : [])], maxCost: pa.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
     const md = renderProbeEstimate(est, meta, tiers);
     writeFileSync(join(dir, 'probe-estimate.json'), JSON.stringify({ ...meta, price: pa.price, ...est }, null, 2) + '\n');
     writeFileSync(join(dir, 'probe-estimate.md'), md);

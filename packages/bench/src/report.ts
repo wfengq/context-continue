@@ -271,8 +271,12 @@ export function writeResults(
 /** The fact-probe results of a real run, as results.json's `probes` section and the report's input. */
 export interface ProbeSection {
   model: string;
+  /** Present for an OpenAI-compatible provider only (absent for anthropic, so its output is unchanged). */
+  provider?: 'openai';
+  /** Host (with port) of --base-url; never the full URL or its query. */
+  baseUrlHost?: string;
   maxTokens: number;
-  thinking: 'disabled';
+  thinking: 'disabled' | 'not sent';
   temperature: string;
   samples: ProbeSamples;
   maxPerScenario?: number;
@@ -302,7 +306,7 @@ function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): stri
   const groups = [...ORDER, 'none' as const].filter(g => p.records.some(r => r.group === g));
   const out: string[] = [
     '## Fact probes (real model)', '',
-    `Model ${p.model}; max_tokens ${p.maxTokens}; thinking ${p.thinking}; temperature ${p.temperature}; each question asked once (samples ${p.samples}` +
+    `${p.provider === undefined ? '' : `Provider openai-compatible (host ${p.baseUrlHost}); `}Model ${p.model}; max_tokens ${p.maxTokens}; thinking ${p.thinking}; temperature ${p.temperature}; each question asked once (samples ${p.samples}` +
       `${p.maxPerScenario === undefined ? '' : `, at most ${p.maxPerScenario} per scenario`}); groups ${p.groups.join(', ')}. ` +
       'A probe sends the scripted request exactly as the group sent it, plus one uncached question segment; answers are graded by strings only ' +
       '(stale: an old answer appears; wrong: neither expected nor old; error: the request failed or the probe never fired).',
@@ -376,14 +380,14 @@ function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): stri
 /** The dry-run estimate as Markdown (printed and written as probe-estimate.md). */
 export function renderProbeEstimate(
   est: { rows: ProbeEstimateRow[]; total: Omit<ProbeEstimateRow, 'scenario' | 'group'> },
-  meta: { model: string; maxTokens: number; samples: ProbeSamples; groups: (Group | 'none')[]; maxCost: number | null; maxPerScenario?: number },
+  meta: { model: string; provider?: 'openai'; baseUrlHost?: string; maxTokens: number; samples: ProbeSamples; groups: (Group | 'none')[]; maxCost: number | null; maxPerScenario?: number },
   tiers: Record<string, Tier>,
 ): string {
   const cells = (x: Omit<ProbeEstimateRow, 'scenario' | 'group'>) =>
     [fmtInt(x.probes), fmtInt(x.inputTokens), fmtInt(x.cacheableTokens), fmtInt(x.outputTokens), usd(x.costLow), usd(x.costHigh)].join(' | ');
   const out = [
     '# Probe dry run (no requests sent)', '',
-    `Model ${meta.model}; max_tokens ${meta.maxTokens}; samples ${meta.samples}${meta.maxPerScenario === undefined ? '' : `; at most ${meta.maxPerScenario} probes per scenario`}; groups ${meta.groups.join(', ')}.`,
+    `${meta.provider === undefined ? '' : `Provider openai-compatible (host ${meta.baseUrlHost}); `}Model ${meta.model}; max_tokens ${meta.maxTokens}; samples ${meta.samples}${meta.maxPerScenario === undefined ? '' : `; at most ${meta.maxPerScenario} probes per scenario`}; groups ${meta.groups.join(', ')}.`,
     '',
     "Tokens are the bench's count (defaultCountTokens: about 4 characters, or 1 CJK character, per token), an approximation of the model's real tokenizer, " +
       'which may count noticeably more. Low: every R-B19 cacheable token is a cache read; high: every one is a cache write. Output is counted at max_tokens (its upper bound).',

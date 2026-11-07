@@ -118,7 +118,11 @@ ignored by git.
 | `--probes` | off | Fact probes with a real model (below). Takes no value. The flags below need it (a usage error otherwise) |
 | `--dry-run` | off | With `--probes`: send nothing; print the estimate and write `probe-estimate.json` and `probe-estimate.md` |
 | `--max-cost <usd>` | required for a real run | With `--probes`: budget in US dollars; probing stops before the next probe's estimate would pass it (one probe can overshoot by the difference between its estimate and its real cost) |
-| `--model <id>` | `claude-haiku-5-5` | With `--probes`: the probe model; it must have a price in `PRICES` (`src/cost.ts`) |
+| `--provider <anthropic\|openai>` | `anthropic` | With `--probes`: the API. `openai` is any OpenAI-compatible Chat Completions server (below) |
+| `--model <id>` | `claude-haiku-5-5` | With `--probes`: the probe model. With `anthropic` it must have a price in `PRICES` (`src/cost.ts`); with `openai` it is required and any name is accepted |
+| `--base-url <url>` | none | `--provider openai` only, required: `http` or `https`; requests go to `<url>/chat/completions` (trailing slashes removed). Only its host (and port) is recorded |
+| `--api-key-env <NAME>` | `OPENAI_API_KEY` | `--provider openai` only: the environment variable holding the key. If unset, a stderr note is printed and no `Authorization` header is sent |
+| `--price <in>,<hit>,<out>` | none | `--provider openai` only, required: USD per million tokens, three non-negative numbers (input cache miss, input cache hit, output); 0 is allowed |
 | `--probe-groups <list>` | `A,C,D,E` | With `--probes`: comma list of the groups to probe (those also in `--group`) |
 | `--probe-samples <fml\|all\|n>` | `fml` | With `--probes`: which opportunities of a fact are asked: first, middle and last; all; or n evenly spaced |
 | `--max-probes <n>` | no cap | With `--probes`: at most n probes per scenario and group (last samples of every fact first) |
@@ -169,6 +173,40 @@ ANTHROPIC_API_KEY=... pnpm -C packages/bench bench run --scenario long --group a
   `report.md` a "Fact probes" section: answers per group and fact category and per group and tier,
   real usage and cost per group, and the R-B19 comparison (estimated cacheable tokens against real
   cache reads and writes).
+
+#### OpenAI-compatible providers (DeepSeek, local servers)
+
+`--provider openai` sends probes to any server with an OpenAI-style `/chat/completions` endpoint
+(`src/models/openai.ts`). It needs `--base-url`, `--model` and `--price`, and `--max-cost` for a real
+run (all usage errors, exit 2, before any request). The prompt is one user message, the segments
+joined with a newline; `max_tokens` 200, `temperature` 0, `stream` false; no cache markers (these
+servers cache prefixes themselves). Usage is read from `prompt_cache_hit_tokens` /
+`prompt_cache_miss_tokens` (DeepSeek) or `prompt_tokens_details.cached_tokens`; the output count
+includes reasoning tokens, and `reasoning_content` is ignored. Empty answers and `content_filter` are
+probe errors (their usage still counts). 401/402/403/404 stop probing; 400/422 fail one probe;
+408/409/429/5xx are retried as with Anthropic.
+
+```sh
+export DEEPSEEK_API_KEY=...
+pnpm -C packages/bench bench run --scenario long --group all --c-stream auto --probes \
+  --provider openai --base-url https://api.deepseek.com --model deepseek-chat \
+  --api-key-env DEEPSEEK_API_KEY --price <in>,<cache-hit>,<out> --max-cost 1 \
+  --out results --stamp probes-long
+```
+
+Take the prices from DeepSeek's pricing page, in USD per 1M tokens: input (cache miss), input
+(cache hit), output. The bench has no price table for these models: you are responsible for the
+prices you give, and the cost guard and the report's costs are only as good as they are. A custom
+price has one tier and no cache-write premium; the high estimate prices every cacheable token at the
+input rate. Local server (no key needed; a note is printed if the variable is unset):
+
+```sh
+pnpm -C packages/bench bench run --scenario long --group all --probes --provider openai \
+  --base-url http://localhost:11434/v1 --model <name> --price 0,0,0 --max-cost 1
+```
+
+`results.json` and the report record the provider, model, the `--base-url` host (never the full URL
+or its query), and the prices; the key appears nowhere.
 
 ### Group C on the core stream (`--c-stream core` / `auto`)
 
