@@ -1,4 +1,15 @@
-import type { FactProbe, ProbeVerdict, Scenario, Step } from './types.js';
+import type { FactProbe, ProbeRecord, ProbeVerdict, Scenario, Step } from './types.js';
+
+/**
+ * Thrown by the probe model (or `onProbe`) to stop probing for the rest of the run, e.g. when a cost
+ * budget is reached. The probe that threw it is not recorded; the scripted run continues unchanged.
+ */
+export class ProbeStop extends Error {
+  constructor(message = 'probing stopped') {
+    super(message);
+    this.name = 'ProbeStop';
+  }
+}
 
 /** Which opportunities of a fact are probed: first / middle / last, every one, or n evenly spaced ones. */
 export type ProbeSamples = 'fml' | 'all' | number;
@@ -8,6 +19,29 @@ export interface ProbeOptions {
   samples?: ProbeSamples;
   /** At most this many probes per scenario (default no cap); see `scheduleProbes` for which are kept. */
   maxPerScenario?: number;
+}
+
+/** What `runScenario` takes to probe: the scheduling options, the probe model, and an optional sink. */
+export interface ProbeRunOptions extends ProbeOptions {
+  model: import('./model.js').Model;
+  /** Called with each probe record as soon as it exists (errors and "not fired" records included). */
+  onProbe?: (rec: ProbeRecord) => void | Promise<void>;
+}
+
+const MAX_ERROR_LENGTH = 200;
+
+/**
+ * A probe error's message for the record: the Error's message only (never its request, headers or
+ * cause), with key-like tokens masked, one line, at most 200 characters.
+ */
+export function probeErrorMessage(e: unknown): string {
+  const raw = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  const masked = raw
+    .replace(/sk-[A-Za-z0-9_-]+/g, 'sk-***')
+    .replace(/(x-api-key|authorization|api[_-]?key)(["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, '$1$2***')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return masked.length > MAX_ERROR_LENGTH ? `${masked.slice(0, MAX_ERROR_LENGTH - 1)}…` : masked;
 }
 
 /** The final, uncached segment a probe request appends to the scripted request's segments. */
@@ -20,15 +54,44 @@ export function normaliseAnswer(text: string): string {
   return text.toLowerCase().replace(/×/g, 'x').replace(/(\d)\s*x\s*(?=\d)/g, '$1x').replace(/\s+/g, ' ').trim();
 }
 
+const ALNUM = /[\p{L}\p{N}]/u;
+
+/**
+ * True when normalised `term` occurs in normalised `text` with a boundary at each alphanumeric edge:
+ * the character before / after the occurrence must not be a letter or digit ("12x12" is not in
+ * "112x120", "eu-central-1" is not in "eu-central-10").
+ */
+export function containsTerm(text: string, term: string): boolean {
+  const t = normaliseAnswer(text);
+  const n = normaliseAnswer(term);
+  if (n.length === 0) return false;
+  const startEdge = ALNUM.test(n[0]!);
+  const endEdge = ALNUM.test(n[n.length - 1]!);
+  for (let i = t.indexOf(n); i !== -1; i = t.indexOf(n, i + 1)) {
+    const before = t[i - 1];
+    const after = t[i + n.length];
+    if (startEdge && before !== undefined && ALNUM.test(before)) continue;
+    if (endEdge && after !== undefined && ALNUM.test(after)) continue;
+    return true;
+  }
+  return false;
+}
+
 /**
  * String grading (no model): a `reject` hit is 'stale' (it wins over an `expect` hit), else an
- * `expect` hit is 'correct', else 'wrong'. Matching is substring on normalised text (`normaliseAnswer`).
+ * `expect` hit is 'correct', else 'wrong'. Matching is `containsTerm` on normalised text.
  */
 export function gradeAnswer(probe: FactProbe, answer: string): ProbeVerdict {
-  const a = normaliseAnswer(answer);
-  if ((probe.reject ?? []).some(r => a.includes(normaliseAnswer(r)))) return 'stale';
-  if (probe.expect.some(e => a.includes(normaliseAnswer(e)))) return 'correct';
+  if ((probe.reject ?? []).some(r => containsTerm(answer, r))) return 'stale';
+  if (probe.expect.some(e => containsTerm(answer, e))) return 'correct';
   return 'wrong';
+}
+
+function checkProbeOptions(opts: ProbeOptions): void {
+  const { samples, maxPerScenario: cap } = opts;
+  if (samples !== undefined && samples !== 'fml' && samples !== 'all' && !(Number.isInteger(samples) && samples >= 1))
+    throw new Error(`probe samples must be 'fml', 'all' or a positive integer, got ${String(samples)}`);
+  if (cap !== undefined && !(Number.isInteger(cap) && cap >= 0)) throw new Error(`probe maxPerScenario must be a non-negative integer, got ${String(cap)}`);
 }
 
 const requester = (s: Scenario, st: Step): string | undefined =>
@@ -54,6 +117,7 @@ export function sampleIndices(n: number, samples: ProbeSamples): number[] {
  * rank. `maxPerScenario` keeps a prefix of that order.
  */
 export function scheduleProbes(s: Scenario, opts: ProbeOptions = {}): { factId: string; step: number }[] {
+  checkProbeOptions(opts);
   const samples = opts.samples ?? 'fml';
   const perFact: { factId: string; steps: number[] }[] = [];
   for (const f of s.facts ?? []) {
@@ -74,6 +138,5 @@ export function scheduleProbes(s: Scenario, opts: ProbeOptions = {}): { factId: 
   for (let rank = 0; perFact.some(p => rank < p.steps.length); rank++)
     for (const p of perFact) if (rank < p.steps.length) out.push({ factId: p.factId, step: p.steps[rank]! });
   const cap = opts.maxPerScenario;
-  if (cap !== undefined && (!Number.isInteger(cap) || cap < 0)) throw new Error(`probe maxPerScenario must be a non-negative integer, got ${cap}`);
   return cap === undefined ? out : out.slice(0, cap);
 }

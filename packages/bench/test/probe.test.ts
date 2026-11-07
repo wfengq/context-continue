@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Model, ModelRequest } from '../src/model.js';
 import { createPolicy, type PolicyOptions } from '../src/policies/index.js';
-import { gradeAnswer, probeQuestion, scheduleProbes } from '../src/probe.js';
+import { gradeAnswer, probeErrorMessage, probeQuestion, ProbeStop, scheduleProbes } from '../src/probe.js';
 import { runScenario, type Policy, type RunContext } from '../src/runner.js';
 import { validateScenario } from '../src/scenario.js';
-import type { Group, Scenario, Step } from '../src/types.js';
+import type { Group, ProbeRecord, Scenario, Step } from '../src/types.js';
 
 const ws = (id: string, owner: string) => ({ id, title: id, brief: `do ${id}`, owner, dependsOn: [] as string[] });
 const work = (botId: string, reply: string) => ({ kind: 'work', botId, workstreamId: botId, reply });
@@ -74,6 +74,17 @@ describe('gradeAnswer', () => {
     expect(gradeAnswer(p, 'unknown')).toBe('wrong');
     expect(gradeAnswer({ question: 'q', expect: ['eu-central-1'] }, 'us-east-1')).toBe('wrong');
   });
+  test('matches need boundaries at alphanumeric edges', () => {
+    expect(gradeAnswer({ question: 'q', expect: ['12x12'] }, '112x120')).toBe('wrong');
+    expect(gradeAnswer({ question: 'q', expect: ['12x12'] }, '12x120')).toBe('wrong');
+    expect(gradeAnswer({ question: 'q', expect: ['eu-central-1'] }, 'eu-central-10')).toBe('wrong');
+    expect(gradeAnswer({ question: 'q', expect: ['eu-central-1'] }, 'Region: eu-central-1.')).toBe('correct');
+    expect(gradeAnswer({ question: 'q', expect: ['12'] }, '1 2')).toBe('wrong');
+    expect(gradeAnswer({ question: 'q', expect: ['12'] }, '(12)')).toBe('correct');
+    // a later boundary-respecting occurrence still counts
+    expect(gradeAnswer({ question: 'q', expect: ['12x12'] }, '112x12 or 12x12')).toBe('correct');
+    expect(gradeAnswer({ question: 'q', expect: ['12x12'], reject: ['10x10'] }, '12x12, not 210x100')).toBe('correct');
+  });
   test('expect strings with × match answers with x', () => {
     expect(gradeAnswer({ question: 'q', expect: ['12×12'] }, '12x12')).toBe('correct');
   });
@@ -90,8 +101,9 @@ describe('probe validation', () => {
     expect(withProbe({ question: 'q', expect: [' '] })).toThrow(/expect/);
     expect(withProbe({ question: 'q', expect: ['a'], reject: [''] })).toThrow(/reject/);
   });
-  test('rejects a reject string contained in an expect string', () => {
-    expect(withProbe({ question: 'q', expect: ['12x12'], reject: ['12'] })).toThrow(/reject "12" is contained in expect "12x12"/);
+  test('rejects a reject string contained (as a term) in an expect string', () => {
+    expect(withProbe({ question: 'q', expect: ['12x12 grid'], reject: ['grid'] })).toThrow(/reject "grid" is contained in expect "12x12 grid"/);
+    expect(withProbe({ question: 'q', expect: ['12x12'], reject: ['12'] })).not.toThrow();
   });
 });
 
@@ -129,6 +141,14 @@ describe('scheduleProbes', () => {
       { factId: 'change-board', step: 9 }, { factId: 'conv-y', step: 10 }, { factId: 'change-board', step: 1 },
     ]);
     expect(scheduleProbes(s, { maxPerScenario: 0 })).toEqual([]);
+  });
+  test('options are validated up front, even without probes', () => {
+    const none = scenario([{ id: 'change-board', marker: 'CHANGE-BOARD', step: 0, audience: ['art'] }]);
+    expect(() => scheduleProbes(none, { samples: 0 })).toThrow(/samples/);
+    expect(() => scheduleProbes(none, { samples: 1.5 })).toThrow(/samples/);
+    expect(() => scheduleProbes(none, { samples: 'x' as 'all' })).toThrow(/samples/);
+    expect(() => scheduleProbes(none, { maxPerScenario: -1 })).toThrow(/maxPerScenario/);
+    expect(() => scheduleProbes(none, { maxPerScenario: 0.5 })).toThrow(/maxPerScenario/);
   });
   test('"*" audience uses every requester', () => {
     const s = scenario([{ id: 'change-board', marker: 'CHANGE-BOARD', step: 0, audience: ['*'], probe: { question: 'q', expect: ['12x12'] } }]);
@@ -226,5 +246,92 @@ describe('real scenarios without probes', () => {
     const s = validateScenario(JSON.parse(readFileSync(join(import.meta.dirname, '../scenarios/flappy-bird.json'), 'utf8')));
     const run = await runScenario(s, createPolicy('C', { window: 128000, compactRatio: 0.8, summaryTokens: 1500 }));
     expect('probes' in run).toBe(false);
+  });
+});
+
+describe('probe failures, stop and streaming', () => {
+  test('a failing probe model is recorded as error with a masked, truncated message, and probing goes on', async () => {
+    const s = scenario();
+    let n = 0;
+    const probeModel: Model = {
+      async complete() {
+        if (n++ === 0) throw new Error(`HTTP 500 x-api-key: sk-ant-secret123 ${'y'.repeat(500)}`);
+        return { reply: '12x12', ops: [] };
+      },
+    };
+    const plain = await runScenario(s, fixedPolicy());
+    const run = await runScenario(s, fixedPolicy(), { probe: { model: probeModel } });
+    expect(run.records).toEqual(plain.records);
+    expect(run.probes!.map(p => p.verdict)).toEqual(['error', 'correct', 'correct']);
+    const err = run.probes![0]!.error!;
+    expect(err.length).toBeLessThanOrEqual(200);
+    expect(err).toMatch(/^Error: HTTP 500/);
+    expect(err).not.toContain('secret123');
+    expect(run.probes![0]!.answer).toBe('');
+  });
+
+  test('probeErrorMessage masks keys and never uses anything but the message', () => {
+    const e = Object.assign(new Error('bad request authorization=Bearer-abc api_key: "k-123"'), { headers: { 'x-api-key': 'sk-zzz' } });
+    const m = probeErrorMessage(e);
+    expect(m).not.toMatch(/abc|k-123|sk-zzz/);
+    expect(probeErrorMessage('plain')).toBe('plain');
+  });
+
+  test('onProbe receives each record as it is made', async () => {
+    const s = scenario();
+    const streamed: ProbeRecord[] = [];
+    const run = await runScenario(s, fixedPolicy(), { probe: { model: { async complete() { return { reply: '12x12', ops: [] }; } }, onProbe: r => { streamed.push(r); } } });
+    expect(streamed).toEqual(run.probes);
+    expect(streamed).toHaveLength(3);
+  });
+
+  test('ProbeStop from the model ends probing; the scripted run is unaffected', async () => {
+    const s = scenario();
+    let n = 0;
+    const probeModel: Model = {
+      async complete() {
+        if (n++ === 1) throw new ProbeStop('budget reached');
+        return { reply: '12x12', ops: [] };
+      },
+    };
+    const plain = await runScenario(s, fixedPolicy());
+    const run = await runScenario(s, fixedPolicy(), { probe: { model: probeModel } });
+    expect(run.records).toEqual(plain.records);
+    expect(run.stats).toEqual(plain.stats);
+    expect(run.probes!.map(p => p.step)).toEqual([1]);
+    expect(run.probeStopped).toBe('budget reached');
+    expect(n).toBe(2);
+  });
+
+  test('ProbeStop from onProbe ends probing after that record', async () => {
+    const s = scenario();
+    const run = await runScenario(s, fixedPolicy(), {
+      probe: { model: { async complete() { return { reply: '12x12', ops: [] }; } }, onProbe: () => { throw new ProbeStop('stop'); } },
+    });
+    expect(run.probes).toHaveLength(1);
+    expect(run.probeStopped).toBe('stop');
+  });
+
+  test('other onProbe errors propagate', async () => {
+    const s = scenario();
+    await expect(runScenario(s, fixedPolicy(), {
+      probe: { model: { async complete() { return { reply: '', ops: [] }; } }, onProbe: () => { throw new Error('sink'); } },
+    })).rejects.toThrow('sink');
+  });
+
+  test('a scheduled probe whose step never gets a scripted request is recorded as not fired', async () => {
+    const s = scenario();
+    const skipping: Policy = {
+      group: 'D',
+      async onStep(step, index, ctx) {
+        if (step.kind === 'human' || index === 5) return;
+        await ctx.call({ botId: ctx.actorOf(step), step: index, kind: 'scripted', segments: [{ text: 't', cacheable: false }] });
+      },
+      async finish() { return { compactions: 0, pauses: 0, coreErrors: 0 }; },
+    };
+    const run = await runScenario(s, skipping, { probe: { model: { async complete() { return { reply: '12x12', ops: [] }; } } } });
+    expect(run.probes!.map(p => [p.step, p.verdict, p.error])).toEqual([[1, 'correct', undefined], [9, 'correct', undefined], [5, 'error', 'not fired']]);
+    expect(run.probes![2]!.botId).toBe('art');
+    expect('probeStopped' in run).toBe(false);
   });
 });

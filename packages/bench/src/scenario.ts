@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { toolDefinitions, type PlanInput } from '@context-continue/core';
 import { z } from 'zod';
-import { normaliseAnswer } from './probe.js';
+import { containsTerm } from './probe.js';
 import { isDeliverableArgs } from './text.js';
 import type { Scenario, Step } from './types.js';
 
@@ -164,7 +164,7 @@ export function validateScenario(raw: unknown): Scenario {
     // A reject string inside an expect string would grade every correct answer 'stale'.
     for (const r of f.probe?.reject ?? [])
       for (const e of f.probe!.expect)
-        if (normaliseAnswer(e).includes(normaliseAnswer(r))) bad(`probe reject "${r}" is contained in expect "${e}"`);
+        if (containsTerm(e, r)) bad(`probe reject "${r}" is contained in expect "${e}"`);
   }
 
   if (problems.length > 0) throw new Error(`Invalid scenario "${s.id}":\n${problems.join('\n')}`);

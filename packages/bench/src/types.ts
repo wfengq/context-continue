@@ -37,7 +37,8 @@ export interface FactProbe {
   reject?: string[];
 }
 
-export type ProbeVerdict = 'correct' | 'stale' | 'wrong';
+/** 'error': the probe model failed, or the probe never fired (see `ProbeRecord.error`). */
+export type ProbeVerdict = 'correct' | 'stale' | 'wrong' | 'error';
 
 /** Token usage a real model reports for one request; absent for fake models. */
 export interface ModelUsage {
@@ -65,6 +66,8 @@ export interface ProbeRecord {
   inputTokens: number;
   cacheableTokens: number;
   usage?: ModelUsage;
+  /** Verdict 'error' only: the masked, truncated error message, or "not fired". */
+  error?: string;
 }
 
 /** 'standard' is 20–40 steps, 'long' 150–300, 'xlong' 1,000–1,500. */

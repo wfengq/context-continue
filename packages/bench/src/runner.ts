@@ -1,6 +1,6 @@
 import { defaultCountTokens } from '@context-continue/core';
 import { ScriptedModel, type Model } from './model.js';
-import { gradeAnswer, probeQuestion, scheduleProbes, type ProbeOptions } from './probe.js';
+import { gradeAnswer, probeErrorMessage, probeQuestion, ProbeStop, scheduleProbes, type ProbeRunOptions } from './probe.js';
 import { DEFAULT_IDLE_REPLY } from './scenario.js';
 import { planLines } from './text.js';
 import type { CallRecord, Group, PolicyStats, ProbeRecord, Scenario, Step, ToolCall } from './types.js';
@@ -65,14 +65,20 @@ export function scriptedOutput(step: Step, index: number): { reply: string; ops:
 export async function runScenario(
   s: Scenario,
   policy: Policy,
-  opts: { model?: Model; probe?: ProbeOptions & { model: Model } } = {},
-): Promise<{ records: CallRecord[]; stats: PolicyStats; probes?: ProbeRecord[] }> {
+  opts: { model?: Model; probe?: ProbeRunOptions } = {},
+): Promise<{ records: CallRecord[]; stats: PolicyStats; probes?: ProbeRecord[]; probeStopped?: string }> {
   const model = opts.model ?? new ScriptedModel(s.idleReply ?? DEFAULT_IDLE_REPLY);
   const records: CallRecord[] = [];
   // Probes by step (in schedule order); each fires once, after the first scripted request of its step.
   const probesAt = new Map<number, string[]>();
   for (const p of opts.probe ? scheduleProbes(s, opts.probe) : []) probesAt.set(p.step, [...(probesAt.get(p.step) ?? []), p.factId]);
   const probes: ProbeRecord[] = [];
+  /** Set by a ProbeStop: no further probes are sent; the scripted run goes on. */
+  let probeStopped: string | undefined;
+  const emit = async (rec: ProbeRecord) => {
+    probes.push(rec);
+    await opts.probe?.onProbe?.(rec);
+  };
   const counted = new Map<string, number>();
   const count = (text: string): number => {
     let n = counted.get(text);
@@ -138,20 +144,36 @@ export async function runScenario(
       const sent = segments.map(g => ({ text: g.text, cacheable: g.cacheable }));
       const out = await model.complete({ botId, segments: sent, scripted });
       const due = kind === 'scripted' ? probesAt.get(step) : undefined;
-      if (due !== undefined && opts.probe) {
+      if (due !== undefined && opts.probe && probeStopped === undefined) {
         probesAt.delete(step);
         for (const factId of due) {
           const probe = s.facts!.find(f => f.id === factId)!.probe!;
           const question = { text: probeQuestion(probe.question), cacheable: false };
-          // The probe model sees the group's request exactly as sent, plus the question; its answer never enters the run.
-          const answer = await opts.probe.model.complete({ botId, segments: [...sent, question], scripted: null });
-          const rec: ProbeRecord = {
+          const base = {
             group: policy.group, scenario: s.id, step, botId, factId, question: probe.question,
-            answer: answer.reply, verdict: gradeAnswer(probe, answer.reply),
             inputTokens: inputTokens + count(question.text), cacheableTokens,
           };
-          if (answer.usage !== undefined) rec.usage = answer.usage;
-          probes.push(rec);
+          let rec: ProbeRecord;
+          try {
+            // The probe model sees the group's request exactly as sent, plus the question; its answer never enters the run.
+            const answer = await opts.probe.model.complete({ botId, segments: [...sent, question], scripted: null });
+            rec = { ...base, answer: answer.reply, verdict: gradeAnswer(probe, answer.reply) };
+            if (answer.usage !== undefined) rec.usage = answer.usage;
+          } catch (e) {
+            if (e instanceof ProbeStop) {
+              probeStopped = e.message;
+              break;
+            }
+            rec = { ...base, answer: '', verdict: 'error', error: probeErrorMessage(e) };
+          }
+          try {
+            await emit(rec);
+          } catch (e) {
+            // onProbe may stop probing too; any other sink error is the caller's and propagates.
+            if (!(e instanceof ProbeStop)) throw e;
+            probeStopped = e.message;
+            break;
+          }
         }
       }
       return out;
@@ -160,5 +182,17 @@ export async function runScenario(
 
   for (const [i, step] of s.steps.entries()) await policy.onStep(step, i, ctx);
   const stats = await policy.finish();
-  return opts.probe ? { records, stats, probes } : { records, stats };
+  if (!opts.probe) return { records, stats };
+  // Every scheduled probe fires unless probing was stopped; any left over is recorded, not dropped.
+  if (probeStopped === undefined) {
+    for (const [step, factIds] of [...probesAt].sort((a, b) => a[0] - b[0]))
+      for (const factId of factIds) {
+        const f = s.facts!.find(x => x.id === factId)!;
+        await emit({
+          group: policy.group, scenario: s.id, step, botId: actorOf(s.steps[step]!), factId, question: f.probe!.question,
+          answer: '', verdict: 'error', error: 'not fired', inputTokens: 0, cacheableTokens: 0,
+        });
+      }
+  }
+  return probeStopped === undefined ? { records, stats, probes } : { records, stats, probes, probeStopped };
 }
