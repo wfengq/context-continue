@@ -203,7 +203,10 @@ export function generateLongEvent(): Scenario {
   b.review('registration', false, 'Two problems. Prices without VAT will surprise every buyer at checkout, and we ask for date of birth, home address and phone number although we use none of them. Show the real prices and cut the form down to what we need.', [
     'Every ticket and sponsor price we publish is in EUR including 21% Dutch VAT (CONV-PRICES-INCL-VAT).',
   ]);
-  b.fact('conv-prices-incl-vat', 'CONV-PRICES-INCL-VAT', ['marketing', 'partners']);
+  b.fact('conv-prices-incl-vat', 'CONV-PRICES-INCL-VAT', ['marketing', 'partners'], {
+    question: 'What currency and tax treatment must every published ticket and sponsor price follow?',
+    expect: ['including 21%', '21% Dutch VAT'],
+  });
   b.work('production', 'livestream', 'Getting quotes for stage AV and streaming while the venue is being chosen.', [
     op.notes('livestream: quotes from two AV firms; main hall with 3 cameras, stream 1080p to YouTube; second room with sound and slides only.'),
   ]);
@@ -219,7 +222,10 @@ export function generateLongEvent(): Scenario {
   b.review('venue', false, 'The mezzanine room is only reachable by stairs, so a wheelchair user cannot get to half of the talks, and there is no quiet room. Kraanhal can stay if we find a step-free second room.', [
     'Every space attendees use (talk rooms, expo, catering, toilets, workshop rooms) is reachable step-free, and the event has a quiet room (CONV-STEP-FREE-ACCESS).',
   ]);
-  b.fact('conv-step-free-access', 'CONV-STEP-FREE-ACCESS', ['venue', 'program', 'production']);
+  b.fact('conv-step-free-access', 'CONV-STEP-FREE-ACCESS', ['venue', 'program', 'production'], {
+    question: 'What must be true of every space attendees use, and what extra room must the event provide?',
+    expect: ['step-free', 'quiet room'],
+  });
   b.ask('program', 'speakers', 'venue', {
     reply: 'Halfway through the call for papers with 212 proposals.',
     question: 'can the second talk room move to the ground floor so it is step-free (CONV-STEP-FREE-ACCESS), and would it still seat 150? It decides how many talks I accept.',
@@ -274,7 +280,11 @@ export function generateLongEvent(): Scenario {
     'Change of plan (CHANGE-CAPACITY-1000): early bird sold out in two days and 1,700 people are on the waiting list. We plan for 1,000 attendees instead of 600, with three talk tracks instead of two. The budget grows to EUR 560,000 and ticket and sponsor income must still cover it. @venue can Kraanhal take 1,000?',
     ['venue'],
   );
-  b.fact('change-capacity-1000', 'CHANGE-CAPACITY-1000', ['*']);
+  b.fact('change-capacity-1000', 'CHANGE-CAPACITY-1000', ['*'], {
+    question: 'How many attendees and how many talk tracks are we planning for now? Give only the current value.',
+    expect: ['1,000', 'three talk tracks'],
+    reject: ['600 people'],
+  });
   b.replan({
     workstreams: [
       { ...W.venue, brief: 'Host 1,000 attendees at Kraanhal on 9 and 10 September 2027: three step-free talk rooms, the expo area and the floor plan.' },
@@ -294,7 +304,10 @@ export function generateLongEvent(): Scenario {
       { id: 'c-venue-livestream', from: 'venue', to: 'livestream', spec: ROOMS_SPEC },
     ],
   });
-  b.fact('contract-room-capacities', 'CONTRACT-ROOM-CAPACITIES', ['production', 'program', 'venue']);
+  b.fact('contract-room-capacities', 'CONTRACT-ROOM-CAPACITIES', ['production', 'program', 'venue'], {
+    question: 'What are the seat capacities of the Main hall, the Harbour room and the Quay room?',
+    expect: ['720', '180', '150'],
+  });
   b.work('venue', 'venue', '@mira Kraanhal can take 1,000 (CHANGE-CAPACITY-1000): the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds the Quay room with 150 seats; with the Harbour room at 180 that matches CONTRACT-ROOM-CAPACITIES. I am getting the revised quote.', [
     op.notes('venue: main hall 720; Harbour room 180 (ground floor); Quay room pavilion 150 with a level ramp; uplinks and AV power per room as in CONTRACT-ROOM-CAPACITIES.'),
   ]);
@@ -306,7 +319,10 @@ export function generateLongEvent(): Scenario {
     ),
     op.message('Heads-up (FAIL-OPEN-TICKET-LINK): resale bots bought 180 tickets in four minutes from the public link for the second batch. I cancelled those orders; from now on tickets are named and go out by invitation from the waiting list.', 'inform'),
   ]);
-  b.fact('fail-open-ticket-link', 'FAIL-OPEN-TICKET-LINK', ['marketing', 'venue']);
+  b.fact('fail-open-ticket-link', 'FAIL-OPEN-TICKET-LINK', ['marketing', 'venue'], {
+    question: 'Which way of releasing the second batch of tickets failed against resale bots?',
+    expect: ['public link', 'per-order limit'],
+  });
   b.deliver('venue', 'venue', {
     reply: 'The venue plan now holds 1,000 attendees in three step-free rooms.',
     summary: 'Three step-free talk rooms for 1,000 attendees',
@@ -321,7 +337,10 @@ export function generateLongEvent(): Scenario {
     question: 'tickets are named now because of the resale bots (FAIL-OPEN-TICKET-LINK); what exactly do you need in the attendee export to print badges and check names at the door?',
   });
   b.answer('venue', 'logistics', 'marketing', 'A UTF-8 CSV with the columns ticket_id, first_name, last_name, company, ticket_type, dietary, access_needs, sorted by last name (CONTRACT-BADGE-CSV). Weekly from 1 July and a final export on 6 September at 12:00. Names must match the ticket because we check ID at the door.');
-  b.fact('contract-badge-csv', 'CONTRACT-BADGE-CSV', ['venue', 'marketing']);
+  b.fact('contract-badge-csv', 'CONTRACT-BADGE-CSV', ['venue', 'marketing'], {
+    question: 'Which columns does the badge export for the venue contain?',
+    expect: ['ticket_id', 'access_needs'],
+  });
 
   // -------------------------------------------------------------------------
   // Phase 2: speakers, sponsors, agenda and promotion
@@ -339,7 +358,10 @@ export function generateLongEvent(): Scenario {
   b.review('speakers', false, 'Twelve of these speakers have not signed, and the list is about to go public. If one of them drops out we will have announced a talk that does not happen. Hand over only signed speakers.', [
     'A speaker is named publicly (website, newsletter, social posts, sponsor material) only after they have signed the speaker agreement (CONV-SIGNED-CONFIRMATION).',
   ]);
-  b.fact('conv-signed-confirmation', 'CONV-SIGNED-CONFIRMATION', ['program', 'marketing']);
+  b.fact('conv-signed-confirmation', 'CONV-SIGNED-CONFIRMATION', ['program', 'marketing'], {
+    question: 'When may a speaker be named publicly?',
+    expect: ['speaker agreement'],
+  });
   b.deliver('partners', 'sponsors', {
     reply: 'First version of the sponsor packages.',
     summary: 'Gold, Silver and Bronze packages; 28 expo booths',
@@ -353,8 +375,14 @@ export function generateLongEvent(): Scenario {
     'Sponsors never buy a talk, keynote or workshop; sponsored content goes in a clearly marked sponsor session in the Quay room at lunch (CONV-NO-PAID-TALKS).',
     'Attendee data reaches a sponsor only when the attendee opts in, by an unticked checkbox at checkout or a badge scan at the booth (CONV-SPONSOR-OPT-IN-ONLY).',
   ]);
-  b.fact('conv-no-paid-talks', 'CONV-NO-PAID-TALKS', ['partners', 'program']);
-  b.fact('conv-sponsor-opt-in-only', 'CONV-SPONSOR-OPT-IN-ONLY', ['partners', 'marketing']);
+  b.fact('conv-no-paid-talks', 'CONV-NO-PAID-TALKS', ['partners', 'program'], {
+    question: 'Can sponsors buy a talk, and where does sponsored content go?',
+    expect: ['Quay room', 'sponsor session'],
+  });
+  b.fact('conv-sponsor-opt-in-only', 'CONV-SPONSOR-OPT-IN-ONLY', ['partners', 'marketing'], {
+    question: 'Under what condition does attendee data reach a sponsor?',
+    expect: ['opts in', 'badge scan'],
+  });
   b.deliver('program', 'speakers', {
     reply: 'Marketing now gets only the signed speakers.',
     summary: 'Only signed speakers handed over; two replacements',
@@ -401,7 +429,10 @@ export function generateLongEvent(): Scenario {
   b.review('agenda', false, 'The times mix 8am, 5:45 PM and 17.00, and the sessions have no ids, so the stream schedule, the signs and the website will never agree. Pick one format and give every session its id.', [
     'Every time we publish is 24-hour Rotterdam local time written HH:MM (09:15, 17:45), and every session carries its id S-nn wherever it appears (CONV-TIMES-24H).',
   ]);
-  b.fact('conv-times-24h', 'CONV-TIMES-24H', ['program', 'marketing', 'production', 'venue']);
+  b.fact('conv-times-24h', 'CONV-TIMES-24H', ['program', 'marketing', 'production', 'venue'], {
+    question: 'What time format must every published time use?',
+    expect: ['24-hour', 'HH:MM'],
+  });
   b.work('marketing', 'promotion', 'Building the speakers page from the signed speakers.', [
     op.board('c-speakers-promotion'),
     op.notes('promotion: speakers page from signed speakers only; agenda page waits for the session ids; newsletter every two weeks.'),
@@ -432,7 +463,10 @@ export function generateLongEvent(): Scenario {
     ),
     op.message('Heads-up (FAIL-VENUE-WIFI-STREAM): the venue Wi-Fi dropped our test stream eleven times in an hour at a busy event. We stream over the wired stage uplink only, with a 4G backup.', 'inform'),
   ]);
-  b.fact('fail-venue-wifi-stream', 'FAIL-VENUE-WIFI-STREAM', ['production', 'venue']);
+  b.fact('fail-venue-wifi-stream', 'FAIL-VENUE-WIFI-STREAM', ['production', 'venue'], {
+    question: 'Which network setup for streaming the main hall failed during a busy event?',
+    expect: ['Wi-Fi'],
+  });
   b.work('venue', 'venue', 'Confirmed the wired stage uplinks with Kraanhal after the stream test (FAIL-VENUE-WIFI-STREAM).', [
     op.notes('venue: Kraanhal confirms a dedicated 1 Gbit wired line at each stage on a VLAN separate from the attendee Wi-Fi; EUR 1,800 for both days.'),
   ]);
@@ -476,7 +510,10 @@ export function generateLongEvent(): Scenario {
   b.review('livestream', false, 'Automatic captions are not good enough for technical talks by speakers from 31 countries, and deaf attendees in the rooms need captions too, not only stream viewers. Show me captions that work.', [
     'Every talk shown on a screen or a stream has live captions written or corrected by a human captioner, shown in the room and on the stream (CONV-HUMAN-CAPTIONS).',
   ]);
-  b.fact('conv-human-captions', 'CONV-HUMAN-CAPTIONS', ['production', 'program']);
+  b.fact('conv-human-captions', 'CONV-HUMAN-CAPTIONS', ['production', 'program'], {
+    question: 'Who must produce the live captions for talks on a screen or a stream?',
+    expect: ['human captioner'],
+  });
   b.work('production', 'livestream', 'Measured automatic captions on last year\'s recordings; recording the result (FAIL-AUTO-CAPTIONS).', [
     op.failure(
       'Using automatic speech recognition captions for technical talks (FAIL-AUTO-CAPTIONS).',
@@ -485,7 +522,10 @@ export function generateLongEvent(): Scenario {
     ),
     op.message('Result (FAIL-AUTO-CAPTIONS): automatic captions got 14% of the words wrong on last year\'s talks and lagged 6 seconds. We book human captioners.', 'inform'),
   ]);
-  b.fact('fail-auto-captions', 'FAIL-AUTO-CAPTIONS', ['production', 'program']);
+  b.fact('fail-auto-captions', 'FAIL-AUTO-CAPTIONS', ['production', 'program'], {
+    question: 'Which captioning approach was measured on last year\'s talks and found wanting?',
+    expect: ['automatic speech recognition', 'automatic captions'],
+  });
   b.ask('production', 'livestream', 'program', {
     reply: 'Booking two human captioners per day (CONV-HUMAN-CAPTIONS).',
     question: 'can speakers send a list of the terms and names in their talks two weeks ahead? The human captioners (CONV-HUMAN-CAPTIONS) need it to prepare.',
@@ -501,7 +541,10 @@ export function generateLongEvent(): Scenario {
     'New requirement (CHANGE-WORKSHOP-DAY): attendees and sponsors keep asking for hands-on sessions, so 8 September becomes a workshop day instead of a build-up day only. Eight workshops of 40 seats each, sold as an add-on to a conference ticket for EUR 145 including VAT. @program please own the workshops.',
     ['program'],
   );
-  b.fact('change-workshop-day', 'CHANGE-WORKSHOP-DAY', ['*']);
+  b.fact('change-workshop-day', 'CHANGE-WORKSHOP-DAY', ['*'], {
+    question: 'What is 8 September now, and what does a workshop cost? Give only the current value.',
+    expect: ['workshop day', 'EUR 145'],
+  });
   b.replan({
     workstreams: [
       { ...b.currentPlan.workstreams.find(w => w.id === 'venue')!, brief: 'Host 1,000 attendees at Kraanhal on 9 and 10 September 2027 (three step-free talk rooms, the expo area and the floor plan) and find eight step-free workshop rooms for 40 people on 8 September.' },
@@ -526,7 +569,10 @@ export function generateLongEvent(): Scenario {
       },
     ],
   });
-  b.fact('contract-workshop-seats-40', 'CONTRACT-WORKSHOP-SEATS-40', ['program', 'marketing']);
+  b.fact('contract-workshop-seats-40', 'CONTRACT-WORKSHOP-SEATS-40', ['program', 'marketing'], {
+    question: 'How many seats does each workshop have, and how is it sold?',
+    expect: ['40 seats', 'add-on'],
+  });
   b.work('program', 'workshops', 'Starting the workshop day: topics first, then trainers.', [
     op.board('c-workshops-registration'),
     op.notes('workshops: pick 8 topics from the workshop proposals in the call for papers; trainers paid EUR 1,200; 40 seats each (CONTRACT-WORKSHOP-SEATS-40).', true),
@@ -568,7 +614,10 @@ export function generateLongEvent(): Scenario {
   b.review('workshops', false, 'People will arrive with laptops that cannot run the exercises; a Kubernetes workshop where half the room spends an hour installing tools is wasted. Every workshop needs prerequisites and a setup guide well before the day.', [
     'Every workshop publishes its level, prerequisites and a tested setup guide at least 7 days before the workshop, and the trainer answers setup questions until then (CONV-SETUP-GUIDE-7D).',
   ]);
-  b.fact('conv-setup-guide-7d', 'CONV-SETUP-GUIDE-7D', ['program', 'marketing']);
+  b.fact('conv-setup-guide-7d', 'CONV-SETUP-GUIDE-7D', ['program', 'marketing'], {
+    question: 'How far ahead of a workshop must its setup guide be published?',
+    expect: ['7 days'],
+  });
   b.ask('partners', 'sponsors', 'program', {
     reply: 'Following up with the Gold sponsors.',
     question: 'two Gold sponsors want to run a workshop; can they take a slot on the workshop day?',
@@ -606,7 +655,10 @@ export function generateLongEvent(): Scenario {
   b.review('logistics', false, 'The run sheet lists tasks by time but not who does them. On the day nobody will know who opens the cloakroom or who calls the captioners when they are late.', [
     'Every run-sheet line names one owner and one fallback person with a phone number, with times as CONV-TIMES-24H says (CONV-RUN-SHEET-OWNER).',
   ]);
-  b.fact('conv-run-sheet-owner', 'CONV-RUN-SHEET-OWNER', ['venue', 'production', 'program']);
+  b.fact('conv-run-sheet-owner', 'CONV-RUN-SHEET-OWNER', ['venue', 'production', 'program'], {
+    question: 'What must every run-sheet line name?',
+    expect: ['one owner', 'fallback person'],
+  });
   progress('venue', 'logistics', 'the badge printer rental (two printers, 600 badges an hour each)', 'the volunteer roster');
   b.ask('venue', 'logistics', 'production', {
     reply: 'Adding owners to the run sheet (CONV-RUN-SHEET-OWNER).',
@@ -620,7 +672,10 @@ export function generateLongEvent(): Scenario {
   b.human(
     'Decision on the stream (CHANGE-NO-LIVESTREAM): the streaming sponsor has pulled out and we cannot carry EUR 75,000 of AV. We drop the livestream. Instead we record all three rooms and publish every talk within 7 days. Live captions stay in the rooms.',
   );
-  b.fact('change-no-livestream', 'CHANGE-NO-LIVESTREAM', ['*']);
+  b.fact('change-no-livestream', 'CHANGE-NO-LIVESTREAM', ['*'], {
+    question: 'How do people who are not in the rooms get the talks now? Give only the current value.',
+    expect: ['record all three rooms', 'within 7 days'],
+  });
   b.replan({
     workstreams: [
       ...b.currentPlan.workstreams.filter(w => w.id !== 'livestream'),
@@ -649,7 +704,10 @@ export function generateLongEvent(): Scenario {
       },
     ],
   });
-  b.fact('contract-video-7d', 'CONTRACT-VIDEO-7D', ['production', 'marketing']);
+  b.fact('contract-video-7d', 'CONTRACT-VIDEO-7D', ['production', 'marketing'], {
+    question: 'How soon must a talk video be published, and how is it titled?',
+    expect: ['within 7 days', 'S-nn Speaker'],
+  });
   b.work('production', 'recordings', 'Re-planning the AV for recordings instead of a stream.', [
     op.board('c-recordings-promotion'),
     op.notes('recordings: two cameras and the slide feed per room, recorded locally; editors on site; uploads over the wired stage uplink, never the venue Wi-Fi (FAIL-VENUE-WIFI-STREAM).'),
@@ -686,7 +744,10 @@ export function generateLongEvent(): Scenario {
   b.review('recordings', false, 'Do we have every speaker\'s permission to publish their talk? The speaker agreement covers a stream with an opt-out, not a video that stays online. Get a recording release from every speaker before anything is published.', [
     'No talk is recorded or published without a signed recording release from every speaker on stage; for a talk without one the cameras stay off (CONV-RECORDING-RELEASE).',
   ]);
-  b.fact('conv-recording-release', 'CONV-RECORDING-RELEASE', ['program', 'production']);
+  b.fact('conv-recording-release', 'CONV-RECORDING-RELEASE', ['program', 'production'], {
+    question: 'What must a speaker sign before their talk may be recorded or published?',
+    expect: ['recording release'],
+  });
   b.ask('program', 'speakers', 'production', {
     reply: 'Preparing the recording release for the speakers (CONV-RECORDING-RELEASE).',
     question: 'what should the recording release (CONV-RECORDING-RELEASE) cover: recording, editing and YouTube only, or also clips for social?',
@@ -739,7 +800,10 @@ export function generateLongEvent(): Scenario {
     'One more change (CHANGE-GREEN-EVENT): the city of Rotterdam will fund EUR 40,000 if we follow its green event rules. Speakers who travel less than 700 km come by train instead of plane, catering is vegetarian by default with meat only on request, there is no printed programme and no plastic swag, and badges and lanyards are collected and reused. We report the results to the city after the event. @venue please own that report.',
     ['venue'],
   );
-  b.fact('change-green-event', 'CHANGE-GREEN-EVENT', ['*']);
+  b.fact('change-green-event', 'CHANGE-GREEN-EVENT', ['*'], {
+    question: 'How must speakers who travel a short distance arrive, and what is the default catering? Give only the current value.',
+    expect: ['train', 'vegetarian'],
+  });
   b.replan({
     workstreams: [
       ...b.currentPlan.workstreams.filter(w => w.id === 'venue'),
@@ -765,7 +829,10 @@ export function generateLongEvent(): Scenario {
       },
     ],
   });
-  b.fact('contract-travel-log', 'CONTRACT-TRAVEL-LOG', ['program', 'venue']);
+  b.fact('contract-travel-log', 'CONTRACT-TRAVEL-LOG', ['program', 'venue'], {
+    question: 'Which details must be logged per speaker trip?',
+    expect: ['travel mode', 'booking reference'],
+  });
   b.ask('program', 'speakers', 'venue', {
     reply: 'Rebooking speaker travel for the green event rules (CHANGE-GREEN-EVENT).',
     question: 'does the travel log for the city report (CONTRACT-TRAVEL-LOG) need the return trips as well, and how do I log a speaker who combines the trip with other work in Europe?',

@@ -4,7 +4,7 @@
 // the same code always produces the same scenario.
 import type { PlanInput } from '@context-continue/core';
 import { checkCoverage, stepText, validateScenario } from '../scenario.js';
-import type { Fact, Scenario, Step, ToolCall } from '../types.js';
+import type { Fact, FactProbe, Scenario, Step, ToolCall } from '../types.js';
 
 /** The i-th element of `xs`, wrapping around: a deterministic stand-in for a random choice. */
 export function rotate<T>(xs: readonly T[], i: number): T {
@@ -244,12 +244,12 @@ export class LongScenarioBuilder {
     return this.work(bot, ws, `@${asker} ${text}`, [op.message(text, 'inform', [asker, ...also]), ...ops]);
   }
 
-  /** Annotates the last step as introducing a fact; its marker must be in that step's text. */
-  fact(id: string, marker: string, audience: string[]): this {
+  /** Annotates the last step as introducing a fact; its marker must be in that step's text. `probe` is the real-model question for it. */
+  fact(id: string, marker: string, audience: string[], probe?: FactProbe): this {
     const step = this.length - 1;
     const last = this.steps[step];
     if (!last || !stepText(last).includes(marker)) throw new Error(`fact ${id}: marker "${marker}" is not in step ${step}`);
-    this.facts.push({ id, marker, step, audience });
+    this.facts.push(probe === undefined ? { id, marker, step, audience } : { id, marker, step, audience, probe });
     return this;
   }
 

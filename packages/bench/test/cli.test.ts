@@ -350,9 +350,19 @@ describe('bench cli', () => {
 describe('bench cli: fact probes', () => {
   const KEY = 'sk-ant-api03-TOPSECRETKEYVALUE';
 
-  /** flappy-bird with probes on two facts, written to a scratch file. */
+  /** flappy-bird without the bundled probes, written to a scratch file. */
+  function unprobedScenario(): string {
+    const s = JSON.parse(readFileSync(scenarioPath('flappy-bird'), 'utf8'));
+    for (const f of s.facts) delete f.probe;
+    const path = join(tmp(), 'flappy-unprobed.json');
+    writeFileSync(path, JSON.stringify(s));
+    return path;
+  }
+
+  /** flappy-bird with probes on two facts only (the bundled probes removed), written to a scratch file. */
   function probeScenario(): string {
     const s = JSON.parse(readFileSync(scenarioPath('flappy-bird'), 'utf8'));
+    for (const f of s.facts) delete f.probe;
     s.facts[0].probe = { question: 'What hitbox size did the team agree?', expect: ['12x12'], reject: ['10x10'] };
     s.facts[2].probe = { question: 'How does the player flap on mobile?', expect: ['tap'] };
     const path = join(tmp(), 'flappy-probes.json');
@@ -481,7 +491,7 @@ describe('bench cli: fact probes', () => {
     expect(onlyB.code).toBe(2);
     expect(onlyB.err).toMatch(/--probe-groups/);
     // Groups named in --probe-groups but not run are dropped with a note.
-    const dropped = await run(['run', '--scenario', 'flappy-bird', '--group', 'C', '--out', tmp(), '--stamp', 'S', '--probes', '--dry-run'], { fetch, env: {} });
+    const dropped = await run(['run', '--scenario', unprobedScenario(), '--group', 'C', '--out', tmp(), '--stamp', 'S', '--probes', '--dry-run'], { fetch, env: {} });
     expect(dropped.code).toBe(0);
     expect(dropped.err).toMatch(/--probe-groups: A, D, E not in this run/);
     // No fact with a probe: a note.

@@ -109,7 +109,18 @@
       "step": 8,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "Who are we selling to and how is pricing structured? Give only the current value.",
+        "expect": [
+          "per seat",
+          "small teams"
+        ],
+        "reject": [
+          "freemium",
+          "3.99"
+        ]
+      }
     },
     {
       "id": "conv-metric-per-feature",
@@ -118,7 +129,13 @@
       "audience": [
         "ux",
         "eng"
-      ]
+      ],
+      "probe": {
+        "question": "What must every feature in the plan name?",
+        "expect": [
+          "metric"
+        ]
+      }
     },
     {
       "id": "contract-numbered-features",
@@ -126,7 +143,14 @@
       "step": 9,
       "audience": [
         "eng"
-      ]
+      ],
+      "probe": {
+        "question": "What form must the feature list handed to tech take?",
+        "expect": [
+          "numbered",
+          "must-have"
+        ]
+      }
     },
     {
       "id": "fail-realtime-websocket",
@@ -135,7 +159,14 @@
       "audience": [
         "pm",
         "research"
-      ]
+      ],
+      "probe": {
+        "question": "What was recorded as a failed approach for the manager dashboard because it pushed the release past the budget?",
+        "expect": [
+          "websocket",
+          "realtime"
+        ]
+      }
     }
   ],
   "steps": [

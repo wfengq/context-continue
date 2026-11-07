@@ -119,7 +119,13 @@
       "audience": [
         "catering",
         "av"
-      ]
+      ],
+      "probe": {
+        "question": "What currency and tax treatment must every cost figure follow?",
+        "expect": [
+          "including VAT"
+        ]
+      }
     },
     {
       "id": "fail-venue-price-excl-vat",
@@ -127,7 +133,15 @@
       "step": 4,
       "audience": [
         "venue"
-      ]
+      ],
+      "probe": {
+        "question": "What did the venue's first price quote leave out?",
+        "expect": [
+          "VAT",
+          "projection",
+          "microphones"
+        ]
+      }
     },
     {
       "id": "change-200-guests-eur-25k",
@@ -135,7 +149,18 @@
       "step": 11,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "What is the expected number of guests and the budget now? Give only the current value.",
+        "expect": [
+          "25,000",
+          "200 people"
+        ],
+        "reject": [
+          "15,000",
+          "120 people"
+        ]
+      }
     },
     {
       "id": "contract-kitchen-rules",
@@ -143,7 +168,14 @@
       "step": 12,
       "audience": [
         "catering"
-      ]
+      ],
+      "probe": {
+        "question": "What does the venue hand over to catering under the venue-catering contract?",
+        "expect": [
+          "kitchen rules",
+          "room layout"
+        ]
+      }
     }
   ],
   "steps": [

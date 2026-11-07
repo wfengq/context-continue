@@ -394,7 +394,10 @@ function cycleAccounts(x: Ctx): void {
   x.rev('acct-api', false, 'Local time strings will break as soon as a workspace has members in two time zones, and members lists of large workspaces need paging. Fix both before the clients generate from this.', [
     'Every timestamp in the API, in events and in exported files is ISO 8601 in UTC with a Z suffix; calendar days are plain YYYY-MM-DD (CONV-ISO8601-UTC).',
   ]);
-  b.fact('conv-iso8601-utc', 'CONV-ISO8601-UTC', ['backend', 'web', 'mobile', 'analyst']);
+  b.fact('conv-iso8601-utc', 'CONV-ISO8601-UTC', ['backend', 'web', 'mobile', 'analyst'], {
+    question: 'What time format must every timestamp in the API, in events and in exported files use?',
+    expect: ['ISO 8601', 'UTC'],
+  });
   x.tick('acct-web', 'acct-mobile', 'acct-api', 'acct-sec');
   x.qa({
     from: 'web', ws: 'acct-web', to: 'backend', toWs: 'acct-api',
@@ -403,7 +406,10 @@ function cycleAccounts(x: Ctx): void {
     a: 'Every error is {code, message, requestId} with a 4xx or 5xx status (CONTRACT-ERROR-ENVELOPE): code is a stable string such as INVITATION_EXPIRED, message is safe to show to the user, requestId is what support asks for, and a 429 or 503 carries Retry-After. @mobile the same holds for you, and I will put it in the API document.',
     also: ['mobile'],
   });
-  b.fact('contract-error-envelope', 'CONTRACT-ERROR-ENVELOPE', ['web', 'mobile', 'qa', 'backend']);
+  b.fact('contract-error-envelope', 'CONTRACT-ERROR-ENVELOPE', ['web', 'mobile', 'qa', 'backend'], {
+    question: 'Which fields must every API error body carry?',
+    expect: ['requestId'],
+  });
   x.dv('acct-api', 'Revised the identity API: UTC timestamps, paging, and the error format.', 'UTC timestamps, cursor paging on members, error format',
     'Revision after review: every timestamp is ISO 8601 in UTC with a Z suffix; members and invitations use cursor paging (cursor and limit, at most 100). Errors use the {code, message, requestId} body with stable codes such as INVITATION_EXPIRED and LAST_OWNER.',
   );
@@ -416,7 +422,10 @@ function cycleAccounts(x: Ctx): void {
   x.rev('acct-ux', false, 'The role chips are pale grey on white (about 2.1:1) and the switcher items are 28 px high on touch screens. People will not be able to read or hit them. Fix contrast and target sizes across the kit, not only here.', [
     'Text and icons meet WCAG 2.2 AA contrast (4.5:1 for text, 3:1 for icons and chips) and touch targets are at least 44 by 44 points on every platform (CONV-WCAG-22-AA).',
   ]);
-  b.fact('conv-wcag-22-aa', 'CONV-WCAG-22-AA', ['design', 'web', 'mobile', 'qa']);
+  b.fact('conv-wcag-22-aa', 'CONV-WCAG-22-AA', ['design', 'web', 'mobile', 'qa'], {
+    question: 'What contrast ratio must text meet, and what is the minimum touch target size?',
+    expect: ['WCAG 2.2 AA', '44 by 44', '4.5:1'],
+  });
   x.tick('acct-req', 'acct-api', 'acct-mobile', 'acct-ux');
   x.dv('acct-ux', 'Fixed contrast and target sizes in the kit and in these flows.', 'Contrast and 44-point targets across the kit',
     'Accessibility: role chips now use slate-700 on slate-100 (7.2:1), switcher rows are 44 px on touch screens and 32 px only with a pointer, focus rings are 2 px indigo-600. Checked every screen of the flows against WCAG 2.2 AA.',
@@ -429,7 +438,11 @@ function cycleAccounts(x: Ctx): void {
   b.human(
     'Change of requirements (CHANGE-SAML-SSO): the three enterprise trials we are closing all need SAML single sign-on with Okta and Azure AD, and their admins want to enforce it for the whole workspace, instead of the Google-only sign-in we planned. Please add it to 3.1 rather than waiting for a later release.',
   );
-  b.fact('change-saml-sso', 'CHANGE-SAML-SSO', ['*']);
+  b.fact('change-saml-sso', 'CHANGE-SAML-SSO', ['*'], {
+    question: 'Which sign-in methods must workspace authentication support? Give only the current value.',
+    expect: ['SAML', 'Okta'],
+    reject: ['Google sign-in'],
+  });
   b.replan({
     workstreams: [
       ACCT_WS.req,
@@ -447,7 +460,10 @@ function cycleAccounts(x: Ctx): void {
       { id: 'c-acct-sso-mobile', from: 'acct-sso', to: 'acct-mobile', spec: 'The same discovery endpoint; the app opens the identity provider in an in-app browser session and receives the session tokens through the universal link; refresh tokens rotate on every use.' },
     ],
   });
-  b.fact('contract-session-tokens', 'CONTRACT-SESSION-TOKENS', ['web', 'mobile', 'backend', 'ops']);
+  b.fact('contract-session-tokens', 'CONTRACT-SESSION-TOKENS', ['web', 'mobile', 'backend', 'ops'], {
+    question: 'How long is a refresh token valid?',
+    expect: ['30 days', 'rotating'],
+  });
   x.tasks('acct-sso', [
     'the SAML library choice and its signature checks',
     'per-workspace identity provider settings',
@@ -480,7 +496,10 @@ function cycleAccounts(x: Ctx): void {
       ['acct-sec'],
     ),
   ]);
-  b.fact('fail-sms-otp', 'FAIL-SMS-OTP', ['ops', 'backend', 'mobile', 'web']);
+  b.fact('fail-sms-otp', 'FAIL-SMS-OTP', ['ops', 'backend', 'mobile', 'web'], {
+    question: 'Which second-factor method was recorded as a failed approach?',
+    expect: ['SMS', 'one-time codes'],
+  });
   x.tick('acct-ux', 'acct-req', 'acct-api', 'acct-ux');
   x.dv('acct-web', 'First version of the web sign-in and workspace settings.', 'Sign-in, switcher, members page and invitations on the web',
     'Routes /signin, /w/:slug and /w/:slug/settings/members; the client is generated from the /v2 document. Errors show the server message with a retry button when Retry-After is set, and the requestId is in the "copy details" link for support.',
@@ -489,7 +508,10 @@ function cycleAccounts(x: Ctx): void {
   x.rev('acct-web', false, 'Hiding the buttons is not a permission check: I removed a member as a plain member by calling the endpoint from the console, and the API accepted it. Roles have to be enforced by the service on every request; the UI only mirrors them.', [
     'Permissions are enforced by a server-side role check on every request against one role matrix in the identity service; clients only hide what the role matrix forbids (CONV-SERVER-ROLE-CHECK).',
   ]);
-  b.fact('conv-server-role-check', 'CONV-SERVER-ROLE-CHECK', ['backend', 'web', 'mobile', 'qa']);
+  b.fact('conv-server-role-check', 'CONV-SERVER-ROLE-CHECK', ['backend', 'web', 'mobile', 'qa'], {
+    question: 'Where must permissions be enforced?',
+    expect: ['server-side'],
+  });
   x.tick('acct-api', 'acct-web');
   x.dv('acct-api', 'Added the server-side role check and the session rules.', 'Role matrix enforced on every request; session rotation',
     'Permissions: one role matrix (owner, admin, member, guest by action) lives in the identity service and every handler checks it before doing anything; a plain member removing someone now gets 403 FORBIDDEN_ROLE. Sessions: 15-minute access tokens and refresh tokens that rotate on every use and expire after 30 days without use; reusing an old refresh token revokes the whole session family.',
@@ -497,7 +519,10 @@ function cycleAccounts(x: Ctx): void {
   x.rev('acct-api', false, 'The role matrix is right. But mobile retries on a flaky connection will create two invitations or two workspaces: POST is not safe to repeat. Fix that before clients ship.', [
     'Every POST accepts an Idempotency-Key header; the server keeps keys for 24 hours and a repeat returns the first response (CONV-IDEMPOTENCY-KEY).',
   ]);
-  b.fact('conv-idempotency-key', 'CONV-IDEMPOTENCY-KEY', ['backend', 'web', 'mobile']);
+  b.fact('conv-idempotency-key', 'CONV-IDEMPOTENCY-KEY', ['backend', 'web', 'mobile'], {
+    question: 'Which request header must every POST accept, and how long does the server keep its values?',
+    expect: ['Idempotency-Key', '24 hours'],
+  });
   x.tick('acct-mobile', 'acct-tests', 'acct-sso');
   x.dv('acct-api', 'Added idempotency keys to every POST.', 'Idempotency-Key on every POST',
     'Idempotency: every POST accepts an Idempotency-Key header; keys live for 24 hours in Postgres and a repeat with the same key returns the stored response. With 30% packet loss on the staging proxy no duplicate invitation or workspace was created in 2,000 attempts.',
@@ -529,7 +554,10 @@ function cycleAccounts(x: Ctx): void {
   b.human(
     'Another change from the enterprise trials (CHANGE-ADMIN-2FA): two-factor authentication was going to be optional for everyone. Now workspace owners and admins must use it, with passkeys or an authenticator app; an admin without it gets read-only access until they enrol. Members can still opt in. This is part of 3.1.',
   );
-  b.fact('change-admin-2fa', 'CHANGE-ADMIN-2FA', ['*']);
+  b.fact('change-admin-2fa', 'CHANGE-ADMIN-2FA', ['*'], {
+    question: 'Who must use two-factor authentication, and what happens to an admin without it? Give only the current value.',
+    expect: ['owners and admins', 'read-only'],
+  });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
       w.id === 'acct-sec'
@@ -602,7 +630,10 @@ function cycleAccounts(x: Ctx): void {
   x.rev('acct-tests', false, 'The failures are listed but I cannot tell which story or build each one belongs to, so nobody knows whether rc2 fixed them. Name both in every result.', [
     'Every bug report and test result names the story id and the build number, for example ACC-03 / build 3.1.0-rc1 (CONV-STORY-AND-BUILD).',
   ]);
-  b.fact('conv-story-and-build', 'CONV-STORY-AND-BUILD', ['qa', 'analyst', 'web', 'mobile']);
+  b.fact('conv-story-and-build', 'CONV-STORY-AND-BUILD', ['qa', 'analyst', 'web', 'mobile'], {
+    question: 'Which two identifiers must every bug report and test result name?',
+    expect: ['story id', 'build number'],
+  });
   x.tick('acct-tests', 'acct-api', 'acct-sec', 'acct-sso', 'acct-mobile', 'acct-web', 'acct-tests');
   x.dv('acct-tests', 'Release pass on rc2, with story and build on every result.', 'Release pass on 3.1.0-rc2; known issues',
     'Release pass on build 3.1.0-rc2: 71 of 71 automated and 12 of 12 manual cases pass. Fixed since rc1: ACC-03 / build 3.1.0-rc1 (invitation email delay, the mail queue now has its own workers), the flaky switcher case, and the Azure AD certificate. Known issue: ACC-08 / build 3.1.0-rc2, the Okta error page shows English only.',
@@ -641,7 +672,10 @@ function cycleBilling(x: Ctx): void {
       { id: 'c-bill-tax-service', from: 'bill-tax', to: 'bill-service', spec: 'Stripe Tax calculates VAT and sales tax on every invoice; invoice numbers are QUI-<year>-<5 digits> without gaps, and PDFs are kept for 10 years.' },
     ],
   });
-  b.fact('contract-entitlements', 'CONTRACT-ENTITLEMENTS', ['web', 'mobile', 'backend', 'qa']);
+  b.fact('contract-entitlements', 'CONTRACT-ENTITLEMENTS', ['web', 'mobile', 'backend', 'qa'], {
+    question: 'Which fields does the entitlements response return?',
+    expect: ['seatsUsed', 'renewsAt'],
+  });
 
   x.tasks('bill-req', [
     'the pricing interviews with nine teams that pay by invoice today, which put the pain at chasing the yearly invoice rather than the price itself',
@@ -803,7 +837,10 @@ function cycleBilling(x: Ctx): void {
   x.rev('bill-service', false, 'Floats for money will round: 3 seats at 8.10 is 24.299999 in the logs already, and an implied currency breaks the moment a UK team pays in pounds. Fix the money model everywhere it appears, including what clients receive.', [
     'Money is an integer amount in minor units plus an ISO 4217 currency code, for example {amount: 4900, currency: "EUR"}, in the database, the API, events and exports; never a float (CONV-MONEY-MINOR-UNITS).',
   ]);
-  b.fact('conv-money-minor-units', 'CONV-MONEY-MINOR-UNITS', ['backend', 'web', 'mobile', 'analyst']);
+  b.fact('conv-money-minor-units', 'CONV-MONEY-MINOR-UNITS', ['backend', 'web', 'mobile', 'analyst'], {
+    question: 'How must money amounts be represented in the database, the API, events and exports?',
+    expect: ['minor units', 'ISO 4217'],
+  });
   x.tick('bill-web', 'bill-mobile', 'bill-tax');
   x.qa({
     from: 'mobile', ws: 'bill-mobile', to: 'analyst', toWs: 'bill-req',
@@ -831,14 +868,20 @@ function cycleBilling(x: Ctx): void {
       ['bill-service'],
     ),
   ]);
-  b.fact('fail-nightly-proration', 'FAIL-NIGHTLY-PRORATION', ['backend', 'qa', 'analyst']);
+  b.fact('fail-nightly-proration', 'FAIL-NIGHTLY-PRORATION', ['backend', 'qa', 'analyst'], {
+    question: 'Which approach to charging seat changes was tried and failed?',
+    expect: ['nightly proration', 'nightly'],
+  });
   x.tick('bill-tax', 'bill-mobile', 'bill-web');
 
   // Change 1: per-seat pricing
   b.human(
     'Change of plan on pricing (CHANGE-PER-SEAT-PRICING): the flat workspace prices do not work. Small teams of 4 think EUR 49 is steep and the 30-person agency hits the Business cap. We switch to per-seat pricing: Team EUR 8 per seat per month, Business EUR 14 per seat per month, annual billing pays for 10 months. Free stays as it is. Please replan around per seat instead of per workspace.',
   );
-  b.fact('change-per-seat-pricing', 'CHANGE-PER-SEAT-PRICING', ['*']);
+  b.fact('change-per-seat-pricing', 'CHANGE-PER-SEAT-PRICING', ['*'], {
+    question: 'How is the Team plan priced? Give only the current value.',
+    expect: ['EUR 8 per seat', 'per-seat'],
+  });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
       w.id === 'bill-req'
@@ -866,7 +909,10 @@ function cycleBilling(x: Ctx): void {
     a: 'Four states, exposed as billingState in the entitlements response (CONTRACT-DUNNING-STATES): active; past_due for 14 days after the first failed charge while Stripe retries, with everything working; read_only from day 15, where documents open but nobody can edit or invite; canceled after 60 days, which moves the workspace to Free. @mobile @design please use the same names and days.',
     also: ['mobile', 'design'],
   });
-  b.fact('contract-dunning-states', 'CONTRACT-DUNNING-STATES', ['web', 'mobile', 'design', 'qa', 'backend']);
+  b.fact('contract-dunning-states', 'CONTRACT-DUNNING-STATES', ['web', 'mobile', 'design', 'qa', 'backend'], {
+    question: 'Which billing states does the entitlements response expose?',
+    expect: ['past_due', 'read_only'],
+  });
   x.tick('bill-web', 'bill-mobile', 'bill-req');
   x.dv('bill-service', 'Reworked the money model and moved to per-seat subscriptions.', 'Minor units with currency; per-seat quantities with immediate prorations',
     'Revision after review: every amount is an integer in minor units with an ISO 4217 currency, in Postgres, in the API and in events. Subscriptions are per seat: adding or removing a member updates the Stripe subscription quantity at once with prorations, so the nightly job is gone. Inviting beyond the paid seats returns 402 SEATS_REQUIRED.',
@@ -874,7 +920,10 @@ function cycleBilling(x: Ctx): void {
   x.rev('bill-service', false, 'The money model is right now. But the webhook handler trusts any POST to /webhooks/stripe and applies the same event twice when Stripe retries; I replayed one event and the workspace got two seat credits. Fix both.', [
     'Every incoming webhook is checked against its provider signature (Stripe-Signature with the endpoint secret) and is processed at most once by its event id; unsigned or repeated events return 200 without effect (CONV-WEBHOOKS-VERIFIED).',
   ]);
-  b.fact('conv-webhooks-verified', 'CONV-WEBHOOKS-VERIFIED', ['backend', 'ops', 'qa']);
+  b.fact('conv-webhooks-verified', 'CONV-WEBHOOKS-VERIFIED', ['backend', 'ops', 'qa'], {
+    question: 'How must incoming webhooks be checked and de-duplicated?',
+    expect: ['signature', 'event id'],
+  });
   x.tick('bill-service', 'bill-tax', 'bill-ux', 'bill-mobile');
   x.status('Two weeks into 3.2. Short status from each of you, please, and flag anything at risk.', ['bill-req', 'bill-ux', 'bill-service', 'bill-web', 'bill-mobile', 'bill-tax', 'bill-tests']);
   x.tick('bill-service', 'bill-web', 'bill-tests');
@@ -907,7 +956,10 @@ function cycleBilling(x: Ctx): void {
   b.human(
     'Change of requirements from finance (CHANGE-VAT-REVERSE-CHARGE): EU business customers with a valid VAT ID must get reverse-charge invoices without VAT, and the VAT ID has to be checked against VIES at checkout and again every month. Right now Stripe Tax charges them German VAT, which their accountants reject. This is now part of 3.2.',
   );
-  b.fact('change-vat-reverse-charge', 'CHANGE-VAT-REVERSE-CHARGE', ['backend', 'ops', 'analyst', 'web', 'qa']);
+  b.fact('change-vat-reverse-charge', 'CHANGE-VAT-REVERSE-CHARGE', ['backend', 'ops', 'analyst', 'web', 'qa'], {
+    question: 'How must invoices be issued to EU business customers with a valid VAT ID? Give only the current value.',
+    expect: ['reverse-charge', 'VIES'],
+  });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
       w.id === 'bill-tax'
@@ -954,7 +1006,10 @@ function cycleBilling(x: Ctx): void {
       ['bill-service'],
     ),
   ]);
-  b.fact('fail-cached-seat-count', 'FAIL-CACHED-SEAT-COUNT', ['backend', 'qa']);
+  b.fact('fail-cached-seat-count', 'FAIL-CACHED-SEAT-COUNT', ['backend', 'qa'], {
+    question: 'What was the failed way of tracking how many seats are used?',
+    expect: ['cached seat count', 'Redis'],
+  });
   x.tick('bill-service', 'bill-ux', 'bill-mobile', 'bill-web');
   x.dv('bill-mobile', 'First version of the plan display in the apps.', 'Plan card, limit messages and billing states on iOS and Android',
     'Plan card on the workspace screen with the plan, seats used and renewal date from the entitlements response, refreshed on launch and on the billing.changed silent push. No prices, buy buttons or links anywhere in the apps; owners read "Manage billing on quire.app".',
@@ -1167,7 +1222,10 @@ function cycleCollaboration(x: Ctx): void {
       ['collab-sync'],
     ),
   ]);
-  b.fact('fail-ot-server', 'FAIL-OT-SERVER', ['backend', 'web', 'mobile', 'qa']);
+  b.fact('fail-ot-server', 'FAIL-OT-SERVER', ['backend', 'web', 'mobile', 'qa'], {
+    question: 'Which approach to concurrent editing was rejected for diverging on real documents?',
+    expect: ['operational transform'],
+  });
   x.tick('collab-sync', 'collab-req', 'collab-ux');
   x.dv('collab-req', 'First version of the 3.3 collaboration requirements.', 'Co-editing, presence, comments and mentions; COL-01 to COL-06',
     'Co-editing: up to 50 people edit one document at the same time; a keystroke appears for everyone else within 300 ms on a normal connection and nothing typed is ever lost, including during a 10-second outage. Presence shows who is in the document, their cursor and their selection.',
@@ -1182,7 +1240,10 @@ function cycleCollaboration(x: Ctx): void {
     a: 'Three document roles: viewer, commenter and editor (CONTRACT-DOC-ROLES). Workspace members get their workspace role\'s level unless the document narrows it; outside reviewers only get viewer or commenter, never editor. The sync server enforces it with the 3.1 role matrix on connect and on every update. @mobile @qa the same three roles apply to you.',
     also: ['mobile', 'qa'],
   });
-  b.fact('contract-doc-roles', 'CONTRACT-DOC-ROLES', ['backend', 'web', 'mobile', 'qa']);
+  b.fact('contract-doc-roles', 'CONTRACT-DOC-ROLES', ['backend', 'web', 'mobile', 'qa'], {
+    question: 'What are the document roles?',
+    expect: ['viewer', 'commenter'],
+  });
   x.start('collab-web', 'Starting the web side of co-editing: the Yjs binding replaces save-on-blur.', 'collab-web: y-prosemirror binding; websocket provider; cursors; comment margin; share dialog.', 'c-collab-sync-web');
   x.dv('collab-req', 'Added document roles and the orphaned comment rule.', 'Document roles viewer/commenter/editor; orphaned comments; COL-07 and COL-08',
     'Document roles: viewer, commenter and editor, as the sync server enforces them; outside reviewers are viewers or commenters only. COL-07 when the anchored text of a comment is deleted, the thread stays in the margin marked "Text deleted" with a quote of what it was attached to; COL-08 an outside reviewer\'s access expires on the date the sharer sets, at most 90 days.',
@@ -1197,7 +1258,10 @@ function cycleCollaboration(x: Ctx): void {
   b.human(
     'Change of scope for 3.3 (CHANGE-SUGGESTION-MODE): our two biggest agency customers and the legal team at Fenwick Partners say comments are not enough; they need suggestion mode, where an edit is proposed and an editor accepts or rejects it, like tracked changes. It has to be in 3.3. To make room, we drop live cursors on mobile: the apps show who is in the document, but no remote cursors or selections.',
   );
-  b.fact('change-suggestion-mode', 'CHANGE-SUGGESTION-MODE', ['*']);
+  b.fact('change-suggestion-mode', 'CHANGE-SUGGESTION-MODE', ['*'], {
+    question: 'Which editing feature beyond comments must be in 3.3? Give only the current value.',
+    expect: ['suggestion mode'],
+  });
   b.replan({
     workstreams: [
       { ...COLLAB_WS.req, brief: 'Write the 3.3 requirements for real-time co-editing, presence, comments, @mentions, suggestion mode (proposed edits an editor accepts or rejects) and sharing a single document, as stories COL-nn with acceptance checklists.' },
@@ -1215,7 +1279,10 @@ function cycleCollaboration(x: Ctx): void {
       { id: 'c-collab-roles-web', from: 'collab-sync', to: 'collab-web', spec: 'Document roles are viewer, commenter and editor; outside reviewers are viewer or commenter only; suggestions can be made by commenters and accepted or rejected by editors.' },
     ],
   });
-  b.fact('contract-yjs-sync', 'CONTRACT-YJS-SYNC', ['backend', 'web', 'mobile', 'qa', 'ops']);
+  b.fact('contract-yjs-sync', 'CONTRACT-YJS-SYNC', ['backend', 'web', 'mobile', 'qa', 'ops'], {
+    question: 'What does the document sync websocket carry?',
+    expect: ['Yjs'],
+  });
   x.dv('collab-req', 'Added suggestion mode and removed remote cursors from mobile.', 'Suggestion mode COL-09 to COL-11; mobile without remote cursors',
     'Suggestion mode: COL-09 a commenter or editor switches to suggesting and every insertion or deletion becomes a suggestion with author and time; COL-10 an editor accepts or rejects one suggestion or all of them; COL-11 two suggestions on the same text are shown side by side and accepting one rejects the other. Mobile shows who is in the document but no remote cursors or selections, and can accept or reject suggestions.',
   );
@@ -1229,7 +1296,10 @@ function cycleCollaboration(x: Ctx): void {
   x.rev('collab-ux', false, 'Every @mention sends an email at once: in the usability test one brainstorm with 40 mentions sent the same person 11 emails in five minutes. Batch them. Also three of the twelve presence colours (yellow, lime, cyan) fail contrast on white.', [
     'Mention and reply emails are batched into one digest per person every 10 minutes, at most one email per document per digest; in-app notifications stay immediate (CONV-MENTION-DIGEST).',
   ]);
-  b.fact('conv-mention-digest', 'CONV-MENTION-DIGEST', ['backend', 'design', 'web', 'mobile']);
+  b.fact('conv-mention-digest', 'CONV-MENTION-DIGEST', ['backend', 'design', 'web', 'mobile'], {
+    question: 'How are mention and reply emails sent out?',
+    expect: ['digest', '10 minutes'],
+  });
   x.tick('collab-ux', 'collab-mobile', 'collab-tests', 'collab-web');
   x.dv('collab-ux', 'Added suggestions, the email digest and fixed the presence colours.', 'Suggestion style, notification digest, accessible presence colours',
     'Suggestions: insertions are underlined in the author\'s presence colour, deletions struck through, and hovering shows the author, the time and Accept or Reject; a suggesting toggle sits next to the share button. Emails for mentions and replies go out as a digest every 10 minutes. Yellow, lime and cyan are replaced by amber-700, green-700 and teal-700, so all twelve colours pass WCAG 2.2 AA for labels.',
@@ -1252,7 +1322,10 @@ function cycleCollaboration(x: Ctx): void {
   x.rev('collab-sync', false, 'When I closed my laptop lid, I stayed in the presence list of the document for two hours, and so did everyone whose browser crashed. Presence needs an expiry that does not depend on a clean disconnect.', [
     'Presence entries expire 30 seconds after the last heartbeat; clients send a heartbeat every 10 seconds while the document is visible, and the server removes silent entries without waiting for a close (CONV-PRESENCE-TTL).',
   ]);
-  b.fact('conv-presence-ttl', 'CONV-PRESENCE-TTL', ['backend', 'web', 'mobile']);
+  b.fact('conv-presence-ttl', 'CONV-PRESENCE-TTL', ['backend', 'web', 'mobile'], {
+    question: 'After how long does a presence entry expire without a heartbeat?',
+    expect: ['30 seconds'],
+  });
   x.tick('collab-sync', 'collab-web', 'collab-req', 'collab-mobile');
   x.status('Halfway through 3.3. Short status from each of you, please, and whether the scope still fits in six weeks.', ['collab-req', 'collab-ux', 'collab-sync', 'collab-web', 'collab-mobile', 'collab-infra', 'collab-tests']);
   b.replan({
@@ -1293,7 +1366,10 @@ function cycleCollaboration(x: Ctx): void {
       ['collab-infra'],
     ),
   ]);
-  b.fact('fail-sticky-sessions', 'FAIL-STICKY-SESSIONS', ['ops', 'backend', 'qa']);
+  b.fact('fail-sticky-sessions', 'FAIL-STICKY-SESSIONS', ['ops', 'backend', 'qa'], {
+    question: 'Which routing approach for keeping a document on one sync server was tried and failed?',
+    expect: ['sticky sessions', 'cookie'],
+  });
   x.tick('collab-infra', 'collab-docs', 'collab-ux', 'collab-web');
   x.dv('collab-web', 'First version of co-editing and comments in the web editor.', 'Yjs editor binding, cursors, comments, mentions, suggestions, share dialog',
     'Editor: save-on-blur is gone; the ProseMirror editor is bound to a Yjs document and synced over the document websocket, with pending updates resent after a reconnect and SESSION_EXPIRED handled by refreshing the token and reconnecting. Undo only undoes the user\'s own changes.',
@@ -1535,7 +1611,10 @@ function cycleOffline(x: Ctx): void {
   b.human(
     'Change of requirements after the site visits (CHANGE-OFFLINE-EDITING): reading is not enough. The field engineers fill in inspection checklists and site reports at the client, with no signal, and today they do it on paper and type it up at night. In 3.4 people must be able to edit pinned documents offline, including checklists and comments, and everything has to merge when they come back online. Please replan around offline editing rather than read-only offline.',
   );
-  b.fact('change-offline-editing', 'CHANGE-OFFLINE-EDITING', ['*']);
+  b.fact('change-offline-editing', 'CHANGE-OFFLINE-EDITING', ['*'], {
+    question: 'What offline capability must 3.4 provide? Give only the current value.',
+    expect: ['offline editing', 'edit pinned documents offline'],
+  });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
       w.id === 'off-req'
@@ -1554,7 +1633,10 @@ function cycleOffline(x: Ctx): void {
       { id: 'c-off-resync-mobile', from: 'off-sync', to: 'off-mobile', spec: 'The same resync handshake, batches and REJECTED_OFFLINE_EDITS message as the web app; the apps send their batches only after the state vector exchange has finished.' },
     ],
   });
-  b.fact('contract-state-vector-resync', 'CONTRACT-STATE-VECTOR-RESYNC', ['backend', 'web', 'mobile', 'qa']);
+  b.fact('contract-state-vector-resync', 'CONTRACT-STATE-VECTOR-RESYNC', ['backend', 'web', 'mobile', 'qa'], {
+    question: 'What does the client send first when it reconnects after offline editing?',
+    expect: ['state vector'],
+  });
   x.dv('off-req', 'Added the offline editing stories after the owner\'s change, including what happens when someone loses access or their session while away.', 'Offline editing OFF-07 to OFF-10; losing access while offline',
     'Offline editing: OFF-07 edit text and tick checklist items in a pinned document without a connection; OFF-08 add comments and suggestions offline; OFF-09 on reconnect every local change is sent and merged without asking, and the person sees "All changes synced". Two people ticking the same checklist offline end with the same ticks on both devices.',
     'Losing access while offline: OFF-10 if the person\'s role was reduced to commenter, their offline edits arrive as suggestions; if the workspace became read_only, their edits are kept on the device as a private copy they can export; if they were removed, the device deletes the documents on reconnect. After more than 30 days offline the person signs in again and nothing typed is lost.',
@@ -1562,7 +1644,10 @@ function cycleOffline(x: Ctx): void {
   x.rev('off-req', false, 'The editing stories are right, but storage is unbounded: a folder pin on a 3,000-document folder would fill a phone. Put a hard limit per device in the stories, and say what happens when it is reached.', [
     'Offline storage is capped per device at the plan\'s offlineDocs count and at most 200 MB; when a pin would exceed either cap the client says so before pinning, and folder pins stop adding documents at the cap (CONV-OFFLINE-PIN-LIMIT).',
   ]);
-  b.fact('conv-offline-pin-limit', 'CONV-OFFLINE-PIN-LIMIT', ['mobile', 'web', 'design', 'qa', 'analyst']);
+  b.fact('conv-offline-pin-limit', 'CONV-OFFLINE-PIN-LIMIT', ['mobile', 'web', 'design', 'qa', 'analyst'], {
+    question: 'What caps offline storage per device?',
+    expect: ['offlineDocs', '200 MB'],
+  });
   x.tick('off-req', 'off-sync', 'off-mobile');
   x.start('off-mobile', 'Starting the offline apps with an encrypted SQLite store for pinned documents.', 'off-mobile: SQLCipher store of snapshots + local updates; fetch on launch and push; edit offline; wipe rules.', 'c-off-resync-mobile');
   x.start('off-tests', 'Starting the 3.4 test plan with device profiles that can cut the network on command.', 'off-tests: Pixel 4a, iPhone SE, Windows/Edge, MacBook/Chrome; offline toggles; server test clock for long absences.', 'c-off-req-tests');
@@ -1580,7 +1665,10 @@ function cycleOffline(x: Ctx): void {
       ['off-web'],
     ),
   ]);
-  b.fact('fail-localstorage-quota', 'FAIL-LOCALSTORAGE-QUOTA', ['web', 'qa', 'ops']);
+  b.fact('fail-localstorage-quota', 'FAIL-LOCALSTORAGE-QUOTA', ['web', 'qa', 'ops'], {
+    question: 'Where did the first prototype keep pinned documents, which failed?',
+    expect: ['localStorage'],
+  });
   x.tick('off-web', 'off-mobile', 'off-ux', 'off-req');
   x.qa({
     from: 'mobile', ws: 'off-mobile', to: 'backend', toWs: 'off-sync',
@@ -1596,7 +1684,10 @@ function cycleOffline(x: Ctx): void {
   x.rev('off-ux', false, 'The designs show offline and online, but not what matters most to the engineers: whether their own changes are safe. In the test two people thought their checklist was lost because nothing said it was waiting to sync. Every document needs a visible state.', [
     'Every document shows its sync state wherever it appears (lists, editor header, pinned list): synced, saved on this device, waiting to sync with the number of changes, or needs attention; the state is never shown by colour alone (CONV-SYNC-STATE-VISIBLE).',
   ]);
-  b.fact('conv-sync-state-visible', 'CONV-SYNC-STATE-VISIBLE', ['design', 'web', 'mobile', 'qa']);
+  b.fact('conv-sync-state-visible', 'CONV-SYNC-STATE-VISIBLE', ['design', 'web', 'mobile', 'qa'], {
+    question: 'What must every document show wherever it appears?',
+    expect: ['sync state'],
+  });
   x.tick('off-ux', 'off-web', 'off-desktop', 'off-sync', 'off-mobile');
   x.status('Two weeks into 3.4. Status from each of you, please, and say whether your estimate still holds.', ['off-req', 'off-ux', 'off-sync', 'off-web', 'off-desktop', 'off-mobile', 'off-sec', 'off-tests']);
 
@@ -1604,7 +1695,10 @@ function cycleOffline(x: Ctx): void {
   b.human(
     'One more change for 3.4 (CHANGE-PWA-NOT-DESKTOP): we drop the Electron desktop app. Signing, notarising and auto-updating it for macOS and Windows would cost us a person for every release, and the field teams said an installable web app from Chrome or Edge is fine on their laptops. Please fold what the desktop app was meant to do into the web app as an installable web app with offline support.',
   );
-  b.fact('change-pwa-not-desktop', 'CHANGE-PWA-NOT-DESKTOP', ['web', 'design', 'qa', 'analyst', 'ops']);
+  b.fact('change-pwa-not-desktop', 'CHANGE-PWA-NOT-DESKTOP', ['web', 'design', 'qa', 'analyst', 'ops'], {
+    question: 'How are field teams served on their laptops now? Give only the current value.',
+    expect: ['installable web app'],
+  });
   b.replan({
     workstreams: b.currentPlan.workstreams
       .filter(w => w.id !== 'off-desktop')
@@ -1667,7 +1761,10 @@ function cycleOffline(x: Ctx): void {
       ['off-mobile'],
     ),
   ]);
-  b.fact('fail-ios-background-fetch', 'FAIL-IOS-BACKGROUND-FETCH', ['mobile', 'backend', 'qa']);
+  b.fact('fail-ios-background-fetch', 'FAIL-IOS-BACKGROUND-FETCH', ['mobile', 'backend', 'qa'], {
+    question: 'Which iOS mechanism for refreshing pinned documents overnight failed?',
+    expect: ['background app refresh', 'BGAppRefreshTask'],
+  });
   x.tick('off-mobile', 'off-sec', 'off-req');
   x.qa({
     from: 'qa', ws: 'off-tests', to: 'backend', toWs: 'off-sync',
@@ -1740,7 +1837,10 @@ function cycleExport(x: Ctx): void {
       { id: 'c-exp-ux-web', from: 'exp-ux', to: 'exp-web', spec: 'Figma frames for the export dialog, progress, the download toast and the finished-export email, using UI kit names.' },
     ],
   });
-  b.fact('contract-export-jobs', 'CONTRACT-EXPORT-JOBS', ['backend', 'web', 'mobile', 'qa', 'ops']);
+  b.fact('contract-export-jobs', 'CONTRACT-EXPORT-JOBS', ['backend', 'web', 'mobile', 'qa', 'ops'], {
+    question: 'What does POST /v2/exports return, and how long does the download URL stay valid?',
+    expect: ['202', '24 hours'],
+  });
 
   x.tasks('exp-req', [
     'the 212 support requests for exports from the last six months, grouped by format: 61% PDF for clients, 22% Markdown for wikis, 9% HTML for intranets and the rest asking for Word',
@@ -1896,7 +1996,10 @@ function cycleExport(x: Ctx): void {
       ['exp-engine'],
     ),
   ]);
-  b.fact('fail-pdf-in-api', 'FAIL-PDF-IN-API', ['backend', 'ops', 'qa']);
+  b.fact('fail-pdf-in-api', 'FAIL-PDF-IN-API', ['backend', 'ops', 'qa'], {
+    question: 'Where was PDF rendering first done, which failed?',
+    expect: ['headless Chromium', 'API process'],
+  });
   x.tick('exp-engine', 'exp-workers', 'exp-ux', 'exp-web');
   x.qa({
     from: 'web', ws: 'exp-web', to: 'backend', toWs: 'exp-engine',
@@ -1911,7 +2014,10 @@ function cycleExport(x: Ctx): void {
   b.human(
     'Change of plan for 3.5 (CHANGE-DOCX-EXPORT): the law firms and two of our agency customers say the most important format is Word, not an HTML archive. Their clients review contracts in Word, so comments must arrive as Word comments and suggestions as tracked changes. We drop the HTML archive from 3.5 and add DOCX export instead. Nobody has asked for HTML since the interviews.',
   );
-  b.fact('change-docx-export', 'CHANGE-DOCX-EXPORT', ['*']);
+  b.fact('change-docx-export', 'CHANGE-DOCX-EXPORT', ['*'], {
+    question: 'Which document format is the most important export format in 3.5? Give only the current value.',
+    expect: ['DOCX', 'Word'],
+  });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
       w.id === 'exp-req'
@@ -1942,7 +2048,10 @@ function cycleExport(x: Ctx): void {
   x.rev('exp-engine', false, 'The outputs look good today, but nothing stops them from changing silently: I changed the table CSS in a branch and three exports broke without a single failing test. Every format needs expected outputs that a change has to match or update on purpose.', [
     'Every export format has golden files for the 40 reference documents; CI renders them on every change and fails on any difference, and an intended change updates the golden file in the same pull request with the visual diff attached (CONV-GOLDEN-FILES).',
   ]);
-  b.fact('conv-golden-files', 'CONV-GOLDEN-FILES', ['backend', 'qa', 'ops']);
+  b.fact('conv-golden-files', 'CONV-GOLDEN-FILES', ['backend', 'qa', 'ops'], {
+    question: 'What must CI compare every export format against?',
+    expect: ['golden files'],
+  });
   x.tick('exp-engine', 'exp-web', 'exp-workers', 'exp-req');
   x.status('Two weeks into 3.5. Status from each of you, please, and say whether the Word work moved your dates.', ['exp-req', 'exp-ux', 'exp-engine', 'exp-web', 'exp-mobile', 'exp-workers', 'exp-tests']);
   x.tick('exp-engine', 'exp-mobile', 'exp-tests');
@@ -1953,7 +2062,10 @@ function cycleExport(x: Ctx): void {
       ['exp-engine'],
     ),
   ]);
-  b.fact('fail-pandoc-docx', 'FAIL-PANDOC-DOCX', ['backend', 'qa']);
+  b.fact('fail-pandoc-docx', 'FAIL-PANDOC-DOCX', ['backend', 'qa'], {
+    question: 'Which tool was first used to produce DOCX files, and failed?',
+    expect: ['pandoc'],
+  });
   x.tick('exp-engine', 'exp-ux', 'exp-req', 'exp-web');
   x.qa({
     from: 'mobile', ws: 'exp-mobile', to: 'backend', toWs: 'exp-engine',
@@ -1973,7 +2085,10 @@ function cycleExport(x: Ctx): void {
   b.human(
     'One more change for 3.5 (CHANGE-WORKSPACE-EXPORT): two enterprise customers have it in their contract renewals that an admin must be able to export the whole workspace at any time: every document, attachment and comment, for their own archive. Please add a workspace export for admins, on the Business plan only, to this release.',
   );
-  b.fact('change-workspace-export', 'CHANGE-WORKSPACE-EXPORT', ['backend', 'web', 'analyst', 'qa', 'ops']);
+  b.fact('change-workspace-export', 'CHANGE-WORKSPACE-EXPORT', ['backend', 'web', 'analyst', 'qa', 'ops'], {
+    question: 'Which plan gets the whole-workspace export for admins? Give only the current value.',
+    expect: ['Business'],
+  });
   b.replan({
     workstreams: [
       ...b.currentPlan.workstreams.map(w =>
@@ -2021,7 +2136,10 @@ function cycleExport(x: Ctx): void {
   x.rev('exp-web', false, 'The file names break things: slashes and colons in titles produce files Windows will not save, and two exports of the same document on different days get the same name. Fix the naming everywhere we produce files, not only on the web.', [
     'Exported files are named with one file name pattern on every platform and in the API: <title as an ASCII-safe slug>-<YYYY-MM-DD in UTC>.<ext>, at most 80 characters before the date, for example q3-plan-draft-2-final-2027-03-04.pdf (CONV-EXPORT-FILENAMES).',
   ]);
-  b.fact('conv-export-filenames', 'CONV-EXPORT-FILENAMES', ['backend', 'web', 'mobile', 'qa']);
+  b.fact('conv-export-filenames', 'CONV-EXPORT-FILENAMES', ['backend', 'web', 'mobile', 'qa'], {
+    question: 'What file name pattern must exported files follow?',
+    expect: ['slug'],
+  });
   x.tick('exp-web', 'exp-mobile', 'exp-engine', 'exp-web');
   x.dv('exp-web', 'Moved file naming to the shared pattern and added the admin workspace export page.', 'ASCII-safe dated file names; workspace export page',
     'File names: downloads use the file name pattern the engine now sets in Content-Disposition, an ASCII-safe slug of the title plus the UTC date, so Windows saves every file and exports from different days differ. Workspace export page for owners and admins: the size estimate, the start button, progress, and for Team workspaces an upgrade note; members never see it.',
@@ -2116,7 +2234,10 @@ function cycleCompliance(x: Ctx): void {
       { id: 'c-comp-ux-admin', from: 'comp-ux', to: 'comp-admin', spec: 'Figma frames for the admin console and the audit log viewer, using UI kit names; every table works with the keyboard alone.' },
     ],
   });
-  b.fact('contract-audit-events', 'CONTRACT-AUDIT-EVENTS', ['backend', 'web', 'mobile', 'qa', 'ops', 'analyst']);
+  b.fact('contract-audit-events', 'CONTRACT-AUDIT-EVENTS', ['backend', 'web', 'mobile', 'qa', 'ops', 'analyst'], {
+    question: 'How long are audit events kept?',
+    expect: ['400 days'],
+  });
 
   x.tasks('comp-req', [
     'the last 30 enterprise security questionnaires, of which 27 asked for an audit log, 22 for session policies and 19 for a SOC 2 report, and 11 for data residency in the EU',
@@ -2281,7 +2402,11 @@ function cycleCompliance(x: Ctx): void {
   b.human(
     'Change of plan on the audit (CHANGE-SOC2-TYPE2): two of the enterprise renewals will not accept a Type I report; they want SOC 2 Type II. That means a three-month observation window in which every control runs and leaves evidence, and the window has to start the day 3.6 ships. So instead of preparing for a point-in-time audit, every control must be running and producing evidence automatically by release day.',
   );
-  b.fact('change-soc2-type2', 'CHANGE-SOC2-TYPE2', ['*']);
+  b.fact('change-soc2-type2', 'CHANGE-SOC2-TYPE2', ['*'], {
+    question: 'Which SOC 2 report type must we deliver? Give only the current value.',
+    expect: ['Type II'],
+    reject: ['Type I'],
+  });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
       w.id === 'comp-soc2'
@@ -2313,7 +2438,10 @@ function cycleCompliance(x: Ctx): void {
   x.rev('comp-soc2', false, 'The matrix lists "quarterly review of access" without saying what is reviewed, by whom, and what happens to access nobody can justify. The auditor will sample exactly this control first, and our 3.1 admin and SAML rules depend on it.', [
     'Every quarter the owner of each system reviews who has production, admin-tool and Stripe access; access nobody can justify is removed within 5 working days, and the review is recorded with the reviewer, the date and the removals (CONV-ACCESS-REVIEW).',
   ]);
-  b.fact('conv-access-review', 'CONV-ACCESS-REVIEW', ['ops', 'analyst', 'backend']);
+  b.fact('conv-access-review', 'CONV-ACCESS-REVIEW', ['ops', 'analyst', 'backend'], {
+    question: 'How often is production access reviewed, and within how many working days is access nobody can justify removed?',
+    expect: ['every quarter', '5 working days'],
+  });
   x.tick('comp-soc2', 'comp-audit', 'comp-ux', 'comp-infra', 'comp-req');
   x.start('comp-admin', 'Starting the admin console in the web app against the audit and policy endpoints.', 'comp-admin: console shell for owners/admins; audit table with server filters; policy pages; retention; overview.', 'c-comp-audit-admin');
   x.start('comp-mobile', 'Starting the admin policies in the apps and managed app configuration.', 'comp-mobile: policies endpoint + push; session end by policy; two-factor required; Intune/Jamf config; remote sign-out.', 'c-comp-audit-mobile');
@@ -2339,7 +2467,10 @@ function cycleCompliance(x: Ctx): void {
   b.human(
     'Change of requirements (CHANGE-EU-RESIDENCY): our German and Dutch enterprise customers, and 11 of the last 30 questionnaires, require that their data stays in the EU. From 3.6 every EU workspace is stored in eu-central-1 (Frankfurt): documents, attachments, sync servers, search, exports, backups and logs, no copies elsewhere. Existing EU workspaces move there without downtime. This replaces our single-region setup in us-east-1 for those customers.',
   );
-  b.fact('change-eu-residency', 'CHANGE-EU-RESIDENCY', ['*']);
+  b.fact('change-eu-residency', 'CHANGE-EU-RESIDENCY', ['*'], {
+    question: 'In which region must EU workspaces be stored? Give only the current value.',
+    expect: ['eu-central-1', 'Frankfurt'],
+  });
   b.replan({
     workstreams: [...b.currentPlan.workstreams, COMP_RESIDENCY].map(w =>
       w.id === 'comp-tests' ? { ...w, dependsOn: ['comp-admin', 'comp-mobile', 'comp-audit', 'comp-residency'] } : w,
@@ -2396,7 +2527,10 @@ function cycleCompliance(x: Ctx): void {
       ['comp-residency'],
     ),
   ]);
-  b.fact('fail-us-read-replica', 'FAIL-US-READ-REPLICA', ['ops', 'backend', 'analyst']);
+  b.fact('fail-us-read-replica', 'FAIL-US-READ-REPLICA', ['ops', 'backend', 'analyst'], {
+    question: 'Which placement of the reporting replica broke the residency check?',
+    expect: ['us-east-1'],
+  });
   x.tick('comp-residency', 'comp-admin', 'comp-ux', 'comp-audit', 'comp-infra', 'comp-tests');
   x.dv('comp-infra', 'First version of the infrastructure controls, each leaving evidence for the observation window.', 'Production access, central logs, restores, vulnerability deadlines, change management',
     'Access and logging: production access only through short-lived roles from the identity provider with hardware keys; no long-lived access keys remain. AWS API calls, database access and admin tool use go to a separate log account engineers cannot change. Every data store has backups and a monthly restore test that writes its result to the evidence bucket.',
@@ -2405,7 +2539,10 @@ function cycleCompliance(x: Ctx): void {
   x.rev('comp-infra', false, 'Close, but an auditor will pick a deploy and ask why it was made and who approved it. A reviewed pull request says what changed, not why or who signed it off; emergency fixes at night skip review today.', [
     'Every production change, deploys and infrastructure changes alike, links a change ticket that says why, has an approver other than the author and records the result; an emergency change gets its ticket and approval within one working day (CONV-CHANGE-TICKET).',
   ]);
-  b.fact('conv-change-ticket', 'CONV-CHANGE-TICKET', ['ops', 'backend', 'web', 'mobile']);
+  b.fact('conv-change-ticket', 'CONV-CHANGE-TICKET', ['ops', 'backend', 'web', 'mobile'], {
+    question: 'What must every production change link?',
+    expect: ['change ticket'],
+  });
   x.tick('comp-infra', 'comp-tests', 'comp-req', 'comp-mobile');
   x.qa({
     from: 'mobile', ws: 'comp-mobile', to: 'ops', toWs: 'comp-infra',

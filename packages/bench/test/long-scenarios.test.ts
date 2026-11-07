@@ -8,6 +8,7 @@ import { createPolicy } from '../src/policies/index.js';
 import { runScenario } from '../src/runner.js';
 import { checkCoverage, loadScenario } from '../src/scenario.js';
 import { isDeliverableArgs } from '../src/text.js';
+import { probeProblems } from './probe-expectations.js';
 import type { Group, Scenario } from '../src/types.js';
 
 const GROUPS: Group[] = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -116,4 +117,12 @@ describe.each(CASES)('$id', ({ id, generate, bots, minWs, maxWs, delivered }) =>
       for (const [fid, n] of opportunities) expect({ g, fid, n: n > 0 }).toEqual({ g, fid, n: true });
     }
   }, 60_000);
+});
+
+describe('fact probes on the long and xlong scenarios', () => {
+  test.each(['long-app', 'long-event', 'xlong-product'])('%s: every fact has a probe whose expect is in its step, is not the marker and is not in the question, and whose reject is gone from later steps', id => {
+    const s = loadScenario(file(id));
+    expect(probeProblems(s)).toEqual([]);
+    expect((s.facts ?? []).length).toBeGreaterThan(0);
+  });
 });

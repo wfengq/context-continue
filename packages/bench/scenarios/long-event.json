@@ -175,7 +175,14 @@
       "audience": [
         "marketing",
         "partners"
-      ]
+      ],
+      "probe": {
+        "question": "What currency and tax treatment must every published ticket and sponsor price follow?",
+        "expect": [
+          "including 21%",
+          "21% Dutch VAT"
+        ]
+      }
     },
     {
       "id": "conv-step-free-access",
@@ -185,7 +192,14 @@
         "venue",
         "program",
         "production"
-      ]
+      ],
+      "probe": {
+        "question": "What must be true of every space attendees use, and what extra room must the event provide?",
+        "expect": [
+          "step-free",
+          "quiet room"
+        ]
+      }
     },
     {
       "id": "change-capacity-1000",
@@ -193,7 +207,17 @@
       "step": 22,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "How many attendees and how many talk tracks are we planning for now? Give only the current value.",
+        "expect": [
+          "1,000",
+          "three talk tracks"
+        ],
+        "reject": [
+          "600 people"
+        ]
+      }
     },
     {
       "id": "contract-room-capacities",
@@ -203,7 +227,15 @@
         "production",
         "program",
         "venue"
-      ]
+      ],
+      "probe": {
+        "question": "What are the seat capacities of the Main hall, the Harbour room and the Quay room?",
+        "expect": [
+          "720",
+          "180",
+          "150"
+        ]
+      }
     },
     {
       "id": "fail-open-ticket-link",
@@ -212,7 +244,14 @@
       "audience": [
         "marketing",
         "venue"
-      ]
+      ],
+      "probe": {
+        "question": "Which way of releasing the second batch of tickets failed against resale bots?",
+        "expect": [
+          "public link",
+          "per-order limit"
+        ]
+      }
     },
     {
       "id": "contract-badge-csv",
@@ -221,7 +260,14 @@
       "audience": [
         "venue",
         "marketing"
-      ]
+      ],
+      "probe": {
+        "question": "Which columns does the badge export for the venue contain?",
+        "expect": [
+          "ticket_id",
+          "access_needs"
+        ]
+      }
     },
     {
       "id": "conv-signed-confirmation",
@@ -230,7 +276,13 @@
       "audience": [
         "program",
         "marketing"
-      ]
+      ],
+      "probe": {
+        "question": "When may a speaker be named publicly?",
+        "expect": [
+          "speaker agreement"
+        ]
+      }
     },
     {
       "id": "conv-no-paid-talks",
@@ -239,7 +291,14 @@
       "audience": [
         "partners",
         "program"
-      ]
+      ],
+      "probe": {
+        "question": "Can sponsors buy a talk, and where does sponsored content go?",
+        "expect": [
+          "Quay room",
+          "sponsor session"
+        ]
+      }
     },
     {
       "id": "conv-sponsor-opt-in-only",
@@ -248,7 +307,14 @@
       "audience": [
         "partners",
         "marketing"
-      ]
+      ],
+      "probe": {
+        "question": "Under what condition does attendee data reach a sponsor?",
+        "expect": [
+          "opts in",
+          "badge scan"
+        ]
+      }
     },
     {
       "id": "conv-times-24h",
@@ -259,7 +325,14 @@
         "marketing",
         "production",
         "venue"
-      ]
+      ],
+      "probe": {
+        "question": "What time format must every published time use?",
+        "expect": [
+          "24-hour",
+          "HH:MM"
+        ]
+      }
     },
     {
       "id": "fail-venue-wifi-stream",
@@ -268,7 +341,13 @@
       "audience": [
         "production",
         "venue"
-      ]
+      ],
+      "probe": {
+        "question": "Which network setup for streaming the main hall failed during a busy event?",
+        "expect": [
+          "Wi-Fi"
+        ]
+      }
     },
     {
       "id": "conv-human-captions",
@@ -277,7 +356,13 @@
       "audience": [
         "production",
         "program"
-      ]
+      ],
+      "probe": {
+        "question": "Who must produce the live captions for talks on a screen or a stream?",
+        "expect": [
+          "human captioner"
+        ]
+      }
     },
     {
       "id": "fail-auto-captions",
@@ -286,7 +371,14 @@
       "audience": [
         "production",
         "program"
-      ]
+      ],
+      "probe": {
+        "question": "Which captioning approach was measured on last year's talks and found wanting?",
+        "expect": [
+          "automatic speech recognition",
+          "automatic captions"
+        ]
+      }
     },
     {
       "id": "change-workshop-day",
@@ -294,7 +386,14 @@
       "step": 72,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "What is 8 September now, and what does a workshop cost? Give only the current value.",
+        "expect": [
+          "workshop day",
+          "EUR 145"
+        ]
+      }
     },
     {
       "id": "contract-workshop-seats-40",
@@ -303,7 +402,14 @@
       "audience": [
         "program",
         "marketing"
-      ]
+      ],
+      "probe": {
+        "question": "How many seats does each workshop have, and how is it sold?",
+        "expect": [
+          "40 seats",
+          "add-on"
+        ]
+      }
     },
     {
       "id": "conv-setup-guide-7d",
@@ -312,7 +418,13 @@
       "audience": [
         "program",
         "marketing"
-      ]
+      ],
+      "probe": {
+        "question": "How far ahead of a workshop must its setup guide be published?",
+        "expect": [
+          "7 days"
+        ]
+      }
     },
     {
       "id": "conv-run-sheet-owner",
@@ -322,7 +434,14 @@
         "venue",
         "production",
         "program"
-      ]
+      ],
+      "probe": {
+        "question": "What must every run-sheet line name?",
+        "expect": [
+          "one owner",
+          "fallback person"
+        ]
+      }
     },
     {
       "id": "change-no-livestream",
@@ -330,7 +449,14 @@
       "step": 98,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "How do people who are not in the rooms get the talks now? Give only the current value.",
+        "expect": [
+          "record all three rooms",
+          "within 7 days"
+        ]
+      }
     },
     {
       "id": "contract-video-7d",
@@ -339,7 +465,14 @@
       "audience": [
         "production",
         "marketing"
-      ]
+      ],
+      "probe": {
+        "question": "How soon must a talk video be published, and how is it titled?",
+        "expect": [
+          "within 7 days",
+          "S-nn Speaker"
+        ]
+      }
     },
     {
       "id": "conv-recording-release",
@@ -348,7 +481,13 @@
       "audience": [
         "program",
         "production"
-      ]
+      ],
+      "probe": {
+        "question": "What must a speaker sign before their talk may be recorded or published?",
+        "expect": [
+          "recording release"
+        ]
+      }
     },
     {
       "id": "change-green-event",
@@ -356,7 +495,14 @@
       "step": 126,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "How must speakers who travel a short distance arrive, and what is the default catering? Give only the current value.",
+        "expect": [
+          "train",
+          "vegetarian"
+        ]
+      }
     },
     {
       "id": "contract-travel-log",
@@ -365,7 +511,14 @@
       "audience": [
         "program",
         "venue"
-      ]
+      ],
+      "probe": {
+        "question": "Which details must be logged per speaker trip?",
+        "expect": [
+          "travel mode",
+          "booking reference"
+        ]
+      }
     }
   ],
   "steps": [

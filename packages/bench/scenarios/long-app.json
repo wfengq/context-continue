@@ -219,7 +219,13 @@
       "audience": [
         "analyst",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What format must acceptance criteria be written in?",
+        "expect": [
+          "Given/When/Then"
+        ]
+      }
     },
     {
       "id": "conv-cursor-pagination",
@@ -229,7 +235,13 @@
         "backend",
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "What pagination style must list endpoints use?",
+        "expect": [
+          "cursor"
+        ]
+      }
     },
     {
       "id": "conv-iso8601-utc",
@@ -240,7 +252,14 @@
         "web",
         "mobile",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "What time format must every timestamp in the API and in events use?",
+        "expect": [
+          "ISO 8601",
+          "UTC"
+        ]
+      }
     },
     {
       "id": "conv-wcag-aa-contrast",
@@ -251,7 +270,14 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which accessibility standard must contrast meet, and what is the minimum touch target size?",
+        "expect": [
+          "44x44",
+          "WCAG 2.2 AA"
+        ]
+      }
     },
     {
       "id": "conv-no-pii-in-events",
@@ -261,7 +287,13 @@
         "analyst",
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "How are users identified in analytics events?",
+        "expect": [
+          "salted hash"
+        ]
+      }
     },
     {
       "id": "contract-error-envelope",
@@ -270,7 +302,13 @@
       "audience": [
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "Which fields must every API error body carry?",
+        "expect": [
+          "requestId"
+        ]
+      }
     },
     {
       "id": "conv-rate-limits-documented",
@@ -279,7 +317,14 @@
       "audience": [
         "ops",
         "backend"
-      ]
+      ],
+      "probe": {
+        "question": "What rate limiting must every public endpoint have?",
+        "expect": [
+          "per IP",
+          "per account"
+        ]
+      }
     },
     {
       "id": "conv-idempotency-key",
@@ -289,7 +334,14 @@
         "backend",
         "mobile",
         "web"
-      ]
+      ],
+      "probe": {
+        "question": "Which request header must every POST accept, and how long does the server keep its values?",
+        "expect": [
+          "Idempotency-Key",
+          "24 hours"
+        ]
+      }
     },
     {
       "id": "change-household-6",
@@ -297,7 +349,17 @@
       "step": 47,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "What is the account model, and how many people can be in it? Give only the current value.",
+        "expect": [
+          "up to 6",
+          "6 members"
+        ],
+        "reject": [
+          "separate accounts"
+        ]
+      }
     },
     {
       "id": "contract-invite-link-72h",
@@ -306,7 +368,14 @@
       "audience": [
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "How long is a household invite link valid, and how many times can it be used?",
+        "expect": [
+          "72 hours",
+          "single-use"
+        ]
+      }
     },
     {
       "id": "fail-websocket-fanout",
@@ -316,7 +385,14 @@
         "backend",
         "mobile",
         "web"
-      ]
+      ],
+      "probe": {
+        "question": "Which approach to live sync of list edits was tried and dropped?",
+        "expect": [
+          "websocket",
+          "websockets"
+        ]
+      }
     },
     {
       "id": "fail-stripe-in-webview",
@@ -326,7 +402,14 @@
         "mobile",
         "web",
         "backend"
-      ]
+      ],
+      "probe": {
+        "question": "Which payment approach got the iOS build rejected in App Review?",
+        "expect": [
+          "Stripe",
+          "webview"
+        ]
+      }
     },
     {
       "id": "change-store-billing",
@@ -337,7 +420,17 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "How is Larder Plus billed now? Give only the current value.",
+        "expect": [
+          "App Store",
+          "Google Play"
+        ],
+        "reject": [
+          "Stripe web checkout"
+        ]
+      }
     },
     {
       "id": "contract-receipt-post",
@@ -346,7 +439,13 @@
       "audience": [
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which endpoint does the app send the raw store receipt to?",
+        "expect": [
+          "/v1/billing/receipts"
+        ]
+      }
     },
     {
       "id": "conv-restore-path",
@@ -356,7 +455,13 @@
         "mobile",
         "backend",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What must every paid feature have so that any household member can get it back on a fresh install?",
+        "expect": [
+          "restore"
+        ]
+      }
     },
     {
       "id": "change-offline-list",
@@ -367,7 +472,13 @@
         "backend",
         "qa",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "What connectivity behaviour must the grocery list support? Give only the current value.",
+        "expect": [
+          "offline"
+        ]
+      }
     },
     {
       "id": "contract-sync-cursor",
@@ -376,7 +487,13 @@
       "audience": [
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "How does a client fetch the edits made to a list after a given point?",
+        "expect": [
+          "changes?cursor="
+        ]
+      }
     },
     {
       "id": "fail-full-list-resync",
@@ -386,7 +503,14 @@
         "mobile",
         "qa",
         "backend"
-      ]
+      ],
+      "probe": {
+        "question": "Which reconnect approach lost edits made offline?",
+        "expect": [
+          "whole list",
+          "overwriting the local copy"
+        ]
+      }
     },
     {
       "id": "conv-delete-wins",
@@ -396,7 +520,14 @@
         "mobile",
         "backend",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "How are sync conflicts resolved?",
+        "expect": [
+          "delete wins",
+          "last writer wins"
+        ]
+      }
     },
     {
       "id": "conv-story-and-build-in-reports",
@@ -405,7 +536,14 @@
       "audience": [
         "qa",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "Which two identifiers must every bug report and test result name?",
+        "expect": [
+          "story id",
+          "build number"
+        ]
+      }
     },
     {
       "id": "change-eu-first",
@@ -413,7 +551,14 @@
       "step": 133,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "Where do we launch first? Give only the current value.",
+        "expect": [
+          "EU",
+          "Germany"
+        ]
+      }
     },
     {
       "id": "contract-export-zip-30d",
@@ -423,7 +568,14 @@
         "ops",
         "web",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "In what form does an account data export arrive, and within how many days?",
+        "expect": [
+          "ZIP",
+          "30 days"
+        ]
+      }
     }
   ],
   "steps": [

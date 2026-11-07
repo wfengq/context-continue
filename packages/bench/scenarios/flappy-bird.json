@@ -130,7 +130,13 @@
         "artist",
         "coder",
         "web"
-      ]
+      ],
+      "probe": {
+        "question": "What hitbox size does collision use for the bird?",
+        "expect": [
+          "12x12"
+        ]
+      }
     },
     {
       "id": "conv-whole-number-scale",
@@ -139,7 +145,13 @@
       "audience": [
         "coder",
         "web"
-      ]
+      ],
+      "probe": {
+        "question": "How must the game scene be scaled to fit the screen?",
+        "expect": [
+          "whole-number"
+        ]
+      }
     },
     {
       "id": "change-portrait-tap",
@@ -149,7 +161,14 @@
         "coder",
         "web",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which screen orientation and input method must the game now support? Give only the current value.",
+        "expect": [
+          "portrait",
+          "tap"
+        ]
+      }
     },
     {
       "id": "contract-loop-api",
@@ -157,7 +176,14 @@
       "step": 11,
       "audience": [
         "web"
-      ]
+      ],
+      "probe": {
+        "question": "Which methods does the gameplay game object expose to the mobile shell? Write them as calls, like name().",
+        "expect": [
+          "pause()",
+          "resume()"
+        ]
+      }
     },
     {
       "id": "fail-smoothed-scaling",
@@ -166,7 +192,14 @@
       "audience": [
         "coder",
         "web"
-      ]
+      ],
+      "probe": {
+        "question": "Which rendering approach was recorded as a failed attempt because it blurs the pixel art?",
+        "expect": [
+          "smoothing on",
+          "float positions"
+        ]
+      }
     }
   ],
   "steps": [

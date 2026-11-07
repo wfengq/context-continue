@@ -223,7 +223,10 @@ export function generateLongApp(): Scenario {
   b.review('requirements', false, 'Good personas and a clear scope, but the stories have no acceptance criteria, so neither QA nor the engineers can tell when a story is done. Add criteria to every story.', [
     'Acceptance criteria are written as Given/When/Then, one per behaviour, under the story id (CONV-GIVEN-WHEN-THEN).',
   ]);
-  b.fact('conv-given-when-then', 'CONV-GIVEN-WHEN-THEN', ['analyst', 'qa']);
+  b.fact('conv-given-when-then', 'CONV-GIVEN-WHEN-THEN', ['analyst', 'qa'], {
+    question: 'What format must acceptance criteria be written in?',
+    expect: ['Given/When/Then'],
+  });
   progress('ops', 'infra', 'the Terraform modules for networking and Postgres', 'the CI pipelines for the API and the web app');
   b.deliver('analyst', 'requirements', {
     reply: 'Added Given/When/Then acceptance criteria to the stories.',
@@ -268,8 +271,14 @@ export function generateLongApp(): Scenario {
     'List endpoints use cursor pagination: cursor and limit parameters, nextCursor in the response, limit at most 100 (CONV-CURSOR-PAGINATION).',
     'Every timestamp in the API and in events is ISO 8601 in UTC with a Z suffix; calendar days are plain YYYY-MM-DD dates (CONV-ISO8601-UTC).',
   ]);
-  b.fact('conv-cursor-pagination', 'CONV-CURSOR-PAGINATION', ['backend', 'web', 'mobile']);
-  b.fact('conv-iso8601-utc', 'CONV-ISO8601-UTC', ['backend', 'web', 'mobile', 'analyst']);
+  b.fact('conv-cursor-pagination', 'CONV-CURSOR-PAGINATION', ['backend', 'web', 'mobile'], {
+    question: 'What pagination style must list endpoints use?',
+    expect: ['cursor'],
+  });
+  b.fact('conv-iso8601-utc', 'CONV-ISO8601-UTC', ['backend', 'web', 'mobile', 'analyst'], {
+    question: 'What time format must every timestamp in the API and in events use?',
+    expect: ['ISO 8601', 'UTC'],
+  });
   b.work('web', 'web', 'Reading the draft API while the design is in progress, so the client generator is set up early.', [
     op.board('api'),
     op.notes('web: React 19 + Vite; generate the client from the OpenAPI document once it passes review.'),
@@ -299,7 +308,10 @@ export function generateLongApp(): Scenario {
   b.review('ux', false, 'The flows are good, but ticked items are light grey on white (about 2.4:1) and several icon buttons are 32 points. People will use this in bright supermarkets. Fix the contrast and the target sizes.', [
     'Text and icons meet WCAG 2.2 AA contrast (4.5:1 for text, 3:1 for icons) and touch targets are at least 44 x 44 points (CONV-WCAG-AA-CONTRAST).',
   ]);
-  b.fact('conv-wcag-aa-contrast', 'CONV-WCAG-AA-CONTRAST', ['design', 'web', 'mobile', 'qa']);
+  b.fact('conv-wcag-aa-contrast', 'CONV-WCAG-AA-CONTRAST', ['design', 'web', 'mobile', 'qa'], {
+    question: 'Which accessibility standard must contrast meet, and what is the minimum touch target size?',
+    expect: ['44x44', 'WCAG 2.2 AA'],
+  });
   b.work('mobile', 'mobile', 'Starting the mobile app: project setup, navigation and the generated API client.', [
     op.board('api'),
     op.notes('mobile: React Native 0.80, Expo modules, client generated from the OpenAPI document; share sheet extension for recipe import.'),
@@ -323,7 +335,10 @@ export function generateLongApp(): Scenario {
   b.review('analytics', false, 'We cannot send email addresses and household names to the analytics vendor; that is personal data we do not need for these dashboards.', [
     'Analytics events never carry personal data: no email, names or free text; users are identified only by a salted hash of the account id (CONV-NO-PII-IN-EVENTS).',
   ]);
-  b.fact('conv-no-pii-in-events', 'CONV-NO-PII-IN-EVENTS', ['analyst', 'web', 'mobile']);
+  b.fact('conv-no-pii-in-events', 'CONV-NO-PII-IN-EVENTS', ['analyst', 'web', 'mobile'], {
+    question: 'How are users identified in analytics events?',
+    expect: ['salted hash'],
+  });
   b.work('ops', 'security', 'Starting the threat model from the approved API.', [
     op.board('api'),
     op.notes('security: STRIDE over auth, import, lists; check token storage on devices; check the import fetcher for SSRF.'),
@@ -348,7 +363,10 @@ export function generateLongApp(): Scenario {
     [],
     ['mobile'],
   );
-  b.fact('contract-error-envelope', 'CONTRACT-ERROR-ENVELOPE', ['web', 'mobile']);
+  b.fact('contract-error-envelope', 'CONTRACT-ERROR-ENVELOPE', ['web', 'mobile'], {
+    question: 'Which fields must every API error body carry?',
+    expect: ['requestId'],
+  });
   b.human('@design I tried the onboarding prototype with my partner and it felt long: three screens before we saw anything useful. Can we get people to a first plan faster?', ['design']);
   b.deliver('design', 'ux', {
     reply: 'Shortened onboarding to one screen and tested it with six people.',
@@ -371,7 +389,10 @@ export function generateLongApp(): Scenario {
   b.review('security', false, 'The recipe importer fetches any URL a user gives it, and nothing limits how often someone can request login links. Both need concrete fixes before we go further.', [
     'Every public endpoint is rate limited per IP and per account, and limits are documented in the API (CONV-RATE-LIMITS-DOCUMENTED).',
   ]);
-  b.fact('conv-rate-limits-documented', 'CONV-RATE-LIMITS-DOCUMENTED', ['ops', 'backend']);
+  b.fact('conv-rate-limits-documented', 'CONV-RATE-LIMITS-DOCUMENTED', ['ops', 'backend'], {
+    question: 'What rate limiting must every public endpoint have?',
+    expect: ['per IP', 'per account'],
+  });
   b.deliver('backend', 'backend', {
     reply: 'First version of the backend services.',
     summary: 'Accounts, plans, recipes, lists and import on Postgres; tests and load numbers',
@@ -383,7 +404,10 @@ export function generateLongApp(): Scenario {
   b.review('backend', false, 'Mobile retries on flaky networks will create duplicate list items and duplicate imports: POST is not idempotent. Fix it before clients depend on it.', [
     'Every POST accepts an Idempotency-Key header; the server keeps keys for 24 hours and a replay returns the first response (CONV-IDEMPOTENCY-KEY).',
   ]);
-  b.fact('conv-idempotency-key', 'CONV-IDEMPOTENCY-KEY', ['backend', 'mobile', 'web']);
+  b.fact('conv-idempotency-key', 'CONV-IDEMPOTENCY-KEY', ['backend', 'mobile', 'web'], {
+    question: 'Which request header must every POST accept, and how long does the server keep its values?',
+    expect: ['Idempotency-Key', '24 hours'],
+  });
   b.ask('mobile', 'mobile', 'design', {
     reply: 'Building the planner for tablets as well.',
     question: 'do you want a separate tablet layout for the planner, or should the phone layout just stretch?',
@@ -404,7 +428,11 @@ export function generateLongApp(): Scenario {
   b.human(
     'Change of plan after the beta interviews (CHANGE-HOUSEHOLD-6): people do not want separate accounts, they want a household. One household of up to 6 members shares the meal plan and the grocery list, and everyone sees who added or ticked an item. This replaces the single-user model from the requirements.',
   );
-  b.fact('change-household-6', 'CHANGE-HOUSEHOLD-6', ['*']);
+  b.fact('change-household-6', 'CHANGE-HOUSEHOLD-6', ['*'], {
+    question: 'What is the account model, and how many people can be in it? Give only the current value.',
+    expect: ['up to 6', '6 members'],
+    reject: ['separate accounts'],
+  });
   b.replan({
     workstreams: [
       { ...W.requirements, brief: 'Write the product requirements for Larder v1: personas, numbered user stories with acceptance criteria, scope and non-goals, including households of up to 6 members.' },
@@ -439,7 +467,10 @@ export function generateLongApp(): Scenario {
       },
     ],
   });
-  b.fact('contract-invite-link-72h', 'CONTRACT-INVITE-LINK-72H', ['web', 'mobile']);
+  b.fact('contract-invite-link-72h', 'CONTRACT-INVITE-LINK-72H', ['web', 'mobile'], {
+    question: 'How long is a household invite link valid, and how many times can it be used?',
+    expect: ['72 hours', 'single-use'],
+  });
   b.deliver('analyst', 'requirements', {
     reply: 'Updated the requirements for households.',
     summary: 'Households of up to 6 members; stories LR-07 to LR-09',
@@ -459,7 +490,10 @@ export function generateLongApp(): Scenario {
       ['sharing', 'mobile', 'web'],
     ),
   ]);
-  b.fact('fail-websocket-fanout', 'FAIL-WEBSOCKET-FANOUT', ['backend', 'mobile', 'web']);
+  b.fact('fail-websocket-fanout', 'FAIL-WEBSOCKET-FANOUT', ['backend', 'mobile', 'web'], {
+    question: 'Which approach to live sync of list edits was tried and dropped?',
+    expect: ['websocket', 'websockets'],
+  });
   progress('analyst', 'analytics', 'an event validator in CI that rejects events with unknown fields', 'removing personal data from the event payloads');
   b.deliver('analyst', 'analytics', {
     reply: 'Removed personal data from the events.',
@@ -549,7 +583,10 @@ export function generateLongApp(): Scenario {
     ),
     op.message('Heads-up (FAIL-STRIPE-IN-WEBVIEW): App Review rejected the build because Larder Plus is bought through a Stripe webview. We cannot ship that.', 'inform'),
   ]);
-  b.fact('fail-stripe-in-webview', 'FAIL-STRIPE-IN-WEBVIEW', ['mobile', 'web', 'backend']);
+  b.fact('fail-stripe-in-webview', 'FAIL-STRIPE-IN-WEBVIEW', ['mobile', 'web', 'backend'], {
+    question: 'Which payment approach got the iOS build rejected in App Review?',
+    expect: ['Stripe', 'webview'],
+  });
 
   // -------------------------------------------------------------------------
   // Change 2: store billing
@@ -557,7 +594,11 @@ export function generateLongApp(): Scenario {
   b.human(
     'Change of plan on payments (CHANGE-STORE-BILLING): after the App Review rejection we switch Larder Plus to App Store and Google Play billing instead of Stripe. One subscription covers the whole household. The web app no longer sells anything; it only shows the plan and where to manage it.',
   );
-  b.fact('change-store-billing', 'CHANGE-STORE-BILLING', ['backend', 'web', 'mobile', 'qa']);
+  b.fact('change-store-billing', 'CHANGE-STORE-BILLING', ['backend', 'web', 'mobile', 'qa'], {
+    question: 'How is Larder Plus billed now? Give only the current value.',
+    expect: ['App Store', 'Google Play'],
+    reject: ['Stripe web checkout'],
+  });
   b.replan({
     workstreams: [
       b.currentPlan.workstreams.find(w => w.id === 'requirements')!,
@@ -589,7 +630,10 @@ export function generateLongApp(): Scenario {
       },
     ],
   });
-  b.fact('contract-receipt-post', 'CONTRACT-RECEIPT-POST', ['mobile', 'qa']);
+  b.fact('contract-receipt-post', 'CONTRACT-RECEIPT-POST', ['mobile', 'qa'], {
+    question: 'Which endpoint does the app send the raw store receipt to?',
+    expect: ['/v1/billing/receipts'],
+  });
   b.deliver('analyst', 'requirements', {
     reply: 'Rewrote LR-05 for store billing.',
     summary: 'Store billing for the household; web shows status only',
@@ -648,7 +692,10 @@ export function generateLongApp(): Scenario {
   b.review('mobile', false, 'There is no restore purchases action, and App Review requires one. On Android a member who reinstalls loses Plus until the subscriber opens the app.', [
     'Every paid feature has a restore path that works on a fresh install for any household member (CONV-RESTORE-PATH).',
   ]);
-  b.fact('conv-restore-path', 'CONV-RESTORE-PATH', ['mobile', 'backend', 'qa']);
+  b.fact('conv-restore-path', 'CONV-RESTORE-PATH', ['mobile', 'backend', 'qa'], {
+    question: 'What must every paid feature have so that any household member can get it back on a fresh install?',
+    expect: ['restore'],
+  });
   b.deliver('web', 'web', {
     reply: 'Brought the web app under the size budget.',
     summary: 'Bundle 212 KB gzipped, LCP 1.6 s',
@@ -692,7 +739,10 @@ export function generateLongApp(): Scenario {
   b.human(
     'Change of requirements from the in-store tests (CHANGE-OFFLINE-LIST): shoppers lose signal in half the supermarkets we visited, so the grocery list must work fully offline and sync when the phone is back online. To make room, drop the analytics dashboards for launch; we keep logging events and build dashboards after launch.',
   );
-  b.fact('change-offline-list', 'CHANGE-OFFLINE-LIST', ['mobile', 'backend', 'qa', 'analyst']);
+  b.fact('change-offline-list', 'CHANGE-OFFLINE-LIST', ['mobile', 'backend', 'qa', 'analyst'], {
+    question: 'What connectivity behaviour must the grocery list support? Give only the current value.',
+    expect: ['offline'],
+  });
   b.replan({
     workstreams: [
       ...b.currentPlan.workstreams.filter(w => w.id !== 'analytics' && w.id !== 'testing'),
@@ -715,7 +765,10 @@ export function generateLongApp(): Scenario {
       },
     ],
   });
-  b.fact('contract-sync-cursor', 'CONTRACT-SYNC-CURSOR', ['mobile', 'qa']);
+  b.fact('contract-sync-cursor', 'CONTRACT-SYNC-CURSOR', ['mobile', 'qa'], {
+    question: 'How does a client fetch the edits made to a list after a given point?',
+    expect: ['changes?cursor='],
+  });
   b.deliver('analyst', 'requirements', {
     reply: 'Added the offline story and the LR-04 ordering rule; dashboards are out of scope.',
     summary: 'Offline list (LR-10), ticked-item order, dashboards dropped',
@@ -735,7 +788,10 @@ export function generateLongApp(): Scenario {
       ['offline', 'sharing'],
     ),
   ]);
-  b.fact('fail-full-list-resync', 'FAIL-FULL-LIST-RESYNC', ['mobile', 'qa', 'backend']);
+  b.fact('fail-full-list-resync', 'FAIL-FULL-LIST-RESYNC', ['mobile', 'qa', 'backend'], {
+    question: 'Which reconnect approach lost edits made offline?',
+    expect: ['whole list', 'overwriting the local copy'],
+  });
   b.ask('design', 'ux', 'mobile', {
     reply: 'Designing the offline states.',
     question: 'how long can the queue get in practice, and do you want the offline banner on every screen or only on the list?',
@@ -768,7 +824,10 @@ export function generateLongApp(): Scenario {
   b.review('offline', false, 'In my test an item that another member deleted came back after I ticked it offline. A delete has to win over an edit, as the contract says (CONTRACT-SYNC-CURSOR).', [
     'Sync conflicts follow the contract: the last writer wins per field and a delete wins over an edit; the losing side is told in the UI (CONV-DELETE-WINS).',
   ]);
-  b.fact('conv-delete-wins', 'CONV-DELETE-WINS', ['mobile', 'backend', 'qa']);
+  b.fact('conv-delete-wins', 'CONV-DELETE-WINS', ['mobile', 'backend', 'qa'], {
+    question: 'How are sync conflicts resolved?',
+    expect: ['delete wins', 'last writer wins'],
+  });
   progress('qa', 'testing', 'the traceability matrix for LR-01 to LR-10', 'the Detox offline scenarios');
   b.ask('qa', 'testing', 'mobile', {
     reply: 'Automating the offline cases.',
@@ -794,7 +853,10 @@ export function generateLongApp(): Scenario {
   b.review('testing', false, 'The plan does not say which devices we test on, and our users skew to older Android phones. It also has no sandbox purchase cases.', [
     'Every bug report and test result names the story id and the build number (CONV-STORY-AND-BUILD-IN-REPORTS).',
   ]);
-  b.fact('conv-story-and-build-in-reports', 'CONV-STORY-AND-BUILD-IN-REPORTS', ['qa', 'analyst']);
+  b.fact('conv-story-and-build-in-reports', 'CONV-STORY-AND-BUILD-IN-REPORTS', ['qa', 'analyst'], {
+    question: 'Which two identifiers must every bug report and test result name?',
+    expect: ['story id', 'build number'],
+  });
 
   // -------------------------------------------------------------------------
   // Change 4: EU first
@@ -803,7 +865,10 @@ export function generateLongApp(): Scenario {
     'One more change, and an important one (CHANGE-EU-FIRST): we launch in the EU first instead of the US. Launch countries are Germany, the Netherlands, Ireland and France, prices are in euros including VAT, all data must stay in the EU, and people must be able to export and delete their data. @ops please own the privacy side.',
     ['ops'],
   );
-  b.fact('change-eu-first', 'CHANGE-EU-FIRST', ['*']);
+  b.fact('change-eu-first', 'CHANGE-EU-FIRST', ['*'], {
+    question: 'Where do we launch first? Give only the current value.',
+    expect: ['EU', 'Germany'],
+  });
   b.replan({
     workstreams: [
       ...b.currentPlan.workstreams.filter(w => w.id !== 'testing'),
@@ -833,7 +898,10 @@ export function generateLongApp(): Scenario {
       },
     ],
   });
-  b.fact('contract-export-zip-30d', 'CONTRACT-EXPORT-ZIP-30D', ['ops', 'web', 'qa']);
+  b.fact('contract-export-zip-30d', 'CONTRACT-EXPORT-ZIP-30D', ['ops', 'web', 'qa'], {
+    question: 'In what form does an account data export arrive, and within how many days?',
+    expect: ['ZIP', '30 days'],
+  });
   b.deliver('analyst', 'requirements', {
     reply: 'Updated the requirements for the EU launch.',
     summary: 'EU launch countries, euro prices, export and deletion',

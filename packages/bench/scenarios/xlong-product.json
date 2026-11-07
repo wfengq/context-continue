@@ -191,7 +191,14 @@
         "web",
         "mobile",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "What time format must every timestamp in the API, in events and in exported files use?",
+        "expect": [
+          "ISO 8601",
+          "UTC"
+        ]
+      }
     },
     {
       "id": "contract-error-envelope",
@@ -202,7 +209,13 @@
         "mobile",
         "qa",
         "backend"
-      ]
+      ],
+      "probe": {
+        "question": "Which fields must every API error body carry?",
+        "expect": [
+          "requestId"
+        ]
+      }
     },
     {
       "id": "conv-wcag-22-aa",
@@ -213,7 +226,15 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What contrast ratio must text meet, and what is the minimum touch target size?",
+        "expect": [
+          "WCAG 2.2 AA",
+          "44 by 44",
+          "4.5:1"
+        ]
+      }
     },
     {
       "id": "change-saml-sso",
@@ -221,7 +242,17 @@
       "step": 53,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "Which sign-in methods must workspace authentication support? Give only the current value.",
+        "expect": [
+          "SAML",
+          "Okta"
+        ],
+        "reject": [
+          "Google sign-in"
+        ]
+      }
     },
     {
       "id": "contract-session-tokens",
@@ -232,7 +263,14 @@
         "mobile",
         "backend",
         "ops"
-      ]
+      ],
+      "probe": {
+        "question": "How long is a refresh token valid?",
+        "expect": [
+          "30 days",
+          "rotating"
+        ]
+      }
     },
     {
       "id": "fail-sms-otp",
@@ -243,7 +281,14 @@
         "backend",
         "mobile",
         "web"
-      ]
+      ],
+      "probe": {
+        "question": "Which second-factor method was recorded as a failed approach?",
+        "expect": [
+          "SMS",
+          "one-time codes"
+        ]
+      }
     },
     {
       "id": "conv-server-role-check",
@@ -254,7 +299,13 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Where must permissions be enforced?",
+        "expect": [
+          "server-side"
+        ]
+      }
     },
     {
       "id": "conv-idempotency-key",
@@ -264,7 +315,14 @@
         "backend",
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "Which request header must every POST accept, and how long does the server keep its values?",
+        "expect": [
+          "Idempotency-Key",
+          "24 hours"
+        ]
+      }
     },
     {
       "id": "change-admin-2fa",
@@ -272,7 +330,14 @@
       "step": 111,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "Who must use two-factor authentication, and what happens to an admin without it? Give only the current value.",
+        "expect": [
+          "owners and admins",
+          "read-only"
+        ]
+      }
     },
     {
       "id": "conv-story-and-build",
@@ -283,7 +348,14 @@
         "analyst",
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "Which two identifiers must every bug report and test result name?",
+        "expect": [
+          "story id",
+          "build number"
+        ]
+      }
     },
     {
       "id": "contract-entitlements",
@@ -294,7 +366,14 @@
         "mobile",
         "backend",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which fields does the entitlements response return?",
+        "expect": [
+          "seatsUsed",
+          "renewsAt"
+        ]
+      }
     },
     {
       "id": "conv-money-minor-units",
@@ -305,7 +384,14 @@
         "web",
         "mobile",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "How must money amounts be represented in the database, the API, events and exports?",
+        "expect": [
+          "minor units",
+          "ISO 4217"
+        ]
+      }
     },
     {
       "id": "fail-nightly-proration",
@@ -315,7 +401,14 @@
         "backend",
         "qa",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "Which approach to charging seat changes was tried and failed?",
+        "expect": [
+          "nightly proration",
+          "nightly"
+        ]
+      }
     },
     {
       "id": "change-per-seat-pricing",
@@ -323,7 +416,14 @@
       "step": 254,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "How is the Team plan priced? Give only the current value.",
+        "expect": [
+          "EUR 8 per seat",
+          "per-seat"
+        ]
+      }
     },
     {
       "id": "contract-dunning-states",
@@ -335,7 +435,14 @@
         "design",
         "qa",
         "backend"
-      ]
+      ],
+      "probe": {
+        "question": "Which billing states does the entitlements response expose?",
+        "expect": [
+          "past_due",
+          "read_only"
+        ]
+      }
     },
     {
       "id": "conv-webhooks-verified",
@@ -345,7 +452,14 @@
         "backend",
         "ops",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "How must incoming webhooks be checked and de-duplicated?",
+        "expect": [
+          "signature",
+          "event id"
+        ]
+      }
     },
     {
       "id": "change-vat-reverse-charge",
@@ -357,7 +471,14 @@
         "analyst",
         "web",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "How must invoices be issued to EU business customers with a valid VAT ID? Give only the current value.",
+        "expect": [
+          "reverse-charge",
+          "VIES"
+        ]
+      }
     },
     {
       "id": "fail-cached-seat-count",
@@ -366,7 +487,14 @@
       "audience": [
         "backend",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What was the failed way of tracking how many seats are used?",
+        "expect": [
+          "cached seat count",
+          "Redis"
+        ]
+      }
     },
     {
       "id": "fail-ot-server",
@@ -377,7 +505,13 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which approach to concurrent editing was rejected for diverging on real documents?",
+        "expect": [
+          "operational transform"
+        ]
+      }
     },
     {
       "id": "contract-doc-roles",
@@ -388,7 +522,14 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What are the document roles?",
+        "expect": [
+          "viewer",
+          "commenter"
+        ]
+      }
     },
     {
       "id": "change-suggestion-mode",
@@ -396,7 +537,13 @@
       "step": 419,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "Which editing feature beyond comments must be in 3.3? Give only the current value.",
+        "expect": [
+          "suggestion mode"
+        ]
+      }
     },
     {
       "id": "contract-yjs-sync",
@@ -408,7 +555,13 @@
         "mobile",
         "qa",
         "ops"
-      ]
+      ],
+      "probe": {
+        "question": "What does the document sync websocket carry?",
+        "expect": [
+          "Yjs"
+        ]
+      }
     },
     {
       "id": "conv-mention-digest",
@@ -419,7 +572,14 @@
         "design",
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "How are mention and reply emails sent out?",
+        "expect": [
+          "digest",
+          "10 minutes"
+        ]
+      }
     },
     {
       "id": "conv-presence-ttl",
@@ -429,7 +589,13 @@
         "backend",
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "After how long does a presence entry expire without a heartbeat?",
+        "expect": [
+          "30 seconds"
+        ]
+      }
     },
     {
       "id": "fail-sticky-sessions",
@@ -439,7 +605,14 @@
         "ops",
         "backend",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which routing approach for keeping a document on one sync server was tried and failed?",
+        "expect": [
+          "sticky sessions",
+          "cookie"
+        ]
+      }
     },
     {
       "id": "change-offline-editing",
@@ -447,7 +620,14 @@
       "step": 599,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "What offline capability must 3.4 provide? Give only the current value.",
+        "expect": [
+          "offline editing",
+          "edit pinned documents offline"
+        ]
+      }
     },
     {
       "id": "contract-state-vector-resync",
@@ -458,7 +638,13 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What does the client send first when it reconnects after offline editing?",
+        "expect": [
+          "state vector"
+        ]
+      }
     },
     {
       "id": "conv-offline-pin-limit",
@@ -470,7 +656,14 @@
         "design",
         "qa",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "What caps offline storage per device?",
+        "expect": [
+          "offlineDocs",
+          "200 MB"
+        ]
+      }
     },
     {
       "id": "fail-localstorage-quota",
@@ -480,7 +673,13 @@
         "web",
         "qa",
         "ops"
-      ]
+      ],
+      "probe": {
+        "question": "Where did the first prototype keep pinned documents, which failed?",
+        "expect": [
+          "localStorage"
+        ]
+      }
     },
     {
       "id": "conv-sync-state-visible",
@@ -491,7 +690,13 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What must every document show wherever it appears?",
+        "expect": [
+          "sync state"
+        ]
+      }
     },
     {
       "id": "change-pwa-not-desktop",
@@ -503,7 +708,13 @@
         "qa",
         "analyst",
         "ops"
-      ]
+      ],
+      "probe": {
+        "question": "How are field teams served on their laptops now? Give only the current value.",
+        "expect": [
+          "installable web app"
+        ]
+      }
     },
     {
       "id": "fail-ios-background-fetch",
@@ -513,7 +724,14 @@
         "mobile",
         "backend",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which iOS mechanism for refreshing pinned documents overnight failed?",
+        "expect": [
+          "background app refresh",
+          "BGAppRefreshTask"
+        ]
+      }
     },
     {
       "id": "contract-export-jobs",
@@ -525,7 +743,14 @@
         "mobile",
         "qa",
         "ops"
-      ]
+      ],
+      "probe": {
+        "question": "What does POST /v2/exports return, and how long does the download URL stay valid?",
+        "expect": [
+          "202",
+          "24 hours"
+        ]
+      }
     },
     {
       "id": "fail-pdf-in-api",
@@ -535,7 +760,14 @@
         "backend",
         "ops",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Where was PDF rendering first done, which failed?",
+        "expect": [
+          "headless Chromium",
+          "API process"
+        ]
+      }
     },
     {
       "id": "change-docx-export",
@@ -543,7 +775,14 @@
       "step": 796,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "Which document format is the most important export format in 3.5? Give only the current value.",
+        "expect": [
+          "DOCX",
+          "Word"
+        ]
+      }
     },
     {
       "id": "conv-golden-files",
@@ -553,7 +792,13 @@
         "backend",
         "qa",
         "ops"
-      ]
+      ],
+      "probe": {
+        "question": "What must CI compare every export format against?",
+        "expect": [
+          "golden files"
+        ]
+      }
     },
     {
       "id": "fail-pandoc-docx",
@@ -562,7 +807,13 @@
       "audience": [
         "backend",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "Which tool was first used to produce DOCX files, and failed?",
+        "expect": [
+          "pandoc"
+        ]
+      }
     },
     {
       "id": "change-workspace-export",
@@ -574,7 +825,13 @@
         "analyst",
         "qa",
         "ops"
-      ]
+      ],
+      "probe": {
+        "question": "Which plan gets the whole-workspace export for admins? Give only the current value.",
+        "expect": [
+          "Business"
+        ]
+      }
     },
     {
       "id": "conv-export-filenames",
@@ -585,7 +842,13 @@
         "web",
         "mobile",
         "qa"
-      ]
+      ],
+      "probe": {
+        "question": "What file name pattern must exported files follow?",
+        "expect": [
+          "slug"
+        ]
+      }
     },
     {
       "id": "contract-audit-events",
@@ -598,7 +861,13 @@
         "qa",
         "ops",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "How long are audit events kept?",
+        "expect": [
+          "400 days"
+        ]
+      }
     },
     {
       "id": "change-soc2-type2",
@@ -606,7 +875,16 @@
       "step": 972,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "Which SOC 2 report type must we deliver? Give only the current value.",
+        "expect": [
+          "Type II"
+        ],
+        "reject": [
+          "Type I"
+        ]
+      }
     },
     {
       "id": "conv-access-review",
@@ -616,7 +894,14 @@
         "ops",
         "analyst",
         "backend"
-      ]
+      ],
+      "probe": {
+        "question": "How often is production access reviewed, and within how many working days is access nobody can justify removed?",
+        "expect": [
+          "every quarter",
+          "5 working days"
+        ]
+      }
     },
     {
       "id": "change-eu-residency",
@@ -624,7 +909,14 @@
       "step": 1025,
       "audience": [
         "*"
-      ]
+      ],
+      "probe": {
+        "question": "In which region must EU workspaces be stored? Give only the current value.",
+        "expect": [
+          "eu-central-1",
+          "Frankfurt"
+        ]
+      }
     },
     {
       "id": "fail-us-read-replica",
@@ -634,7 +926,13 @@
         "ops",
         "backend",
         "analyst"
-      ]
+      ],
+      "probe": {
+        "question": "Which placement of the reporting replica broke the residency check?",
+        "expect": [
+          "us-east-1"
+        ]
+      }
     },
     {
       "id": "conv-change-ticket",
@@ -645,7 +943,13 @@
         "backend",
         "web",
         "mobile"
-      ]
+      ],
+      "probe": {
+        "question": "What must every production change link?",
+        "expect": [
+          "change ticket"
+        ]
+      }
     }
   ],
   "steps": [

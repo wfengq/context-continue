@@ -4,6 +4,7 @@ import { createPolicy } from '../src/policies/index.js';
 import { runScenario } from '../src/runner.js';
 import { checkCoverage, loadScenario, validateScenario } from '../src/scenario.js';
 import { isDeliverableArgs } from '../src/text.js';
+import { probeProblems } from './probe-expectations.js';
 import type { Group, Scenario } from '../src/types.js';
 
 const IDS = ['product-plan', 'flappy-bird', 'event-plan'];
@@ -240,5 +241,13 @@ describe('checkCoverage: tier and facts', () => {
     ];
     const facts = [...factsFor(P), ...Array.from({ length: 11 }, (_, i) => ({ id: `conv-n${i}`, marker: 'M', step: 1, audience: ['*'] }))];
     expect(checkCoverage(build('long', facts, steps))).toEqual([]);
+  });
+});
+
+describe('fact probes on the standard scenarios', () => {
+  test.each(IDS)('%s: every fact has a probe whose expect is in its step, is not the marker and is not in the question, and whose reject is gone from later steps', id => {
+    const s = load(id);
+    expect(probeProblems(s)).toEqual([]);
+    expect((s.facts ?? []).length).toBeGreaterThan(0);
   });
 });
