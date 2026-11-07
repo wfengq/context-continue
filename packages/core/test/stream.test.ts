@@ -44,9 +44,9 @@ async function resolveAll(fx: FacadeProject) {
 // ---------------------------------------------------------------------------
 
 describe('stream options', () => {
-  test('defaults: off, 8,000 restream tokens, 40 human messages kept in full', () => {
+  test('defaults: off, 8,000 restream tokens, auto after 75 ledger entries (bench-chosen), 40 human messages kept in full', () => {
     expect(resolveStreamOptions()).toEqual(DEFAULT_STREAM_OPTIONS);
-    expect(DEFAULT_STREAM_OPTIONS).toMatchObject({ mode: 'off', restreamTokens: 8000, snapshotHumanKeep: 40 });
+    expect(DEFAULT_STREAM_OPTIONS).toEqual({ mode: 'off', restreamTokens: 8000, autoAfterEntries: 75, snapshotHumanKeep: 40 });
     expect(resolveStreamOptions({ mode: 'on', restreamTokens: 100 })).toMatchObject({ mode: 'on', restreamTokens: 100, snapshotHumanKeep: 40 });
   });
 

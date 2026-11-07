@@ -67,7 +67,11 @@ export interface StreamOptions {
   mode?: StreamMode;
   /** Tokens appended after a snapshot before the next request restreams, default 8_000. */
   restreamTokens?: number;
-  /** `auto`: ledger entries after which requests use the stream. Provisional default; chosen by the bench evaluation. */
+  /**
+   * `auto`: ledger entries at which requests start using the stream, default 75 (chosen by the bench,
+   * spec 2026-11-06 §5: above every standard scenario's ledger, about 40–45 entries; reached about a
+   * third of the way into the long ones).
+   */
   autoAfterEntries?: number;
   /** Human messages a snapshot shows in full (the newest); older ones are folded to 160 characters, default 40. */
   snapshotHumanKeep?: number;
@@ -76,7 +80,7 @@ export interface StreamOptions {
 export const DEFAULT_STREAM_OPTIONS: Readonly<Required<StreamOptions>> = Object.freeze({
   mode: 'off',
   restreamTokens: 8_000,
-  autoAfterEntries: 400,
+  autoAfterEntries: 75,
   snapshotHumanKeep: 40,
 });
 

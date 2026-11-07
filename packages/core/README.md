@@ -80,7 +80,7 @@ A brief is rebuilt for every request, so its changing parts (the projection, the
 ```ts
 const project = createProject({
   // …
-  stream: { mode: 'auto', autoAfterEntries: 400, restreamTokens: 8_000, snapshotHumanKeep: 40 },
+  stream: { mode: 'auto', autoAfterEntries: 75, restreamTokens: 8_000, snapshotHumanKeep: 40 },
 });
 
 const r = await project.buildStream('art', { maxTokens: 12_000, trigger: { reason: 'assigned', detail: '...' } });
@@ -96,7 +96,7 @@ Options (`stream`, all optional):
 | `mode` | `'off'` | `off`: every method and output is unchanged (`buildStream` returns what `buildBrief` / `buildReviewContext` / `buildPlanningContext` return). `on`: every bot uses a stream. `auto`: see below. |
 | `restreamTokens` | 8,000 | tokens appended since the last snapshot after which the next request is a fresh snapshot |
 | `snapshotHumanKeep` | 40 | a snapshot keeps this many newest human messages in full; older ones are folded to their first 160 characters (0 folds all) |
-| `autoAfterEntries` | 400 (provisional) | `auto` only: ledger size at which the stream starts; a positive integer |
+| `autoAfterEntries` | 75 | `auto` only: ledger size at which the stream starts; a positive integer. The default comes from the bench (spec `2026-11-06-core-stream-mode` §5): the standard scenarios end with 42–44 ledger entries and stay on the plain brief; the long ones reach 75 about a third of the way in (step 60 of 160–164). A host that ingests every bot reply as chat fills the ledger faster than the bench does, so it may want a higher value |
 
 `buildStream(botId, { maxTokens, trigger, request? })` takes the request a bot makes: a brief (default), `{ kind: 'review', deliverableId }` or `{ kind: 'planning' }` (the lead's contexts). It returns a `StreamBundle`, a superset of `ContextBundle` with two more segment kinds, `updates` (project-wide changes since the bot's last request) and `own` (text from `recordOwnOutput`), plus `snapshot: true` when the request starts a new stream. The first request, and any request after more than `restreamTokens` were appended, is a snapshot (the bot's own segments, the whole board, retired contracts, your part, then the trigger); every other request returns the previous segment list unchanged followed by new segments: project updates, then updates to the bot's memory, notes and part, item by item, then the trigger. Only what changed is appended; seen-compaction is not a change, and an item already carried in the same request's project updates is repeated only in its short "(seen)" form. Stream state is stored in the `Store` (memory and SQLite alike), so a reopened project continues each stream as an append. Waking rules, seen confirmation, and the state effects of review and planning contexts are the same as with the plain methods.
 

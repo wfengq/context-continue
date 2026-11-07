@@ -81,7 +81,7 @@ export interface ProjectConfig {
    * Long-project stream mode (spec 2026-11-06 §2.1), off by default: with it off every existing
    * method and output is unchanged, `buildStream` is the existing brief / review / planning context
    * and `recordOwnOutput` does nothing. INVALID_OP for an unknown mode or a count that is not a
-   * positive integer. (`auto` behaves as `off` until the auto switch-over is implemented.)
+   * positive integer. `auto` is `off` until the ledger holds `autoAfterEntries` entries (default 75).
    */
   stream?: StreamOptions;
 }
