@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { AnthropicModel, ProbeModelError, buildMessagesBody, cacheBreakpoints, resolveApiKey, PROXY_KEY_FLAG } from '../src/models/anthropic.js';
 import { CostAccumulator, CostGuardModel, estimateProbeCost, priceFor, usageCost } from '../src/cost.js';
 import type { Model, ModelRequest } from '../src/model.js';
-import { probeErrorMessage, ProbeStop } from '../src/probe.js';
+import { MAX_CONSECUTIVE_NETWORK_FAILURES, probeErrorMessage, ProbeStop } from '../src/probe.js';
 import type { ModelUsage } from '../src/types.js';
 
 const KEY = 'sk-ant-api03-SECRETSECRETSECRET';
@@ -167,6 +167,29 @@ describe('AnthropicModel', () => {
     expect((err as Error).message).not.toContain(KEY);
     await expect(m.complete(request([seg('q', false)]))).rejects.toBeInstanceOf(ProbeStop);
     expect(calls).toHaveLength(5);
+  });
+
+  test('replay requests: network failure is a plain masked error; 10 in a row stop; an HTTP response resets', async () => {
+    const down = () => Object.assign(new TypeError(`fetch failed ${KEY}`), { cause: { code: 'ECONNRESET' } });
+    const rr = (): ModelRequest => ({ ...request([seg('q', false)]), purpose: 'replay' });
+    const seq: (Response | Error)[] = [];
+    for (let i = 0; i < MAX_CONSECUTIVE_NETWORK_FAILURES - 1; i++) seq.push(...Array.from({ length: 5 }, down));
+    seq.push(errResponse(400, 'invalid_request_error', 'too long'));
+    for (let i = 0; i < MAX_CONSECUTIVE_NETWORK_FAILURES; i++) seq.push(...Array.from({ length: 5 }, down));
+    const { fetch } = stubFetch(seq);
+    const m = new AnthropicModel({ model: 'm', apiKey: KEY, fetch, sleep: noSleep });
+    for (let i = 0; i < MAX_CONSECUTIVE_NETWORK_FAILURES - 1; i++) {
+      const e = await m.complete(rr()).catch((x: unknown) => x);
+      expect(e).not.toBeInstanceOf(ProbeStop);
+      expect((e as Error).message).toContain('ECONNRESET');
+      expect((e as Error).message).not.toContain(KEY);
+    }
+    await expect(m.complete(rr())).rejects.not.toBeInstanceOf(ProbeStop); // the 400 resets the counter
+    for (let i = 0; i < MAX_CONSECUTIVE_NETWORK_FAILURES; i++) {
+      expect(await m.complete(rr()).catch((x: unknown) => x)).not.toBeInstanceOf(ProbeStop);
+    }
+    await expect(m.complete(rr())).rejects.toBeInstanceOf(ProbeStop);
+    await expect(m.complete(request([seg('q', false)]))).rejects.toBeInstanceOf(ProbeStop);
   });
 
   test('a refusal is an error, not an empty answer, and carries the usage it was billed', async () => {

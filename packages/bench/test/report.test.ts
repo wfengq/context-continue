@@ -365,3 +365,34 @@ describe('writeResults', () => {
     expect(readFileSync(join(dir, 'report.md'), 'utf8')).toBe('REPORT\n');
   });
 });
+
+describe('renderReport: replay comparison', () => {
+  const zero = { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+  const rates = { input: 0.28, cacheWrite: 0, cacheRead: 0.0056, output: 0.42 }; // ratio 0.02
+  const row = (scenario: string, group: Group, extra: Record<string, unknown> = {}) => ({
+    scenario, group, requests: 10, errors: 0, errorsNoUsage: 0, usage: zero, cost: 1, realCacheReadPct: 50, estCacheablePct: 50,
+    estCostUnits: 600, estInputTokens: 1000, estCacheableTokens: 500, complete: true, ...extra,
+  });
+  const section = (groups: ReturnType<typeof row>[]) =>
+    ({
+      model: 'deepseek-chat', maxTokens: 16, price: { short: rates, long: rates, longPromptAbove: 1e12, source: 'test' }, cacheRatio: 0.1, maxCost: 5, cost: 1, usage: zero, groups,
+    }) as unknown as NonNullable<Parameters<typeof renderReport>[1]['replay']>;
+  const render = (groups: ReturnType<typeof row>[]) => renderReport(all(), { ...meta, scenarios: ['s1'], replay: section(groups) });
+
+  test('states --cache-ratio and the price ratio, and adds the diff at the price ratio', () => {
+    const md = render([row('s1', 'C', { estInputTokens: 1000, estCacheableTokens: 800 }), row('s1', 'D', { estInputTokens: 1000, estCacheableTokens: 0 })]);
+    expect(md).toMatch(/Estimated cost units use --cache-ratio 0\.1 /);
+    expect(md).toMatch(/price ratio 0\.02 \(cache hit \/ cache miss\)/);
+    expect(md).toContain('| Est. diff % at price ratio 0.02 |');
+    // C: 200 + 0.02 * 800 = 216; D: 1000; diff -78.4
+    expect(md).toMatch(/\| D \| s1 \|.*\| -78\.4 \|/);
+  });
+  test('a row with errors that carry no usage is excluded and named with its count', () => {
+    const md = render([row('s1', 'C'), row('s1', 'D', { errors: 3, errorsNoUsage: 2 }), row('s1', 'E', { errors: 1, errorsNoUsage: 0 })]);
+    expect(md).toContain('| D | none |');
+    expect(md).toMatch(/Excluded: s1\/D had 2 failed replay requests without usage/);
+    expect(md).toMatch(/\| E \| s1 \|/);
+    expect(md).toMatch(/Errors: s1\/E had 1 failed replay request, all with reported usage/);
+    expect(md).not.toMatch(/Excluded: s1\/E/);
+  });
+});

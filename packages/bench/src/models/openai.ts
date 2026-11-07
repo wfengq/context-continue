@@ -1,6 +1,6 @@
 import { ProbeModelError, type Model, type ModelRequest } from '../model.js';
 import { backoff, realSleep } from './anthropic.js';
-import { probeErrorMessage, ProbeStop } from '../probe.js';
+import { MAX_CONSECUTIVE_NETWORK_FAILURES, probeErrorMessage, ProbeStop } from '../probe.js';
 import type { ModelUsage, ToolCall } from '../types.js';
 
 /**
@@ -88,6 +88,8 @@ export class OpenAIModel implements Model {
   private fatal: string | undefined;
   /** Consecutive 400/422 responses; any other outcome resets it. */
   private rejects = 0;
+  /** Consecutive replay requests that ended in a network failure; any HTTP response resets it. */
+  private netFails = 0;
 
   constructor(private readonly o: OpenAIOptions) {
     this.fetchFn = o.fetch ?? fetch;
@@ -120,10 +122,19 @@ export class OpenAIModel implements Model {
         }
         const c = (e as { cause?: { code?: unknown } } | null)?.cause?.code;
         const why = `${e instanceof Error ? e.message : String(e)}${typeof c === 'string' ? ` (${c})` : ''}`;
+        if (!counts) {
+          // A replay request fails alone; only a long run of them stops the run.
+          const err = this.clean(`OpenAI-compatible API unreachable after ${attempt + 1} attempts: ${why}`);
+          if (++this.netFails >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
+            this.fatal = `${err}; ${MAX_CONSECUTIVE_NETWORK_FAILURES} replay requests in a row failed on the network`;
+          }
+          throw new Error(err);
+        }
         // Every later request would fail the same way: stop probing for the rest of the run.
         this.fatal = this.clean(`OpenAI-compatible API unreachable after ${attempt + 1} attempts: ${why}`);
         throw new ProbeStop(this.fatal);
       }
+      if (!counts) this.netFails = 0;
       if (res.ok) {
         if (counts) this.rejects = 0;
         let j: ChatResponse;

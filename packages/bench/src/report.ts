@@ -373,7 +373,8 @@ function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier, repla
   out.push('', p.sharedBudget === true ? `Total real probe cost ${usd(p.cost)}; --max-cost ${usd(p.maxCost)} is one budget shared with the replay requests (see the replay section).` : `Total real cost ${usd(p.cost)} of --max-cost ${usd(p.maxCost)}.`, '');
   out.push(
     "R-B19 comparison for probe requests (requests with reported usage only). Estimated: the bench's token count (an approximation of the model's tokenizer) and its R-B19 cacheable tokens; " +
-      'real: prompt tokens = uncached + cache write + cache read, as reported. Real cache reads also depend on what earlier probes wrote within the cache lifetime and on the minimum cacheable length.',
+      'real: prompt tokens = uncached + cache write + cache read, as reported. Real cache reads also depend on what earlier probes wrote within the cache lifetime and on the minimum cacheable length.' +
+      (replayOn ? ' With --replay, each probe followed the replay of the same request, so its prefix was just cached and its cache % cannot be compared with a probe-only run.' : ''),
     '',
   );
   out.push('| Group | Est. input | Est. cacheable | Est. cacheable % | Real prompt | Real cache read | Real cache read % | Real cache write |', '|---|---|---|---|---|---|---|---|');
@@ -428,6 +429,8 @@ export interface ReplayGroupRow {
   /** Replayed requests (including failed ones). */
   requests: number;
   errors: number;
+  /** Errored requests that carry no usage (5xx, 429, network, a request too long): their cost is missing from `cost`. */
+  errorsNoUsage: number;
   usage: ModelUsage;
   cost: number;
   /** Cache read / (uncached + cache write + cache read) in percent; null without reported prompt tokens. */
@@ -435,6 +438,9 @@ export interface ReplayGroupRow {
   /** The bench's R-B19 cacheable share of the group's input tokens in percent; null without input. */
   estCacheablePct: number | null;
   estCostUnits: number;
+  /** The bench's token counts over the same requests (uncached = input - cacheable), to recompute the est. cost at another ratio. */
+  estInputTokens: number;
+  estCacheableTokens: number;
   /** Every request of this scenario and group was replayed and the real-model requests were not stopped. */
   complete: boolean;
 }
@@ -447,6 +453,8 @@ export interface ReplaySection {
   baseUrlHost?: string;
   maxTokens: number;
   price: ModelPrice;
+  /** The --cache-ratio the est. cost units use. */
+  cacheRatio: number;
   maxCost: number;
   /** Real cost and usage of the replay requests alone (what the group rows sum to). */
   cost: number;
@@ -497,15 +505,21 @@ function renderReplaySection(p: ReplaySection, tierOf: (sc: string) => Tier, sce
   }
   out.push('', p.sharedBudget === true ? `Total replay cost ${usd(p.cost)}; --max-cost ${usd(p.maxCost)} is one budget shared with the fact probes.` : `Total replay cost ${usd(p.cost)} of --max-cost ${usd(p.maxCost)}.`, '');
   const tiersPresent = (['standard', 'long', 'xlong'] as const).filter(t => scenarios.some(sc => tierOf(sc) === t));
+  const ratio = p.price.short.input === 0 ? 0 : Number((p.price.short.cacheRead / p.price.short.input).toFixed(4));
   for (const t of tiersPresent) {
-    out.push(`Group C against D and E, ${t} scenarios (negative: C is cheaper). Only scenarios where both groups are complete count:`, '');
-    out.push('| Reference | Scenarios | Real cost C | Real cost ref | Real diff % | Est. units C | Est. units ref | Est. diff % |', '|---|---|---|---|---|---|---|---|');
+    out.push(`Group C against D and E, ${t} scenarios (negative: C is cheaper). Only scenarios where both groups are complete and no request failed without usage count:`, '');
+    out.push(
+      `Estimated cost units use --cache-ratio ${p.cacheRatio} (uncached + ratio x cacheable). The last column recomputes the estimated diff at the rate card's price ratio ${ratio} (cache hit / cache miss), the ratio the real cost was paid at.`, '',
+    );
+    out.push(`| Reference | Scenarios | Real cost C | Real cost ref | Real diff % | Est. units C | Est. units ref | Est. diff % | Est. diff % at price ratio ${ratio} |`, '|---|---|---|---|---|---|---|---|---|');
     const skipped: string[] = [];
     const noted = new Map<string, ReplayGroupRow>();
+    const excluded = new Map<string, ReplayGroupRow>();
     for (const ref of ['D', 'E'] as const) {
       const used: string[] = [];
-      let c = { cost: 0, units: 0 };
-      let d = { cost: 0, units: 0 };
+      let c = { cost: 0, units: 0, at: 0 };
+      let d = { cost: 0, units: 0, at: 0 };
+      const at = (x: ReplayGroupRow) => x.estInputTokens - x.estCacheableTokens + ratio * x.estCacheableTokens;
       for (const sc of scenarios.filter(x => tierOf(x) === t)) {
         const rc = p.groups.find(r => r.scenario === sc && r.group === 'C');
         const rr = p.groups.find(r => r.scenario === sc && r.group === ref);
@@ -513,25 +527,30 @@ function renderReplaySection(p: ReplaySection, tierOf: (sc: string) => Tier, sce
           skipped.push(`${sc} vs ${ref}: group ${rc === undefined ? 'C' : ref} is not in this run`);
         } else if (!rc.complete || !rr.complete) {
           skipped.push(`${sc} vs ${ref}: group ${[!rc.complete ? 'C' : '', !rr.complete ? ref : ''].filter(x => x !== '').join(' and ')} incomplete (real-model requests stopped before every request was replayed)`);
+        } else if (rc.errorsNoUsage > 0 || rr.errorsNoUsage > 0) {
+          for (const x of [rc, rr]) if (x.errorsNoUsage > 0) excluded.set(`${sc}/${x.group}`, x);
         } else {
           used.push(sc);
           for (const x of [rc, rr]) {
             if (x.errors > 0) noted.set(`${sc}/${x.group}`, x);
           }
-          c = { cost: c.cost + rc.cost, units: c.units + rc.estCostUnits };
-          d = { cost: d.cost + rr.cost, units: d.units + rr.estCostUnits };
+          c = { cost: c.cost + rc.cost, units: c.units + rc.estCostUnits, at: c.at + at(rc) };
+          d = { cost: d.cost + rr.cost, units: d.units + rr.estCostUnits, at: d.at + at(rr) };
         }
       }
       out.push(
         used.length === 0
-          ? `| ${ref} | none | n/a | n/a | n/a | n/a | n/a | n/a |`
-          : `| ${ref} | ${used.join(', ')} | ${usd(c.cost)} | ${usd(d.cost)} | ${diffPct(c.cost, d.cost)} | ${fmtCost(c.units)} | ${fmtCost(d.units)} | ${diffPct(c.units, d.units)} |`,
+          ? `| ${ref} | none | n/a | n/a | n/a | n/a | n/a | n/a | n/a |`
+          : `| ${ref} | ${used.join(', ')} | ${usd(c.cost)} | ${usd(d.cost)} | ${diffPct(c.cost, d.cost)} | ${fmtCost(c.units)} | ${fmtCost(d.units)} | ${diffPct(c.units, d.units)} | ${diffPct(c.at, d.at)} |`,
       );
     }
     out.push('');
     if (skipped.length > 0) out.push(...skipped.map(x => `Skipped: ${x}.`), '');
+    for (const [key, row] of excluded) {
+      out.push(`Excluded: ${key} had ${fmtInt(row.errorsNoUsage)} failed replay request${row.errorsNoUsage === 1 ? '' : 's'} without usage; its real cost is missing those requests, so the row is left out of the comparison.`, '');
+    }
     for (const [key, row] of noted) {
-      out.push(`Errors: ${key} had ${fmtInt(row.errors)} failed replay request${row.errors === 1 ? '' : 's'}; its real cost leaves out requests that returned no usage.`, '');
+      out.push(`Errors: ${key} had ${fmtInt(row.errors)} failed replay request${row.errors === 1 ? '' : 's'}, all with reported usage (counted in its real cost).`, '');
     }
   }
   return out;

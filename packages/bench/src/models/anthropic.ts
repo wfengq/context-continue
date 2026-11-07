@@ -1,7 +1,7 @@
 import { ProbeModelError, type Model, type ModelRequest } from '../model.js';
 
 export { ProbeModelError };
-import { probeErrorMessage, ProbeStop } from '../probe.js';
+import { MAX_CONSECUTIVE_NETWORK_FAILURES, probeErrorMessage, ProbeStop } from '../probe.js';
 import type { ModelUsage, ToolCall } from '../types.js';
 
 /**
@@ -95,6 +95,8 @@ export class AnthropicModel implements Model {
   private readonly fetchFn: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
   private fatal: string | undefined;
+  /** Consecutive replay requests that ended in a network failure; any HTTP response resets it. */
+  private netFails = 0;
 
   constructor(private readonly o: AnthropicOptions) {
     this.fetchFn = o.fetch ?? fetch;
@@ -129,10 +131,19 @@ export class AnthropicModel implements Model {
         }
         const c = (e as { cause?: { code?: unknown } } | null)?.cause?.code;
         const why = `${e instanceof Error ? e.message : String(e)}${typeof c === 'string' ? ` (${c})` : ''}`;
+        if (r.purpose === 'replay') {
+          // A replay request fails alone; only a long run of them stops the run.
+          const err = this.clean(`Anthropic API unreachable after ${attempt + 1} attempts: ${why}`);
+          if (++this.netFails >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
+            this.fatal = `${err}; ${MAX_CONSECUTIVE_NETWORK_FAILURES} replay requests in a row failed on the network`;
+          }
+          throw new Error(err);
+        }
         // Every later request would fail the same way: stop probing for the rest of the run.
         this.fatal = this.clean(`Anthropic API unreachable after ${attempt + 1} attempts: ${why}`);
         throw new ProbeStop(this.fatal);
       }
+      if (r.purpose === 'replay') this.netFails = 0;
       if (res.ok) return this.parse((await res.json()) as ApiResponse);
       const text = await res.text().catch(() => '');
       let detail = text.slice(0, 300);

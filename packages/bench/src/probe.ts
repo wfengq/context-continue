@@ -193,3 +193,6 @@ export async function runControl(s: Scenario, opts: ProbeRunOptions): Promise<{ 
   }
   return { records };
 }
+
+/** Consecutive replay requests that end in a network failure (retries exhausted) after which all real-model requests stop. */
+export const MAX_CONSECUTIVE_NETWORK_FAILURES = 10;

@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_STREAM_OPTIONS, type PublicBoardSwitches } from '@context-continue/core';
@@ -383,6 +383,14 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   if (ra !== undefined) {
     if (ra.dryRun) probeModel = new DryRunModel();
     else {
+      // The jsonl files hold paid-for answers: never truncate them, and refuse before any request is sent.
+      for (const f of [...(pa !== undefined ? ['probes.jsonl'] : []), ...(ra.replay ? ['replay.jsonl'] : [])]) {
+        const path = join(dir, f);
+        if (existsSync(path) && statSync(path).size > 0) {
+          process.stderr.write(`bench: ${path} already exists and is not empty (paid results from an earlier run); choose a new --stamp\n`);
+          return 2;
+        }
+      }
       const injected = {
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }), ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
       };
@@ -464,11 +472,12 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
         const usage = replayUsage(run.replay);
         const prompt = usage.inputTokens + usage.cacheWriteTokens + usage.cacheReadTokens;
         replayRows.push({
-          scenario: s.id, group: g, requests: run.replay.length, errors: run.replay.filter(r => r.error !== undefined).length, usage,
+          scenario: s.id, group: g, requests: run.replay.length, errors: run.replay.filter(r => r.error !== undefined).length,
+          errorsNoUsage: run.replay.filter(r => r.error !== undefined && r.usage === undefined).length, usage,
           cost: run.replay.reduce((n, r) => (r.usage === undefined ? n : n + usageCost(ra!.price, r.usage)), 0),
           realCacheReadPct: prompt === 0 ? null : (usage.cacheReadTokens / prompt) * 100,
           estCacheablePct: m.inputTokens === 0 ? null : (m.cacheableTokens / m.inputTokens) * 100,
-          estCostUnits: m.costUnits,
+          estCostUnits: m.costUnits, estInputTokens: m.inputTokens, estCacheableTokens: m.cacheableTokens,
           // A group is complete only if every one of its requests was replayed and real-model requests were never stopped in it.
           complete: run.realStopped === undefined && run.replay.length === run.records.length,
         });
@@ -497,7 +506,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
     realRun && ra.replay
       ? {
           model: ra.model, ...(ra.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: ra.baseUrlHost! } : {}), maxTokens: REPLAY_MAX_TOKENS,
-          price: ra.price, maxCost: ra.maxCost!, cost: replayCost, usage: replayTotal, ...(pa === undefined ? {} : { sharedBudget: true as const }),
+          price: ra.price, cacheRatio: args.cacheRatio, maxCost: ra.maxCost!, cost: replayCost, usage: replayTotal, ...(pa === undefined ? {} : { sharedBudget: true as const }),
           ...(stopped.some(x => x.group !== 'none') ? { stopped: stopped.filter((x): x is { scenario: string; group: Group; reason: string } => x.group !== 'none') } : {}),
           groups: replayRows,
         }
@@ -510,9 +519,11 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);
   if (ra !== undefined && ra.dryRun) {
     const base = { model: ra.model, ...(ra.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: ra.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS };
+    let probeEst: { total: { costLow: number; costHigh: number } } | undefined;
     if (pa !== undefined) {
       const est = estimateProbes(probeRecords, ra.price, DEFAULT_MAX_TOKENS);
       const meta = { ...base, samples: pa.samples, groups: [...pa.groups, ...(pa.control ? ['none' as const] : [])], maxCost: ra.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
+      probeEst = est;
       const md = renderProbeEstimate(est, meta, tiers);
       writeFileSync(join(dir, 'probe-estimate.json'), JSON.stringify({ ...meta, price: ra.price, ...est }, null, 2) + '\n');
       writeFileSync(join(dir, 'probe-estimate.md'), md);
@@ -527,6 +538,13 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
       writeFileSync(join(dir, 'replay-estimate.md'), md);
       process.stdout.write(md);
       process.stdout.write(`bench: wrote ${join(dir, 'replay-estimate.json')} and ${join(dir, 'replay-estimate.md')}\n`);
+      if (probeEst !== undefined) {
+        const low = probeEst.total.costLow + est.total.costLow;
+        const high = probeEst.total.costHigh + est.total.costHigh;
+        const f = (n: number) => `$${n.toFixed(4)}`;
+        const fit = ra.maxCost === undefined ? '' : high <= ra.maxCost ? `; the high estimate fits --max-cost ${f(ra.maxCost)}` : `; the high estimate does not fit --max-cost ${f(ra.maxCost)}`;
+        process.stdout.write(`bench: probes + replay together, one shared --max-cost budget: ${f(low)} low to ${f(high)} high${fit}\n`);
+      }
     }
   } else if (section !== undefined || replaySection !== undefined) {
     const stopClause = stopped.length > 0 ? `; ${ra!.replay ? 'real-model requests' : 'probing'} stopped (${stopped[0]!.reason})` : '';

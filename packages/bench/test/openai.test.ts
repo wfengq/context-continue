@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { OpenAIModel, baseUrlHost, buildChatBody, chatCompletionsUrl } from '../src/models/openai.js';
 import { ProbeModelError } from '../src/model.js';
 import { CostGuardModel, customPrice, estimateProbeCost, usageCost } from '../src/cost.js';
-import { ProbeStop } from '../src/probe.js';
+import { MAX_CONSECUTIVE_NETWORK_FAILURES, ProbeStop } from '../src/probe.js';
 import type { ModelRequest } from '../src/model.js';
 
 const KEY = 'sk-deepseek-SECRETSECRETSECRET';
@@ -221,5 +221,52 @@ describe('per-request max_tokens and purpose', () => {
     const mk = () => new CostGuardModel(inner, customPrice(0, 0, 1000), { maxCost: 0.1, maxTokens: 200, count: () => 0 });
     await expect(mk().complete(request())).rejects.toThrow(/requests/);
     await expect(mk().complete({ ...request(), maxTokens: 16 })).resolves.toMatchObject({ reply: 'x' });
+  });
+});
+
+describe('replay network failures', () => {
+  const down = () => Object.assign(new TypeError(`fetch failed ${KEY}`), { cause: { code: 'ECONNRESET' } });
+  const replayReq = (): ModelRequest => ({ ...request(), purpose: 'replay' });
+
+  test('MAX_CONSECUTIVE_NETWORK_FAILURES is 10', () => {
+    expect(MAX_CONSECUTIVE_NETWORK_FAILURES).toBe(10);
+  });
+  test('a replay request that exhausts its retries is a plain masked error, not a stop', async () => {
+    const s = stubFetch([...Array.from({ length: 5 }, down), chat('ok')]);
+    const m = model(s.fetch);
+    const e = await m.complete(replayReq()).catch(x => x);
+    expect(e).not.toBeInstanceOf(ProbeStop);
+    expect((e as Error).message).toContain('ECONNRESET');
+    expect((e as Error).message).not.toContain(KEY);
+    expect((await m.complete(replayReq())).reply).toBe('ok');
+  });
+  test('stops all requests only after 10 in a row, and the stop is sticky for probes too', async () => {
+    const s = stubFetch(Array.from({ length: 50 }, down));
+    const m = model(s.fetch);
+    for (let i = 0; i < MAX_CONSECUTIVE_NETWORK_FAILURES; i++) {
+      const e = await m.complete(replayReq()).catch(x => x);
+      expect(e).not.toBeInstanceOf(ProbeStop);
+    }
+    const next = await m.complete(replayReq()).catch(x => x);
+    expect(next).toBeInstanceOf(ProbeStop);
+    expect((next as Error).message).not.toContain(KEY);
+    await expect(m.complete(request())).rejects.toBeInstanceOf(ProbeStop);
+    expect(s.calls).toHaveLength(5 * MAX_CONSECUTIVE_NETWORK_FAILURES);
+  });
+  test('any HTTP response resets the counter (even an error response)', async () => {
+    const seq: (Response | Error)[] = [];
+    for (let round = 0; round < 3; round++) {
+      for (let i = 0; i < 9; i++) seq.push(...Array.from({ length: 5 }, down));
+      seq.push(err(400, 'too long'));
+    }
+    const m = model(stubFetch(seq).fetch);
+    for (let i = 0; i < 30; i++) {
+      const e = await m.complete(replayReq()).catch(x => x);
+      expect(e, `request ${i}`).not.toBeInstanceOf(ProbeStop);
+    }
+  });
+  test('probe requests keep the old rule: the first exhausted request stops', async () => {
+    const m = model(stubFetch(Array.from({ length: 5 }, down)).fetch);
+    await expect(m.complete(request())).rejects.toBeInstanceOf(ProbeStop);
   });
 });

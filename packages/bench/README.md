@@ -238,7 +238,14 @@ metrics are the same as without `--replay`. The groups replayed are those `--gro
   estimated cost units of C against D and E. A group the guard stopped before every request was
   replayed is marked incomplete and left out of those comparisons, with the reason.
 - A single failing request (400/422, refusal) is recorded as that request's error and does not stop
-  the replay; 401/402/403/404, exhausted retries and the cost guard stop all real-model requests.
+  the replay; 401/402/403/404 and the cost guard stop all real-model requests. A replay request whose
+  network retries run out (DNS, reset, timeout) is also only that request's error; after 10 replay
+  requests in a row ended that way, all real-model requests stop (any HTTP response resets the count).
+  A group with replay errors that carry no usage is left out of the comparison tables and named below them.
+- If a run is interrupted (Ctrl-C, a stop, a crash), `replay.jsonl` and `probes.jsonl` keep everything
+  already paid for, but no `results.json` or `report.md` is written. Rerun with a new `--stamp`: a real
+  run refuses to start (exit 2) if `probes.jsonl` or `replay.jsonl` in `<out>/<stamp>` is already
+  non-empty, so the old files are never overwritten.
 - Limits: output is cut to 16 tokens, so the output cost is understated; the provider's cache is best
   effort and each configuration runs once; groups share a short fixed template.
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -202,21 +202,61 @@ describe('bench cli: --replay', () => {
     expect(r.err).toMatch(/none of these groups is in this run \(--group A,C\)/);
   });
 
-  test('a comparison row whose group had replay errors is kept and noted; shared budget is stated', async () => {
+  test('a comparison row whose group had replay errors without usage is excluded and named; shared budget is stated', async () => {
     const out = tmp();
     let n = 0;
     const fetch = (async () => {
       n++;
-      // Every 7th request fails with a 400 (a plain per-request error for replay).
+      // Every 7th request fails with a 400 (a plain per-request error for replay, no usage).
       if (n % 7 === 0) return new Response(JSON.stringify({ error: { message: 'too long' } }), { status: 400 });
       return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'length' }], usage: { prompt_tokens: 1000, completion_tokens: 16, prompt_cache_hit_tokens: 600, prompt_cache_miss_tokens: 400 } }), { status: 200 });
     }) as typeof globalThis.fetch;
     const r = await run([...base(out, 'C,D'), '--replay', ...oa, '--max-cost', '5'], deps(fetch));
     expect(r.code, r.err).toBe(0);
     const report = read(join(out, 'S'), 'report.md');
-    expect(report).toMatch(/Errors: flappy-bird\/[CD] had \d+ failed replay request/);
-    expect(report).toMatch(/\| D \| flappy-bird \| \$/);
+    expect(report).toMatch(/Excluded: flappy-bird\/[CD] had \d+ failed replay requests? without usage/);
+    const json = JSON.parse(read(join(out, 'S'), 'results.json'));
+    for (const g of json.replay.groups) expect(g.errorsNoUsage).toBe(g.errors);
+    expect(json.replay.groups.some((g: { errorsNoUsage: number }) => g.errorsNoUsage > 0)).toBe(true);
+    expect(report).toMatch(/\| D \| none \|/);
     expect(report).toMatch(/\| E \| none \|/);
     expect(report).toMatch(/Skipped: flappy-bird vs E: group E is not in this run/);
+  }, 60_000);
+
+  test.each(['probes.jsonl', 'replay.jsonl'])('a non-empty %s from an earlier run: exit 2 before any request, nothing overwritten', async f => {
+    const out = join(tmp(), 'o');
+    const dir = join(out, 'S');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, f), 'PAID\n');
+    const { fetch, calls } = stub();
+    const r = await run([...base(out, 'C'), '--replay', '--probes', ...oa, '--max-cost', '5'], deps(fetch));
+    expect(r.code).toBe(2);
+    expect(r.err).toContain(join(dir, f));
+    expect(r.err).toMatch(/choose a new --stamp/);
+    expect(calls).toHaveLength(0);
+    expect(read(dir, f)).toBe('PAID\n');
+    expect(readdirSync(dir)).toEqual([f]);
+  });
+
+  test('an empty earlier jsonl is fine; a dry run ignores existing files', async () => {
+    const out = join(tmp(), 'o');
+    const dir = join(out, 'S');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'replay.jsonl'), '');
+    const { fetch } = stub();
+    expect((await run([...base(out, 'C'), '--replay', ...oa, '--max-cost', '5'], deps(fetch))).code).toBe(0);
+    const out2 = join(tmp(), 'o');
+    mkdirSync(join(out2, 'S'), { recursive: true });
+    writeFileSync(join(out2, 'S', 'replay.jsonl'), 'PAID\n');
+    expect((await run([...base(out2, 'C'), '--replay', '--dry-run', ...oa, '--max-cost', '5'])).code).toBe(0);
+    expect(read(join(out2, 'S'), 'replay.jsonl')).toBe('PAID\n');
+  }, 60_000);
+
+  test('dry run with both flags prints one combined line against the shared --max-cost; one flag alone does not', async () => {
+    const both = await run([...base(join(tmp(), 'o'), 'C'), '--replay', '--probes', '--dry-run', ...oa, '--max-cost', '5']);
+    expect(both.code, both.err).toBe(0);
+    expect(both.out.match(/probes \+ replay together, one shared --max-cost budget: \$[\d.]+ low to \$[\d.]+ high; the high estimate (fits|does not fit) --max-cost \$5\.0000/g)).toHaveLength(1);
+    const one = await run([...base(join(tmp(), 'o'), 'C'), '--replay', '--dry-run', ...oa, '--max-cost', '5']);
+    expect(one.out).not.toContain('one shared --max-cost budget');
   }, 60_000);
 });
