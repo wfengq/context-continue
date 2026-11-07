@@ -171,5 +171,52 @@ describe('bench cli: --replay', () => {
     expect(json.replay.usage.outputTokens).toBe(json.records.length * 16);
     expect(json.probes.cost + json.replay.cost).toBeCloseTo(calls.length * (400 * 0.28 + 600 * 0.028 + 16 * 0.42) / 1e6, 10);
     expect(read(join(out, 'S'), 'report.md')).toContain('The fact-probe and replay sections used a real model');
+    expect(read(join(out, 'S'), 'report.md').match(/one budget shared/g)).toHaveLength(2);
+  }, 60_000);
+
+  test('--group takes a comma list: validated, canonical order, results equal the groups run singly', async () => {
+    for (const bad of ['A,Z', 'A,A', 'A,', ',A', 'all,A', 'a']) {
+      const out = join(tmp(), 'o');
+      const r = await run(['run', '--scenario', 'flappy-bird', '--group', bad, '--out', out, '--stamp', 'S']);
+      expect(r.code, bad).toBe(2);
+      expect(r.err, bad).toMatch(/group/);
+      expect(existsSync(out)).toBe(false);
+    }
+    const list = tmp();
+    expect((await run(['run', '--scenario', 'flappy-bird', '--group', 'E,C,A', '--out', list, '--stamp', 'S'])).code).toBe(0);
+    const json = JSON.parse(read(join(list, 'S'), 'results.json'));
+    expect(json.metrics.map((m: { group: string }) => m.group)).toEqual(['A', 'C', 'E']);
+    const singles = [];
+    for (const g of ['A', 'C', 'E']) {
+      const o = tmp();
+      expect((await run(['run', '--scenario', 'flappy-bird', '--group', g, '--out', o, '--stamp', 'S'])).code).toBe(0);
+      singles.push(JSON.parse(read(join(o, 'S'), 'results.json')));
+    }
+    expect(json.metrics).toEqual(singles.flatMap(j => j.metrics));
+    expect(json.records).toEqual(singles.flatMap(j => j.records));
+  }, 60_000);
+
+  test('--probe-groups still intersects with a --group list', async () => {
+    const r = await run([...base(join(tmp(), 'o'), 'A,C'), '--probes', '--probe-groups', 'D,E', '--dry-run']);
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/none of these groups is in this run \(--group A,C\)/);
+  });
+
+  test('a comparison row whose group had replay errors is kept and noted; shared budget is stated', async () => {
+    const out = tmp();
+    let n = 0;
+    const fetch = (async () => {
+      n++;
+      // Every 7th request fails with a 400 (a plain per-request error for replay).
+      if (n % 7 === 0) return new Response(JSON.stringify({ error: { message: 'too long' } }), { status: 400 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'length' }], usage: { prompt_tokens: 1000, completion_tokens: 16, prompt_cache_hit_tokens: 600, prompt_cache_miss_tokens: 400 } }), { status: 200 });
+    }) as typeof globalThis.fetch;
+    const r = await run([...base(out, 'C,D'), '--replay', ...oa, '--max-cost', '5'], deps(fetch));
+    expect(r.code, r.err).toBe(0);
+    const report = read(join(out, 'S'), 'report.md');
+    expect(report).toMatch(/Errors: flappy-bird\/[CD] had \d+ failed replay request/);
+    expect(report).toMatch(/\| D \| flappy-bird \| \$/);
+    expect(report).toMatch(/\| E \| none \|/);
+    expect(report).toMatch(/Skipped: flappy-bird vs E: group E is not in this run/);
   }, 60_000);
 });

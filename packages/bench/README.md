@@ -103,7 +103,7 @@ ignored by git.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--scenario <id\|path.json\|standard\|long\|xlong\|all>` | required | A scenario id from `scenarios/`, a path to a scenario JSON file, `standard` (the three standard scenarios), `long` (the two long ones), `xlong` (the extra-long one) or `all` (all six) |
-| `--group <A..F\|all>` | required | One group or all six |
+| `--group <A..F\|all\|list>` | required | One group, all six, or a comma list of distinct groups such as `A,C,D,E` (any order; run in A..F order) |
 | `--window <n>` | `128000` | Group E: assumed context window in tokens |
 | `--compact-ratio <r>` | `0.8` | Group E: compact when history exceeds window x ratio |
 | `--summary-tokens <n>` | `1500` | Group E: size of the summary that replaces compacted history |
@@ -118,7 +118,7 @@ ignored by git.
 | `--probes` | off | Fact probes with a real model (below). Takes no value. `--probe-groups`, `--probe-samples`, `--max-probes` and `--no-probe-control` need it (a usage error otherwise) |
 | `--replay` | off | Also send every request of every selected group to a real model (below). Takes no value. Combinable with `--probes`; the real-model flags below work with either |
 | `--dry-run` | off | With `--probes` or `--replay`: send nothing; print the estimate and write `probe-estimate.*` and/or `replay-estimate.*` |
-| `--max-cost <usd>` | required for a real run | With `--probes` or `--replay`: budget in US dollars; real-model requests stop before the next probe's estimate would pass it (one probe can overshoot by the difference between its estimate and its real cost) |
+| `--max-cost <usd>` | required for a real run | With `--probes` or `--replay`: budget in US dollars; real-model requests stop before the next request's estimate would pass it (one request can overshoot by the difference between its estimate and its real cost) |
 | `--provider <anthropic\|openai>` | `anthropic` | With `--probes` or `--replay`: the API. `openai` is any OpenAI-compatible Chat Completions server (below) |
 | `--model <id>` | `claude-haiku-5-5` | With `--probes` or `--replay`: the model. With `anthropic` it must have a price in `PRICES` (`src/cost.ts`); with `openai` it is required and any name is accepted |
 | `--base-url <url>` | none | `--provider openai` only, required: `http` or `https`; requests go to `<url>/chat/completions` (trailing slashes removed). Only its host (and port) is recorded |
@@ -242,20 +242,23 @@ metrics are the same as without `--replay`. The groups replayed are those `--gro
 - Limits: output is cut to 16 tokens, so the output cost is understated; the provider's cache is best
   effort and each configuration runs once; groups share a short fixed template.
 
-DeepSeek (prices in USD per 1M tokens: cache miss, cache hit, output):
+DeepSeek (prices in USD per 1M tokens: cache miss, cache hit, output), one command per tier:
 
 ```sh
 export DEEPSEEK_API_KEY=...
 D="--provider openai --base-url https://api.deepseek.com --model deepseek-flash --api-key-env DEEPSEEK_API_KEY --price 0.15,0.003,0.6"
 # Estimate (no requests):
-pnpm -C packages/bench bench run --scenario long --group all --replay --dry-run $D --out results --stamp replay-est
-# Long tier, one run: --group all replays all six groups (B and F too; run A, C, D, E singly with --group <g> to skip them):
-pnpm -C packages/bench bench run --scenario long --group all --replay $D --max-cost 2 --out results --stamp replay-long
-# Extra-long tier: one command per group; they can run in parallel:
-for g in C D E; do
-  pnpm -C packages/bench bench run --scenario xlong --group $g --replay $D --max-cost 8 --out results --stamp replay-xlong-$g &
-done; wait
+pnpm -C packages/bench bench run --scenario long --group A,C,D,E --replay --dry-run $D --out results --stamp replay-est
+# Long tier:
+pnpm -C packages/bench bench run --scenario long --group A,C,D,E --replay $D --max-cost 2 --out results --stamp replay-long
+# Extra-long tier:
+pnpm -C packages/bench bench run --scenario xlong --group C,D,E --replay $D --max-cost 8 --out results --stamp replay-xlong
 ```
+
+A run replays its groups and scenarios one after another (sequentially); the extra-long run can take
+a few hours. The C against D and E comparison tables need D and E in the same run as C: if you split
+the groups over several commands (for example to run them in parallel), each report's comparison
+table is empty, because the groups are in different runs.
 
 ### Group C on the core stream (`--c-stream core` / `auto`)
 

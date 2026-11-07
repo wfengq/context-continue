@@ -32,7 +32,7 @@ const GROUPS: Group[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 const SCENARIO_DIR = fileURLToPath(new URL('../scenarios/', import.meta.url));
 
 const USAGE =
-  'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
+  'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all|A,C,D,E> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
   '[--c-stream off|on|core|auto] [--restream-tokens 8000] [--c-stream-own off|on] [--auto-after <n>] [--out results] [--stamp <s>] ' +
   '[--probes] [--replay] (either one: [--dry-run] [--max-cost <usd>] [--provider anthropic|openai] [--model claude-haiku-5-5] [--base-url <url>] [--api-key-env <NAME>] [--price <input>,<cacheRead>,<output>] [--thinking disabled|omit]) ' +
@@ -86,6 +86,8 @@ export interface MainDeps {
 interface Args {
   scenario: string;
   group: string;
+  /** The groups this run covers, in A..F order. */
+  groups: Group[];
   window: number;
   compactRatio: number;
   summaryTokens: number;
@@ -182,6 +184,16 @@ function number(flag: string, raw: string, ok: (n: number) => boolean, what: str
   return n;
 }
 
+/** `--group`: `all`, one group, or a comma list of distinct groups (any order); the result is in A..F order. */
+function parseGroups(raw: string): Group[] {
+  if (raw === 'all') return [...GROUPS];
+  const names = raw.split(',');
+  const bad = names.find(n => !GROUPS.includes(n as Group));
+  if (bad !== undefined) throw new UsageError(`unknown group "${bad}" in "${raw}" (use A..F, a comma list such as A,C,D,E, or all)`);
+  if (new Set(names).size !== names.length) throw new UsageError(`--group: a group is repeated in "${raw}"`);
+  return GROUPS.filter(g => names.includes(g));
+}
+
 function parseArgs(argv: string[]): Args {
   const [command, ...rest] = argv;
   if (command !== 'run') throw new UsageError(command === undefined ? 'missing command' : `unknown command "${command}"`);
@@ -207,7 +219,7 @@ function parseArgs(argv: string[]): Args {
   const group = seen.get('--group');
   if (scenario === undefined) throw new UsageError('--scenario is required');
   if (group === undefined) throw new UsageError('--group is required');
-  if (group !== 'all' && !GROUPS.includes(group as Group)) throw new UsageError(`unknown group "${group}" (use A..F or all)`);
+  const runGroups = parseGroups(group);
   const stamp = seen.get('--stamp');
   // A plain name: no separators, and not "." or ".." (or only dots), which would leave --out.
   if (stamp !== undefined && (!/^[\w.-]+$/.test(stamp) || /^\.+$/.test(stamp))) {
@@ -239,7 +251,8 @@ function parseArgs(argv: string[]): Args {
             };
   return {
     scenario,
-    group,
+    group: runGroups.length === GROUPS.length ? 'all' : runGroups.join(','),
+    groups: runGroups,
     window: number('--window', seen.get('--window') ?? '128000', int, 'a positive integer'),
     compactRatio: number('--compact-ratio', seen.get('--compact-ratio') ?? '0.8', n => n > 0 && n <= 1, 'a number in (0, 1]'),
     summaryTokens: number('--summary-tokens', seen.get('--summary-tokens') ?? '1500', int, 'a positive integer'),
@@ -248,7 +261,7 @@ function parseArgs(argv: string[]): Args {
     cStream,
     out: seen.get('--out') ?? 'results',
     stamp,
-    real: parseRealArgs(seen, group === 'all' ? GROUPS : [group as Group]),
+    real: parseRealArgs(seen, runGroups),
   };
 }
 
@@ -306,7 +319,7 @@ function parseRealArgs(seen: Map<string, string>, runGroups: Group[]): RealArgs 
     if (badGroup !== undefined) throw new UsageError(`--probe-groups: unknown group "${badGroup}" in "${rawGroups}" (use a comma list of A..F)`);
     if (new Set(groups).size !== groups.length) throw new UsageError(`--probe-groups: a group is repeated in "${rawGroups}"`);
     const probed = GROUPS.filter(g => groups.includes(g) && runGroups.includes(g));
-    if (probed.length === 0) throw new UsageError(`--probe-groups ${groups.join(',')}: none of these groups is in this run (--group ${runGroups.length === 1 ? runGroups[0] : 'all'})`);
+    if (probed.length === 0) throw new UsageError(`--probe-groups ${groups.join(',')}: none of these groups is in this run (--group ${runGroups.length === GROUPS.length ? 'all' : runGroups.join(',')})`);
     const rawSamples = seen.get('--probe-samples') ?? 'fml';
     const samples: ProbeSamples =
       rawSamples === 'fml' || rawSamples === 'all'
@@ -351,7 +364,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
     }
   }
 
-  const groups = args.group === 'all' ? GROUPS : [args.group as Group];
+  const groups = args.groups;
   const dir = join(args.out, args.stamp ?? timestamp(new Date()));
 
   // Real-model requests (probes and/or replay): a dry run sends nothing; a real run needs the key (from the environment only) and a budget.
@@ -401,7 +414,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   const probeRecords: ProbeRecord[] = [];
   const stopped: { scenario: string; group: Group | 'none'; reason: string }[] = [];
   const replayRows: ReplayGroupRow[] = [];
-  const replayUsage = (recs: ReplayRecord[]): ModelUsage =>
+  const replayUsage = (recs: { usage?: ModelUsage }[]): ModelUsage =>
     recs.reduce<ModelUsage>((a, r) => (r.usage === undefined ? a : {
       inputTokens: a.inputTokens + r.usage.inputTokens, cacheWriteTokens: a.cacheWriteTokens + r.usage.cacheWriteTokens,
       cacheReadTokens: a.cacheReadTokens + r.usage.cacheReadTokens, outputTokens: a.outputTokens + r.usage.outputTokens,
@@ -465,7 +478,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
 
   const params = { cacheRatio: args.cacheRatio, compactRatio: args.compactRatio, summaryTokens: args.summaryTokens, window: args.window };
   const tiers = Object.fromEntries(scenarios.map(s => [s.id, s.tier ?? 'standard'] as const));
-  const replayTotal = replayUsage(replayRows.map(r => ({ usage: r.usage }) as ReplayRecord));
+  const replayTotal = replayUsage(replayRows);
   const replayCost = replayRows.reduce((n, r) => n + r.cost, 0);
   const section: ProbeSection | undefined =
     pa !== undefined && !ra!.dryRun
@@ -473,22 +486,18 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
           model: ra!.model, ...(ra!.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: ra!.baseUrlHost! } : {}), maxTokens: DEFAULT_MAX_TOKENS,
           thinking: ra!.provider === 'openai' && ra!.thinking === 'omit' ? ('not sent' as const) : ('disabled' as const), temperature: ra!.provider === 'openai' ? '0' : 'not sent (model default)', samples: pa.samples,
           ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
-          // With --replay the guard also paid for the replay requests: the probe totals are what is left.
+          // With --replay the guard also paid for the replay requests: the probe totals come from the probe records alone.
           groups: pa.groups, control: pa.control, maxCost: ra!.maxCost!, price: ra!.price,
-          usage: ra!.replay
-            ? {
-                inputTokens: guard!.spent.usage.inputTokens - replayTotal.inputTokens, cacheWriteTokens: guard!.spent.usage.cacheWriteTokens - replayTotal.cacheWriteTokens,
-                cacheReadTokens: guard!.spent.usage.cacheReadTokens - replayTotal.cacheReadTokens, outputTokens: guard!.spent.usage.outputTokens - replayTotal.outputTokens,
-              }
-            : guard!.spent.usage,
-          cost: ra!.replay ? guard!.spent.cost - replayCost : guard!.spent.cost, stopped, records: probeRecords,
+          usage: ra!.replay ? replayUsage(probeRecords) : guard!.spent.usage,
+          cost: ra!.replay ? probeRecords.reduce((n, r) => (r.usage === undefined ? n : n + usageCost(ra!.price, r.usage)), 0) : guard!.spent.cost,
+          ...(ra!.replay ? { sharedBudget: true as const } : {}), stopped, records: probeRecords,
         }
       : undefined;
   const replaySection: ReplaySection | undefined =
     realRun && ra.replay
       ? {
           model: ra.model, ...(ra.provider === 'openai' ? { provider: 'openai' as const, baseUrlHost: ra.baseUrlHost! } : {}), maxTokens: REPLAY_MAX_TOKENS,
-          price: ra.price, maxCost: ra.maxCost!, cost: replayCost, usage: replayTotal,
+          price: ra.price, maxCost: ra.maxCost!, cost: replayCost, usage: replayTotal, ...(pa === undefined ? {} : { sharedBudget: true as const }),
           ...(stopped.some(x => x.group !== 'none') ? { stopped: stopped.filter((x): x is { scenario: string; group: Group; reason: string } => x.group !== 'none') } : {}),
           groups: replayRows,
         }
