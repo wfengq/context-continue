@@ -75,6 +75,9 @@ export function renderReport(
 ): string {
   const out: string[] = [
     '> Results come from a scripted fake model: they measure context size only, not task quality.',
+    ...(meta.probes === undefined
+      ? []
+      : [`> The fact-probe section used a real model (${meta.probes.provider === undefined ? 'anthropic' : 'openai-compatible'}, ${meta.probes.model}); everything else is still scripted.`]),
     '',
     '# Context bench report',
     '',
@@ -172,7 +175,9 @@ export function renderReport(
   const ownOn = protoStream && meta.cStream!.includes('own outputs');
   out.push(
     '## Caveats', '',
-    '- Results come from a scripted fake model; only context size is measured.',
+    meta.probes === undefined
+      ? '- Results come from a scripted fake model; only context size is measured.'
+      : '- Results come from a scripted fake model; only context size is measured, except the fact-probe section, which used a real model.',
     '- Quality and consistency conflicts: needs a real model, not measured.',
     `- E approximates DS Bot ${meta.dsbotRef}.`,
     '- B and F approximate Grok Bot and Dots + Space from public descriptions.',

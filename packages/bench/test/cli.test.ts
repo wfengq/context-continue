@@ -649,6 +649,43 @@ describe('bench cli: openai-compatible probes', () => {
     expect(r.out + r.err).not.toContain(KEY);
   });
 
+  test('--thinking omit sends no thinking field and records "not sent"; the default sends it and records disabled', async () => {
+    const a = stub();
+    const outA = tmp();
+    expect((await run([...base(outA), ...oa, '--thinking', 'omit', '--max-cost', '1'], { fetch: a.fetch, env: { DEEPSEEK_API_KEY: KEY }, sleep: async () => {} })).code).toBe(0);
+    expect(a.calls.length).toBeGreaterThan(0);
+    for (const c of a.calls) expect('thinking' in c.body).toBe(false);
+    expect(JSON.parse(readFileSync(join(outA, 'S', 'results.json'), 'utf8')).probes.thinking).toBe('not sent');
+    expect(readFileSync(join(outA, 'S', 'report.md'), 'utf8')).toContain('thinking not sent');
+    const b = stub();
+    const outB = tmp();
+    expect((await run([...base(outB), ...oa, '--max-cost', '1'], { fetch: b.fetch, env: { DEEPSEEK_API_KEY: KEY }, sleep: async () => {} })).code).toBe(0);
+    expect(b.calls[0]!.body).toHaveProperty('thinking', { type: 'disabled' });
+    expect(JSON.parse(readFileSync(join(outB, 'S', 'results.json'), 'utf8')).probes.thinking).toBe('disabled');
+  });
+
+  test('--thinking is a usage error with anthropic, without --probes, or with a bad value', async () => {
+    for (const extra of [['--thinking', 'omit', '--max-cost', '1'], ['--provider', 'anthropic', '--thinking', 'disabled', '--max-cost', '1']]) {
+      const r = await run([...base(tmp()), ...extra], { fetch: stub().fetch, env: { ANTHROPIC_API_KEY: 'k' }, sleep: async () => {} });
+      expect(r.code).toBe(2);
+      expect(r.err).toMatch(/--thinking needs --provider openai/);
+    }
+    expect((await run(['run', '--scenario', 'flappy-bird', '--group', 'A', '--thinking', 'omit'], {})).code).toBe(2);
+    const bad = await run([...base(tmp()), ...oa, '--thinking', 'maybe', '--max-cost', '1'], { fetch: stub().fetch, env: {}, sleep: async () => {} });
+    expect(bad.code).toBe(2);
+    expect(bad.err).toMatch(/--thinking must be disabled or omit/);
+  });
+
+  test('three 400s in a row stop probing; the stop reason is recorded and suggests --thinking omit', async () => {
+    const out = tmp();
+    const fetch = (async () => new Response(JSON.stringify({ error: { message: 'unknown field thinking', type: 'invalid_request_error' } }), { status: 400 })) as typeof globalThis.fetch;
+    const r = await run([...base(out), ...oa, '--max-cost', '1'], { fetch, env: { DEEPSEEK_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    const json = JSON.parse(readFileSync(join(out, 'S', 'results.json'), 'utf8'));
+    expect(json.probes.stopped.length).toBeGreaterThan(0);
+    expect(json.probes.stopped[0].reason).toContain('--thinking omit');
+  });
+
   test('no key variable: one stderr note naming it, and no Authorization header', async () => {
     const { fetch, calls } = stub();
     const r = await run([...base(tmp()), ...oa, '--max-cost', '1'], { fetch, env: {}, sleep: async () => {} });

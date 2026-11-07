@@ -37,6 +37,10 @@ describe('request', () => {
       messages: [{ role: 'user', content: 'a\nb' }],
     });
   });
+  test('thinking omit leaves the field out of the body', () => {
+    expect('thinking' in buildChatBody('m', 200, [seg('a')], 'omit')).toBe(false);
+    expect(buildChatBody('m', 200, [seg('a')], 'disabled').thinking).toEqual({ type: 'disabled' });
+  });
   test('url: trailing slashes removed, query kept after the path', () => {
     expect(chatCompletionsUrl('https://h.com/v1///')).toBe('https://h.com/v1/chat/completions');
     expect(chatCompletionsUrl('http://localhost:11434/v1')).toBe('http://localhost:11434/v1/chat/completions');
@@ -98,6 +102,28 @@ describe('errors and retries', () => {
     const e = await m.complete(request()).catch(x => x);
     expect(e).not.toBeInstanceOf(ProbeStop);
     expect((e as Error).message).toMatch(new RegExp(`${status}`));
+    expect((await m.complete(request())).reply).toBe('fine');
+  });
+  test.each([400, 422])('three %i in a row stop the run with a sticky ProbeStop that suggests --thinking omit', async status => {
+    const s = stubFetch([err(status, 'unknown field thinking'), err(status, 'unknown field thinking'), err(status, `unknown field thinking ${KEY}`)]);
+    const m = model(s.fetch);
+    for (let i = 0; i < 2; i++) expect(await m.complete(request()).catch(x => x)).not.toBeInstanceOf(ProbeStop);
+    const e = await m.complete(request()).catch(x => x);
+    expect(e).toBeInstanceOf(ProbeStop);
+    expect((e as Error).message).toMatch(/rejected the request 3 times in a row/);
+    expect((e as Error).message).toContain(String(status));
+    expect((e as Error).message).toContain('unknown field thinking');
+    expect((e as Error).message).toContain('--thinking omit');
+    expect((e as Error).message).not.toContain(KEY);
+    await expect(m.complete(request())).rejects.toBeInstanceOf(ProbeStop);
+    expect(s.calls).toHaveLength(3);
+  });
+  test('a success between 400s resets the counter', async () => {
+    const s = stubFetch([err(400, 'bad'), err(422, 'bad'), chat('fine'), err(400, 'bad'), err(400, 'bad'), chat('fine')]);
+    const m = model(s.fetch);
+    for (let i = 0; i < 2; i++) expect(await m.complete(request()).catch(x => x)).not.toBeInstanceOf(ProbeStop);
+    expect((await m.complete(request())).reply).toBe('fine');
+    for (let i = 0; i < 2; i++) expect(await m.complete(request()).catch(x => x)).not.toBeInstanceOf(ProbeStop);
     expect((await m.complete(request())).reply).toBe('fine');
   });
   test.each([408, 409, 429, 500, 503])('%i is retried with backoff', async status => {

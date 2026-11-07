@@ -123,6 +123,7 @@ ignored by git.
 | `--base-url <url>` | none | `--provider openai` only, required: `http` or `https`; requests go to `<url>/chat/completions` (trailing slashes removed). Only its host (and port) is recorded |
 | `--api-key-env <NAME>` | `OPENAI_API_KEY` | `--provider openai` only: the environment variable holding the key. If unset, a stderr note is printed and no `Authorization` header is sent |
 | `--price <in>,<hit>,<out>` | none | `--provider openai` only, required: USD per million tokens, three non-negative numbers (input cache miss, input cache hit, output); 0 is allowed |
+| `--thinking <disabled\|omit>` | `disabled` | `--provider openai` only (a usage error otherwise): `disabled` sends `thinking: {type: "disabled"}`, which DeepSeek needs; `omit` leaves the field out, for strict servers (official OpenAI API, Mistral, some gateways) that reject unknown fields with 400/422. Results record `disabled` or `not sent` |
 | `--probe-groups <list>` | `A,C,D,E` | With `--probes`: comma list of the groups to probe (those also in `--group`) |
 | `--probe-samples <fml\|all\|n>` | `fml` | With `--probes`: which opportunities of a fact are asked: first, middle and last; all; or n evenly spaced |
 | `--max-probes <n>` | no cap | With `--probes`: at most n probes per scenario and group (last samples of every fact first) |
@@ -185,8 +186,9 @@ every answer is empty); no cache markers (these servers cache prefixes themselve
 from `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` (DeepSeek) or
 `prompt_tokens_details.cached_tokens`; the output count includes reasoning tokens, and
 `reasoning_content` is ignored. Empty answers and `content_filter` are probe errors (their usage
-still counts). 401/402/403/404 stop probing; 400/422 fail one probe; 408/409/429/5xx are retried as
-with Anthropic.
+still counts). 401/402/403/404 stop probing; 400/422 fail one probe, but three 400/422 in a row stop probing too
+(any success resets the count; the stop message suggests `--thinking omit`); 408/409/429/5xx are
+retried as with Anthropic.
 
 ```sh
 export DEEPSEEK_API_KEY=...

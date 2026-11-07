@@ -18,6 +18,18 @@ const all = (): GroupMetrics[] =>
   ['s1', 's2'].flatMap(s => groups.map((g, i) => gm(g, s, 1000 * (i + 1) + (s === 's2' ? 7 : 0))));
 
 describe('renderReport', () => {
+  test('the real-model header line appears with probes, naming provider and model, and not without', () => {
+    const probes = {
+      model: 'deepseek-chat', provider: 'openai' as const, baseUrlHost: 'api.example.com', maxTokens: 200, thinking: 'not sent' as const, temperature: '0',
+      samples: 'fml' as const, groups: ['A' as Group], control: false, maxCost: 1, price: { input: 1, cacheRead: 1, cacheWrite: 1, output: 1 },
+      usage: { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 }, cost: 0, stopped: [], records: [],
+    } as unknown as NonNullable<Parameters<typeof renderReport>[1]['probes']>;
+    const withP = renderReport(all(), { ...meta, probes });
+    const line = withP.split('\n')[1]!;
+    expect(line).toMatch(/^> The fact-probe section used a real model \(openai-compatible, deepseek-chat\)/);
+    expect(withP.split('\n')[0]).toContain('scripted fake model');
+    expect(renderReport(all(), meta)).not.toContain('used a real model');
+  });
   test('starts with the disclaimer; one table per scenario plus a summary', () => {
     const md = renderReport(all(), meta);
     expect(md.startsWith('> Results come from a scripted fake model')).toBe(true);

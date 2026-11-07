@@ -18,7 +18,12 @@ const RETRY_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
 /** Errors that every later request would hit too: stop probing instead of failing each probe. */
 const FATAL_STATUS = new Set([401, 402, 403, 404]);
 
-export function buildChatBody(model: string, maxTokens: number, segments: { text: string }[]) {
+/** What `--thinking` selects: send `thinking: {type: "disabled"}` (default) or leave the field out. */
+export type ThinkingMode = 'disabled' | 'omit';
+/** Consecutive 400/422 responses after which probing stops (a request the server will keep rejecting). */
+export const MAX_CONSECUTIVE_REJECTS = 3;
+
+export function buildChatBody(model: string, maxTokens: number, segments: { text: string }[], thinking: ThinkingMode = 'disabled') {
   return {
     model,
     max_tokens: maxTokens,
@@ -26,7 +31,7 @@ export function buildChatBody(model: string, maxTokens: number, segments: { text
     stream: false,
     // DeepSeek enables thinking by default; a short max_tokens would then hold only the CoT
     // (content empty → every probe an error). Local servers that ignore unknown fields are fine.
-    thinking: { type: 'disabled' as const },
+    ...(thinking === 'omit' ? {} : { thinking: { type: 'disabled' as const } }),
     messages: [{ role: 'user' as const, content: segments.map(s => s.text).join('\n') }],
   };
 }
@@ -62,6 +67,8 @@ export interface OpenAIOptions {
   /** Retries after the first attempt for 408/409/429/5xx and network errors (default 4). */
   maxRetries?: number;
   timeoutMs?: number;
+  /** `omit` leaves the `thinking` field out of the body, for strict servers (default `disabled`). */
+  thinking?: ThinkingMode;
 }
 
 interface ChatResponse {
@@ -79,6 +86,8 @@ export class OpenAIModel implements Model {
   private readonly fetchFn: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
   private fatal: string | undefined;
+  /** Consecutive 400/422 responses; any other outcome resets it. */
+  private rejects = 0;
 
   constructor(private readonly o: OpenAIOptions) {
     this.fetchFn = o.fetch ?? fetch;
@@ -93,7 +102,7 @@ export class OpenAIModel implements Model {
 
   async complete(r: ModelRequest): Promise<{ reply: string; ops: ToolCall[]; usage: ModelUsage }> {
     if (this.fatal !== undefined) throw new ProbeStop(this.fatal);
-    const body = JSON.stringify(buildChatBody(this.o.model, this.o.maxTokens ?? 200, r.segments));
+    const body = JSON.stringify(buildChatBody(this.o.model, this.o.maxTokens ?? 200, r.segments, this.o.thinking));
     const url = chatCompletionsUrl(this.o.baseUrl);
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (this.o.apiKey !== undefined) headers.authorization = `Bearer ${this.o.apiKey}`;
@@ -114,6 +123,7 @@ export class OpenAIModel implements Model {
         throw new ProbeStop(this.fatal);
       }
       if (res.ok) {
+        this.rejects = 0;
         let j: ChatResponse;
         try {
           j = (await res.json()) as ChatResponse;
@@ -140,6 +150,13 @@ export class OpenAIModel implements Model {
         this.fatal = msg;
         throw new ProbeStop(msg);
       }
+      if (res.status === 400 || res.status === 422) {
+        if (++this.rejects >= MAX_CONSECUTIVE_REJECTS) {
+          const hint = (this.o.thinking ?? 'disabled') === 'disabled' ? '; if the server rejects the unknown `thinking` field, retry with --thinking omit' : '';
+          this.fatal = `OpenAI-compatible server rejected the request ${MAX_CONSECUTIVE_REJECTS} times in a row (${msg})${hint}`;
+          throw new ProbeStop(this.fatal);
+        }
+      } else this.rejects = 0;
       throw new Error(attempt > 0 ? `${msg} (after ${attempt + 1} attempts)` : msg);
     }
   }
