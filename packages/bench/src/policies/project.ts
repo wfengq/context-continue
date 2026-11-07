@@ -145,6 +145,7 @@ export function projectPolicy(
     coreStream?: { mode: 'on' | 'auto'; restreamTokens: number; autoAfterEntries?: number };
   } = {},
 ): Policy & { readonly project: Project | null } {
+  if (opts.stream && opts.coreStream) throw new Error('projectPolicy: the prototype stream and coreStream are mutually exclusive');
   let project: Project | null = null;
   /** Stream mode: the per-bot streams, the run's store, and the human chat entries read from it so far. */
   let streams: ReturnType<typeof briefStream> | null = null;

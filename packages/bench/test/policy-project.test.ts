@@ -484,6 +484,12 @@ describe('group C unfinished flag (R-B16)', () => {
     expect(some).not.toMatch(/## (Directives|Failures)/);
   });
 
+  test('projectPolicy throws early when both the prototype stream and coreStream are set', () => {
+    expect(() => projectPolicy({ stream: { restreamTokens: 8000 }, coreStream: { mode: 'on', restreamTokens: 8000 } })).toThrow(/stream.*coreStream|coreStream.*stream/);
+    expect(() => projectPolicy({ coreStream: { mode: 'on', restreamTokens: 8000 } })).not.toThrow();
+    expect(() => projectPolicy({ stream: { restreamTokens: 8000 } })).not.toThrow();
+  });
+
   test('createPolicy passes publicBoard to C only', () => {
     const opts = { ...defaults, publicBoard: { directives: true } };
     expect(createPolicy('C', opts).group).toBe('C');
