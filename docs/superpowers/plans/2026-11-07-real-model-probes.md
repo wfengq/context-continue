@@ -60,3 +60,18 @@
 
 - [ ] `--dry-run` 估算长档（A、C、D、E）与超长档抽样的问题数、token 数与费用，报告给用户，取得同意与密钥后再运行。
 - [ ] 运行并把结果写入设计文档第 5 节与 README（答对率、旧答案率、真实费用与 R-B19 对照）。
+
+### Task 5: OpenAI 兼容适配器（DeepSeek 等，用户本地运行）
+
+用户决定在本地电脑用 DeepSeek API 运行（2026-11-07）。DeepSeek 提供 OpenAI 兼容的 Chat Completions 接口，并自动做前缀缓存（无需缓存断点）。
+
+**Files:** Create `packages/bench/src/models/openai.ts`；Modify `src/cost.ts`（用户给定价目）、`src/cli.ts`、`src/report.ts`、`packages/bench/README.md`；Test `test/openai.test.ts`、`test/cli.test.ts`
+
+- 命令行：`--provider anthropic|openai`（默认 anthropic，现有行为不变）；`openai` 需要 `--base-url <url>`（请求 `<base-url>/chat/completions`，去掉末尾斜杠）与 `--model <name>`；`--api-key-env <NAME>`（默认 `OPENAI_API_KEY`；变量未设置时不发 Authorization 头，并在 stderr 提示，供本地无密钥服务使用）；`--price <input>,<cacheRead>,<output>`（美元 / 百万 token，`openai` 必填，可为 0）。
+- 请求：一条 user 消息，内容为各段按原顺序拼接（与计数时相同的分隔）；`max_tokens` 200、`temperature` 0、`stream` false。
+- 用量：缓存读 = `prompt_cache_hit_tokens` ?? `prompt_tokens_details.cached_tokens` ?? 0；未缓存输入 = `prompt_cache_miss_tokens` ?? `prompt_tokens − 缓存读`；缓存写 = 0；输出 = `completion_tokens`（含推理 token）。答案取 `choices[0].message.content`（忽略 `reasoning_content`）；内容为空或 `finish_reason` 为 `content_filter` 记为 error，并带上用量供费用守卫计入。
+- 估算：低 = 可缓存部分按缓存读价，高 = 全部按输入价；费用守卫与 `--max-cost` 规则与 Anthropic 相同。
+- 状态码：401/402/403/404 停止后续全部 probe；400/422 只判该题 error；408/409/429/5xx 退避重试（同 Anthropic）。
+- 记录：results.json 与报告写 provider、模型、base URL 的主机名（不写完整 URL、不写密钥）与价目；密钥不出现在任何输出与错误信息中。
+- 不加 `--probes` 时输出逐字节相同；`--provider anthropic` 路径行为不变；测试用可注入 `fetch`，不联网。
+- Commit `feat(bench): OpenAI-compatible probe adapter with user-supplied prices`
