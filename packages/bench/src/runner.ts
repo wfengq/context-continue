@@ -1,15 +1,18 @@
 import { defaultCountTokens } from '@context-continue/core';
-import { ScriptedModel, type Model } from './model.js';
+import { ProbeModelError, ScriptedModel, type Model } from './model.js';
 import { gradeAnswer, probeErrorMessage, probeQuestion, ProbeStop, scheduleProbes, type ProbeRunOptions } from './probe.js';
 import { DEFAULT_IDLE_REPLY } from './scenario.js';
 import { planLines } from './text.js';
-import type { CallRecord, Group, PolicyStats, ProbeRecord, Scenario, Step, ToolCall } from './types.js';
+import type { CallRecord, Group, PolicyStats, ProbeRecord, ReplayRecord, Scenario, Step, ToolCall } from './types.js';
 
 /** The fixed instruction every group puts first in every request. */
 export const BASE_TEMPLATE =
   'You are a member of a project team of humans and AI bots working toward one shared goal. ' +
   'Read the context below, do only the part of the work that is yours, use the tools when an action is needed, ' +
   'and reply concisely.';
+
+/** Output cap of a replayed request: only usage is measured, so the answer can be tiny. */
+export const REPLAY_MAX_TOKENS = 16;
 
 export interface Segment {
   text: string;
@@ -65,16 +68,24 @@ export function scriptedOutput(step: Step, index: number): { reply: string; ops:
 export async function runScenario(
   s: Scenario,
   policy: Policy,
-  opts: { model?: Model; probe?: ProbeRunOptions } = {},
-): Promise<{ records: CallRecord[]; stats: PolicyStats; probes?: ProbeRecord[]; probeStopped?: string }> {
+  opts: {
+    model?: Model;
+    probe?: ProbeRunOptions;
+    /** Also sends every request, in order, to `model` (capped at REPLAY_MAX_TOKENS); answers never change the run. */
+    replay?: { model: Model; onReplay?: (r: ReplayRecord) => void | Promise<void> };
+  } = {},
+): Promise<{
+  records: CallRecord[]; stats: PolicyStats; probes?: ProbeRecord[]; probeStopped?: string; replay?: ReplayRecord[]; realStopped?: string;
+}> {
   const model = opts.model ?? new ScriptedModel(s.idleReply ?? DEFAULT_IDLE_REPLY);
   const records: CallRecord[] = [];
   // Probes by step (in schedule order); each fires once, after the first scripted request of its step.
   const probesAt = new Map<number, string[]>();
   for (const p of opts.probe ? scheduleProbes(s, opts.probe) : []) probesAt.set(p.step, [...(probesAt.get(p.step) ?? []), p.factId]);
   const probes: ProbeRecord[] = [];
-  /** Set by a ProbeStop: no further probes are sent; the scripted run goes on. */
-  let probeStopped: string | undefined;
+  const replays: ReplayRecord[] = [];
+  /** Set by a ProbeStop from a replay or a probe: no further real-model requests are sent; the scripted run goes on. */
+  let realStopped: string | undefined;
   const emit = async (rec: ProbeRecord) => {
     probes.push(rec);
     await opts.probe?.onProbe?.(rec);
@@ -143,8 +154,32 @@ export async function runScenario(
       records.push(record);
       const sent = segments.map(g => ({ text: g.text, cacheable: g.cacheable }));
       const out = await model.complete({ botId, segments: sent, scripted });
+      if (opts.replay && realStopped === undefined) {
+        const rec: ReplayRecord = { group: policy.group, scenario: s.id, step, botId, kind };
+        try {
+          const answer = await opts.replay.model.complete({
+            botId, segments: sent, scripted: null, maxTokens: REPLAY_MAX_TOKENS, purpose: 'replay',
+          });
+          if (answer.usage !== undefined) rec.usage = answer.usage;
+        } catch (e) {
+          if (e instanceof ProbeStop) realStopped = e.message;
+          else {
+            rec.error = probeErrorMessage(e);
+            if (e instanceof ProbeModelError && e.usage !== undefined) rec.usage = e.usage;
+          }
+        }
+        if (realStopped === undefined) {
+          replays.push(rec);
+          try {
+            await opts.replay.onReplay?.(rec);
+          } catch (e) {
+            if (!(e instanceof ProbeStop)) throw e;
+            realStopped = e.message;
+          }
+        }
+      }
       const due = kind === 'scripted' ? probesAt.get(step) : undefined;
-      if (due !== undefined && opts.probe && probeStopped === undefined) {
+      if (due !== undefined && opts.probe && realStopped === undefined) {
         probesAt.delete(step);
         for (const factId of due) {
           const probe = s.facts!.find(f => f.id === factId)!.probe!;
@@ -161,7 +196,7 @@ export async function runScenario(
             if (answer.usage !== undefined) rec.usage = answer.usage;
           } catch (e) {
             if (e instanceof ProbeStop) {
-              probeStopped = e.message;
+              realStopped = e.message;
               break;
             }
             rec = { ...base, answer: '', verdict: 'error', error: probeErrorMessage(e) };
@@ -171,7 +206,7 @@ export async function runScenario(
           } catch (e) {
             // onProbe may stop probing too; any other sink error is the caller's and propagates.
             if (!(e instanceof ProbeStop)) throw e;
-            probeStopped = e.message;
+            realStopped = e.message;
             break;
           }
         }
@@ -182,9 +217,18 @@ export async function runScenario(
 
   for (const [i, step] of s.steps.entries()) await policy.onStep(step, i, ctx);
   const stats = await policy.finish();
-  if (!opts.probe) return { records, stats };
+  const finish = (extra: { probes?: ProbeRecord[] }) => {
+    const out: Awaited<ReturnType<typeof runScenario>> = { records, stats, ...extra };
+    if (realStopped !== undefined) out.probeStopped = realStopped;
+    if (opts.replay) {
+      out.replay = replays;
+      if (realStopped !== undefined) out.realStopped = realStopped;
+    }
+    return out;
+  };
+  if (!opts.probe) return finish({});
   // Every scheduled probe fires unless probing was stopped; any left over is recorded, not dropped.
-  if (probeStopped === undefined) {
+  if (realStopped === undefined) {
     notFired: for (const [step, factIds] of [...probesAt].sort((a, b) => a[0] - b[0]))
       for (const factId of factIds) {
         const f = s.facts!.find(x => x.id === factId)!;
@@ -195,10 +239,10 @@ export async function runScenario(
           });
         } catch (e) {
           if (!(e instanceof ProbeStop)) throw e;
-          probeStopped = e.message;
+          realStopped = e.message;
           break notFired;
         }
       }
   }
-  return probeStopped === undefined ? { records, stats, probes } : { records, stats, probes, probeStopped };
+  return finish({ probes });
 }

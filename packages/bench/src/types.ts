@@ -48,6 +48,18 @@ export interface ModelUsage {
   outputTokens: number;
 }
 
+/** One replayed group request: sent to a real model with a small output cap; its answer is discarded. */
+export interface ReplayRecord {
+  group: Group;
+  scenario: string;
+  step: number;
+  botId: string;
+  kind: 'scripted' | 'extra';
+  usage?: ModelUsage;
+  /** The masked, truncated error message when the request failed. */
+  error?: string;
+}
+
 /**
  * One probe request: the scripted request of `step` (its exact segments, as the group sent them)
  * plus a question segment, sent to the probe model after that request. Kept apart from CallRecord.
