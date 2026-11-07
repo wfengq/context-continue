@@ -53,7 +53,8 @@ export interface ModelUsage {
  * plus a question segment, sent to the probe model after that request. Kept apart from CallRecord.
  */
 export interface ProbeRecord {
-  group: Group;
+  /** 'none': the no-context control (step -1, empty botId): the question alone, no project context. */
+  group: Group | 'none';
   scenario: string;
   step: number;
   /** The scripted request's botId (group A: its single agent). */

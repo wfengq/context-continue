@@ -396,8 +396,8 @@ describe('bench cli: fact probes', () => {
     expect(files(join(dry, 'S'))).toEqual(['probe-estimate.json', 'probe-estimate.md', 'report.md', 'results.json']);
     const est = JSON.parse(read(join(dry, 'S'), 'probe-estimate.json'));
     expect(est.model).toBe('claude-haiku-5-5');
-    expect(est.groups).toEqual(['A', 'C', 'D', 'E']);
-    expect([...new Set(est.rows.map((x: { group: string }) => x.group))]).toEqual(['A', 'C', 'D', 'E']);
+    expect(est.groups).toEqual(['A', 'C', 'D', 'E', 'none']);
+    expect([...new Set(est.rows.map((x: { group: string }) => x.group))]).toEqual(['none', 'A', 'C', 'D', 'E']);
     // fml on two facts: at most 3 opportunities each.
     for (const row of est.rows) expect(row.probes).toBeGreaterThan(0);
     expect(est.total.probes).toBe(est.rows.reduce((n: number, x: { probes: number }) => n + x.probes, 0));
@@ -444,6 +444,90 @@ describe('bench cli: fact probes', () => {
     for (const f of files(dir)) expect(read(dir, f)).not.toContain('TOPSECRETKEYVALUE');
     expect(r.out + r.err).not.toContain('TOPSECRETKEYVALUE');
   }, 60_000);
+
+  test('the no-context control asks each probed fact once with the question alone, counted by the guard and shown as group "none"', async () => {
+    const path = probeScenario();
+    const out = tmp();
+    const { fetch, bodies } = stubFetch();
+    const r = await run(['run', '--scenario', path, '--group', 'all', '--out', out, '--stamp', 'S', '--probes', '--max-cost', '5', '--probe-groups', 'A,C'],
+      { fetch, env: { ANTHROPIC_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    const json = JSON.parse(read(join(out, 'S'), 'results.json'));
+    const records = json.probes.records as { group: string; factId: string; step: number; botId: string; inputTokens: number; cacheableTokens: number }[];
+    const control = records.filter(x => x.group === 'none');
+    // Two probed facts, each asked once.
+    expect(control.map(x => x.factId).sort()).toEqual(['change-portrait-tap', 'contract-hitbox-12x12']);
+    expect(control.every(x => x.step === -1 && x.botId === '' && x.cacheableTokens === 0 && x.inputTokens > 0)).toBe(true);
+    expect(json.probes.control).toBe(true);
+    // The control request is only the question segment: no project context, nothing cached.
+    const questionOnly = bodies.filter(b => b.body.messages[0]!.content.length === 1);
+    expect(questionOnly).toHaveLength(2);
+    expect(questionOnly.every(b => /^Question: .*\nAnswer briefly\.$/.test(b.body.messages[0]!.content[0]!.text))).toBe(true);
+    // Control requests are in the cost accounting like any other probe.
+    expect(json.probes.records).toHaveLength(bodies.length);
+    expect(json.probes.usage.cacheWriteTokens).toBe(600 * bodies.length);
+    const report = read(join(out, 'S'), 'report.md');
+    expect(report).toContain('no-context control');
+    expect(report).toMatch(/\| none \| all \| 2 \|/);
+    expect(report).toMatch(/\| none \| standard \| 2 \|/);
+    expect(report).toMatch(/\| none \| 2 \|/);
+    // The scripted results do not change.
+    const plain = tmp();
+    expect((await run(['run', '--scenario', path, '--group', 'all', '--out', plain, '--stamp', 'S'])).code).toBe(0);
+    const { probes: _p, ...rest } = json;
+    expect(rest).toEqual(JSON.parse(read(join(plain, 'S'), 'results.json')));
+  }, 60_000);
+
+  test('--no-probe-control leaves the control out; the flag needs --probes', async () => {
+    const path = probeScenario();
+    const out = tmp();
+    const { fetch, bodies } = stubFetch();
+    const r = await run(['run', '--scenario', path, '--group', 'A', '--out', out, '--stamp', 'S', '--probes', '--max-cost', '5', '--no-probe-control'],
+      { fetch, env: { ANTHROPIC_API_KEY: KEY }, sleep: async () => {} });
+    expect(r.code, r.err).toBe(0);
+    const json = JSON.parse(read(join(out, 'S'), 'results.json'));
+    expect(json.probes.control).toBe(false);
+    expect(json.probes.records.some((x: { group: string }) => x.group === 'none')).toBe(false);
+    expect(bodies.every(b => b.body.messages[0]!.content.length > 1)).toBe(true);
+    expect(read(join(out, 'S'), 'report.md')).not.toContain('no-context control');
+    const stray = await run(['run', '--scenario', path, '--group', 'A', '--out', tmp(), '--no-probe-control'], { fetch, env: {} });
+    expect(stray.code).toBe(2);
+    expect(stray.err).toMatch(/--no-probe-control needs --probes/);
+  });
+
+  test('--dry-run counts the control: its own estimate rows, none when --no-probe-control is given', async () => {
+    const path = probeScenario();
+    const { fetch, bodies } = stubFetch();
+    const on = tmp();
+    const off = tmp();
+    expect((await run(['run', '--scenario', path, '--group', 'A', '--out', on, '--stamp', 'S', '--probes', '--dry-run'], { fetch, env: {} })).code).toBe(0);
+    expect((await run(['run', '--scenario', path, '--group', 'A', '--out', off, '--stamp', 'S', '--probes', '--dry-run', '--no-probe-control'], { fetch, env: {} })).code).toBe(0);
+    expect(bodies).toHaveLength(0);
+    const a = JSON.parse(read(join(on, 'S'), 'probe-estimate.json'));
+    const b = JSON.parse(read(join(off, 'S'), 'probe-estimate.json'));
+    const none = a.rows.find((x: { group: string }) => x.group === 'none');
+    expect(none.probes).toBe(2);
+    expect(none.cacheableTokens).toBe(0);
+    expect(none.costHigh).toBeGreaterThan(0);
+    expect(b.rows.some((x: { group: string }) => x.group === 'none')).toBe(false);
+    expect(a.total.probes).toBe(b.total.probes + 2);
+    expect(read(join(on, 'S'), 'probe-estimate.md')).toContain('| none |');
+  });
+
+  test('--dry-run on the bundled flappy-bird plans its five probes, and the control asks five facts', async () => {
+    const { fetch, bodies } = stubFetch();
+    const dir = tmp();
+    const r = await run(['run', '--scenario', 'flappy-bird', '--group', 'A', '--out', dir, '--stamp', 'S', '--probes', '--dry-run'], { fetch, env: {} });
+    expect(r.code, r.err).toBe(0);
+    expect(r.err).not.toMatch(/has a probe/);
+    expect(bodies).toHaveLength(0);
+    const est = JSON.parse(read(join(dir, 'S'), 'probe-estimate.json'));
+    const row = (g: string) => est.rows.find((x: { group: string }) => x.group === g);
+    expect(row('none').probes).toBe(5);
+    // fml samples: each of the 5 facts has up to three opportunities for group A.
+    expect(row('A').probes).toBeGreaterThanOrEqual(5);
+    expect(row('A').probes).toBeLessThanOrEqual(15);
+  });
 
   test('--max-cost: probing stops once the next probe\'s estimate would pass the budget; spend can exceed it by one probe; finished probes are written', async () => {
     const path = probeScenario();
@@ -510,7 +594,8 @@ describe('bench cli: fact probes', () => {
     const r = await run(['run', '--scenario', path, '--group', 'A', '--out', out, '--stamp', 'S', '--probes', '--max-cost', '1', '--max-probes', '1'],
       { fetch, env: { BENCH_PROXY_INJECTS_API_KEY: '1' } });
     expect(r.code, r.err).toBe(0);
-    expect(bodies).toHaveLength(1);
-    expect(bodies[0]!.headers['x-api-key']).toBe('proxy-injected');
+    // One control probe (--max-probes caps it too) and one group probe.
+    expect(bodies).toHaveLength(2);
+    expect(bodies.every(b => b.headers['x-api-key'] === 'proxy-injected')).toBe(true);
   });
 });

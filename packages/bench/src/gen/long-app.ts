@@ -225,7 +225,7 @@ export function generateLongApp(): Scenario {
   ]);
   b.fact('conv-given-when-then', 'CONV-GIVEN-WHEN-THEN', ['analyst', 'qa'], {
     question: 'What format must acceptance criteria be written in?',
-    expect: ['Given/When/Then'],
+    expect: ['Given/When/Then', 'Given, When, Then', 'Gherkin'],
   });
   progress('ops', 'infra', 'the Terraform modules for networking and Postgres', 'the CI pipelines for the API and the web app');
   b.deliver('analyst', 'requirements', {
@@ -277,7 +277,7 @@ export function generateLongApp(): Scenario {
   });
   b.fact('conv-iso8601-utc', 'CONV-ISO8601-UTC', ['backend', 'web', 'mobile', 'analyst'], {
     question: 'What time format must every timestamp in the API and in events use?',
-    expect: ['ISO 8601', 'UTC'],
+    expect: ['ISO 8601', 'UTC', 'ISO8601'],
   });
   b.work('web', 'web', 'Reading the draft API while the design is in progress, so the client generator is set up early.', [
     op.board('api'),
@@ -310,7 +310,7 @@ export function generateLongApp(): Scenario {
   ]);
   b.fact('conv-wcag-aa-contrast', 'CONV-WCAG-AA-CONTRAST', ['design', 'web', 'mobile', 'qa'], {
     question: 'Which accessibility standard must contrast meet, and what is the minimum touch target size?',
-    expect: ['44x44', 'WCAG 2.2 AA'],
+    expect: ['44x44', 'WCAG 2.2 AA', '44 points', 'WCAG AA'],
   });
   b.work('mobile', 'mobile', 'Starting the mobile app: project setup, navigation and the generated API client.', [
     op.board('api'),
@@ -337,7 +337,7 @@ export function generateLongApp(): Scenario {
   ]);
   b.fact('conv-no-pii-in-events', 'CONV-NO-PII-IN-EVENTS', ['analyst', 'web', 'mobile'], {
     question: 'How are users identified in analytics events?',
-    expect: ['salted hash'],
+    expect: ['salted hash', 'hashed account id', 'hash of the account id'],
   });
   b.work('ops', 'security', 'Starting the threat model from the approved API.', [
     op.board('api'),
@@ -365,7 +365,7 @@ export function generateLongApp(): Scenario {
   );
   b.fact('contract-error-envelope', 'CONTRACT-ERROR-ENVELOPE', ['web', 'mobile'], {
     question: 'Which fields must every API error body carry?',
-    expect: ['requestId'],
+    expect: ['requestId', 'request id'],
   });
   b.human('@design I tried the onboarding prototype with my partner and it felt long: three screens before we saw anything useful. Can we get people to a first plan faster?', ['design']);
   b.deliver('design', 'ux', {
@@ -405,8 +405,8 @@ export function generateLongApp(): Scenario {
     'Every POST accepts an Idempotency-Key header; the server keeps keys for 24 hours and a replay returns the first response (CONV-IDEMPOTENCY-KEY).',
   ]);
   b.fact('conv-idempotency-key', 'CONV-IDEMPOTENCY-KEY', ['backend', 'mobile', 'web'], {
-    question: 'Which request header must every POST accept, and how long does the server keep its values?',
-    expect: ['Idempotency-Key', '24 hours'],
+    question: 'Which request header must every POST accept?',
+    expect: ['Idempotency-Key'],
   });
   b.ask('mobile', 'mobile', 'design', {
     reply: 'Building the planner for tablets as well.',
@@ -430,8 +430,8 @@ export function generateLongApp(): Scenario {
   );
   b.fact('change-household-6', 'CHANGE-HOUSEHOLD-6', ['*'], {
     question: 'What is the account model, and how many people can be in it? Give only the current value.',
-    expect: ['up to 6', '6 members'],
-    reject: ['separate accounts'],
+    expect: ['up to 6', '6 members', 'six members', 'up to six', '6 people'],
+    reject: ['single-user'],
   });
   b.replan({
     workstreams: [
@@ -469,7 +469,7 @@ export function generateLongApp(): Scenario {
   });
   b.fact('contract-invite-link-72h', 'CONTRACT-INVITE-LINK-72H', ['web', 'mobile'], {
     question: 'How long is a household invite link valid, and how many times can it be used?',
-    expect: ['72 hours', 'single-use'],
+    expect: ['72 hours', 'single-use', '72h', '72-hour', '3 days', 'one-time'],
   });
   b.deliver('analyst', 'requirements', {
     reply: 'Updated the requirements for households.',
@@ -492,7 +492,7 @@ export function generateLongApp(): Scenario {
   ]);
   b.fact('fail-websocket-fanout', 'FAIL-WEBSOCKET-FANOUT', ['backend', 'mobile', 'web'], {
     question: 'Which approach to live sync of list edits was tried and dropped?',
-    expect: ['websocket', 'websockets'],
+    expect: ['websocket', 'websockets', 'web socket'],
   });
   progress('analyst', 'analytics', 'an event validator in CI that rejects events with unknown fields', 'removing personal data from the event payloads');
   b.deliver('analyst', 'analytics', {
@@ -585,7 +585,7 @@ export function generateLongApp(): Scenario {
   ]);
   b.fact('fail-stripe-in-webview', 'FAIL-STRIPE-IN-WEBVIEW', ['mobile', 'web', 'backend'], {
     question: 'Which payment approach got the iOS build rejected in App Review?',
-    expect: ['Stripe', 'webview'],
+    expect: ['Stripe', 'webview', 'web view'],
   });
 
   // -------------------------------------------------------------------------
@@ -596,7 +596,7 @@ export function generateLongApp(): Scenario {
   );
   b.fact('change-store-billing', 'CHANGE-STORE-BILLING', ['backend', 'web', 'mobile', 'qa'], {
     question: 'How is Larder Plus billed now? Give only the current value.',
-    expect: ['App Store', 'Google Play'],
+    expect: ['App Store', 'Google Play', 'in-app purchase', 'store billing'],
     reject: ['Stripe web checkout'],
   });
   b.replan({
@@ -693,8 +693,8 @@ export function generateLongApp(): Scenario {
     'Every paid feature has a restore path that works on a fresh install for any household member (CONV-RESTORE-PATH).',
   ]);
   b.fact('conv-restore-path', 'CONV-RESTORE-PATH', ['mobile', 'backend', 'qa'], {
-    question: 'What must every paid feature have so that any household member can get it back on a fresh install?',
-    expect: ['restore'],
+    question: 'What did QA require of every paid feature after the Android reinstall problem?',
+    expect: ['restore path', 'restore purchases', 'any household member'],
   });
   b.deliver('web', 'web', {
     reply: 'Brought the web app under the size budget.',
@@ -740,8 +740,8 @@ export function generateLongApp(): Scenario {
     'Change of requirements from the in-store tests (CHANGE-OFFLINE-LIST): shoppers lose signal in half the supermarkets we visited, so the grocery list must work fully offline and sync when the phone is back online. To make room, drop the analytics dashboards for launch; we keep logging events and build dashboards after launch.',
   );
   b.fact('change-offline-list', 'CHANGE-OFFLINE-LIST', ['mobile', 'backend', 'qa', 'analyst'], {
-    question: 'What connectivity behaviour must the grocery list support? Give only the current value.',
-    expect: ['offline'],
+    question: 'What was dropped for launch to make room for the grocery-list change? Give only the current value.',
+    expect: ['dashboards'],
   });
   b.replan({
     workstreams: [
@@ -767,7 +767,7 @@ export function generateLongApp(): Scenario {
   });
   b.fact('contract-sync-cursor', 'CONTRACT-SYNC-CURSOR', ['mobile', 'qa'], {
     question: 'How does a client fetch the edits made to a list after a given point?',
-    expect: ['changes?cursor='],
+    expect: ['changes?cursor=', 'change feed'],
   });
   b.deliver('analyst', 'requirements', {
     reply: 'Added the offline story and the LR-04 ordering rule; dashboards are out of scope.',
@@ -790,7 +790,7 @@ export function generateLongApp(): Scenario {
   ]);
   b.fact('fail-full-list-resync', 'FAIL-FULL-LIST-RESYNC', ['mobile', 'qa', 'backend'], {
     question: 'Which reconnect approach lost edits made offline?',
-    expect: ['whole list', 'overwriting the local copy'],
+    expect: ['whole list', 'full list', 'entire list', 'overwriting', 'overwrite'],
   });
   b.ask('design', 'ux', 'mobile', {
     reply: 'Designing the offline states.',
@@ -826,7 +826,7 @@ export function generateLongApp(): Scenario {
   ]);
   b.fact('conv-delete-wins', 'CONV-DELETE-WINS', ['mobile', 'backend', 'qa'], {
     question: 'How are sync conflicts resolved?',
-    expect: ['delete wins', 'last writer wins'],
+    expect: ['delete wins', 'last writer wins', 'last write wins', 'deletes win'],
   });
   progress('qa', 'testing', 'the traceability matrix for LR-01 to LR-10', 'the Detox offline scenarios');
   b.ask('qa', 'testing', 'mobile', {
@@ -867,7 +867,7 @@ export function generateLongApp(): Scenario {
   );
   b.fact('change-eu-first', 'CHANGE-EU-FIRST', ['*'], {
     question: 'Where do we launch first? Give only the current value.',
-    expect: ['EU', 'Germany'],
+    expect: ['EU', 'Germany', 'Europe', 'Netherlands', 'Ireland', 'France'],
   });
   b.replan({
     workstreams: [

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Model, ModelRequest } from '../src/model.js';
 import { createPolicy, type PolicyOptions } from '../src/policies/index.js';
-import { gradeAnswer, probeErrorMessage, probeQuestion, ProbeStop, scheduleProbes } from '../src/probe.js';
+import { containsTerm, gradeAnswer, normaliseAnswer, probeErrorMessage, probeQuestion, ProbeStop, runControl, scheduleProbes } from '../src/probe.js';
 import { runScenario, type Policy, type RunContext } from '../src/runner.js';
 import { validateScenario } from '../src/scenario.js';
 import type { Group, ProbeRecord, Scenario, Step } from '../src/types.js';
@@ -94,6 +94,31 @@ describe('gradeAnswer', () => {
   });
   test('expect strings with × match answers with x', () => {
     expect(gradeAnswer({ question: 'q', expect: ['12×12'] }, '12x12')).toBe('correct');
+  });
+});
+
+describe('normalisation of hyphens, underscores and slashes', () => {
+  test('"-", "_" and "/" read as a space, in answer and expect alike', () => {
+    expect(normaliseAnswer('Last-Writer_Wins/Delete')).toBe('last writer wins delete');
+    expect(containsTerm('the last-writer-wins rule', 'last writer wins')).toBe(true);
+    expect(containsTerm('last writer wins', 'last-writer-wins')).toBe(true);
+    expect(containsTerm('billing state is past_due', 'past due')).toBe(true);
+    expect(containsTerm('billing state is past due', 'past_due')).toBe(true);
+    expect(containsTerm('Given / When / Then', 'Given/When/Then')).toBe(true);
+    expect(containsTerm('uses a 24 hour clock', '24-hour')).toBe(true);
+    expect(containsTerm('every region is eu central 1', 'eu-central-1')).toBe(true);
+  });
+  test('boundaries still hold, and the 12x12 rule is unchanged', () => {
+    expect(containsTerm('last-writer-winsome', 'last writer wins')).toBe(false);
+    expect(containsTerm('the eu-central-10 region', 'eu-central-1')).toBe(false);
+    expect(containsTerm('a 12 x 12 board', '12x12')).toBe(true);
+    expect(containsTerm('a 12-12 board', '12x12')).toBe(false);
+    expect(containsTerm('-', '/')).toBe(false);
+  });
+  test('gradeAnswer uses it for reject too', () => {
+    const probe = { question: 'q', expect: ['cursor'], reject: ['page-based'] };
+    expect(gradeAnswer(probe, 'cursor, not page based')).toBe('stale');
+    expect(gradeAnswer(probe, 'Cursor-based paging')).toBe('correct');
   });
 });
 
@@ -388,5 +413,70 @@ describe('probe failures, stop and streaming', () => {
     // step 1 fired; 5 is the first "not fired" record (kept, then stop); 9 is not recorded
     expect(run.probes!.map(p => [p.step, p.verdict])).toEqual([[1, 'correct'], [5, 'error']]);
     expect(run.probeStopped).toBe('sink full');
+  });
+});
+
+describe('runControl (no-context control)', () => {
+  /** Records the segments of each request and answers from a map keyed by question. */
+  class Recording implements Model {
+    requests: ModelRequest[] = [];
+    constructor(private readonly reply = '12x12') {}
+    async complete(r: ModelRequest) {
+      this.requests.push(r);
+      return { reply: this.reply, ops: [] };
+    }
+  }
+
+  test('asks each scheduled fact once with only the question segment, group none, step -1', async () => {
+    const s = scenario();
+    const model = new Recording();
+    const { records, stopped } = await runControl(s, { model });
+    expect(stopped).toBeUndefined();
+    expect(model.requests).toHaveLength(1);
+    expect(model.requests[0]!.segments).toEqual([{ text: probeQuestion('What is the board size?'), cacheable: false }]);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ group: 'none', scenario: 'p', step: -1, botId: '', factId: 'change-board', verdict: 'correct', cacheableTokens: 0 });
+    expect(records[0]!.inputTokens).toBeGreaterThan(0);
+  });
+
+  test('grades like a group probe: a reject hit is stale, a miss is wrong', async () => {
+    const s = scenario();
+    expect((await runControl(s, { model: new Recording('10x10 maybe') })).records[0]!.verdict).toBe('stale');
+    expect((await runControl(s, { model: new Recording('no idea') })).records[0]!.verdict).toBe('wrong');
+  });
+
+  test('only facts the sampling would probe are asked: no probe, no opportunity, or beyond the cap', async () => {
+    const mk = (id: string, audience: string[], probe?: unknown) => ({ id, marker: 'CHANGE-BOARD', step: 0, audience, ...(probe ? { probe } : {}) });
+    const probe = (q: string) => ({ question: q, expect: ['12x12'] });
+    const s = scenario([mk('a-one', ['art'], probe('q1')), mk('b-two', ['art'], probe('q2')), mk('c-none', ['art']), mk('d-nobody', ['pm'], probe('q4'))]);
+    const model = new Recording();
+    const all = await runControl(s, { model });
+    expect(all.records.map(r => r.factId)).toEqual(['a-one', 'b-two']);
+    const capped = await runControl(s, { model: new Recording(), maxPerScenario: 1 });
+    expect(capped.records.map(r => r.factId)).toEqual(['a-one']);
+  });
+
+  test('ProbeStop from the model or from onProbe ends the control and is reported', async () => {
+    const mk = (id: string) => ({ id, marker: 'CHANGE-BOARD', step: 0, audience: ['art'], probe: { question: id, expect: ['12x12'] } });
+    const s = scenario([mk('a-one'), mk('b-two'), mk('c-three')]);
+    let n = 0;
+    const stopping: Model = { async complete() { if (++n === 2) throw new ProbeStop('budget'); return { reply: '12x12', ops: [] }; } };
+    const r1 = await runControl(s, { model: stopping });
+    expect(r1.records.map(r => r.factId)).toEqual(['a-one']);
+    expect(r1.stopped).toBe('budget');
+    const seen: string[] = [];
+    const r2 = await runControl(s, { model: new Recording(), onProbe: rec => { seen.push(rec.factId); if (seen.length === 2) throw new ProbeStop('sink'); } });
+    expect(r2.stopped).toBe('sink');
+    expect(seen).toEqual(['a-one', 'b-two']);
+  });
+
+  test('a failing model is an error record and the control goes on', async () => {
+    const mk = (id: string) => ({ id, marker: 'CHANGE-BOARD', step: 0, audience: ['art'], probe: { question: id, expect: ['12x12'] } });
+    const s = scenario([mk('a-one'), mk('b-two')]);
+    let n = 0;
+    const flaky: Model = { async complete() { if (++n === 1) throw new Error('boom'); return { reply: '12x12', ops: [] }; } };
+    const { records } = await runControl(s, { model: flaky });
+    expect(records.map(r => r.verdict)).toEqual(['error', 'correct']);
+    expect(records[0]!.error).toContain('boom');
   });
 });

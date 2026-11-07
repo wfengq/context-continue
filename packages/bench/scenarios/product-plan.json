@@ -114,7 +114,9 @@
         "question": "Who are we selling to and how is pricing structured? Give only the current value.",
         "expect": [
           "per seat",
-          "small teams"
+          "small teams",
+          "per user",
+          "B2B"
         ],
         "reject": [
           "freemium",
@@ -133,7 +135,9 @@
       "probe": {
         "question": "What must every feature in the plan name?",
         "expect": [
-          "metric"
+          "metric",
+          "metrics",
+          "KPI"
         ]
       }
     },
@@ -164,7 +168,10 @@
         "question": "What was recorded as a failed approach for the manager dashboard because it pushed the release past the budget?",
         "expect": [
           "websocket",
-          "realtime"
+          "websockets",
+          "web socket",
+          "realtime",
+          "real-time"
         ]
       }
     }

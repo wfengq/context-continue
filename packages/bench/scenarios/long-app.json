@@ -223,7 +223,9 @@
       "probe": {
         "question": "What format must acceptance criteria be written in?",
         "expect": [
-          "Given/When/Then"
+          "Given/When/Then",
+          "Given, When, Then",
+          "Gherkin"
         ]
       }
     },
@@ -257,7 +259,8 @@
         "question": "What time format must every timestamp in the API and in events use?",
         "expect": [
           "ISO 8601",
-          "UTC"
+          "UTC",
+          "ISO8601"
         ]
       }
     },
@@ -275,7 +278,9 @@
         "question": "Which accessibility standard must contrast meet, and what is the minimum touch target size?",
         "expect": [
           "44x44",
-          "WCAG 2.2 AA"
+          "WCAG 2.2 AA",
+          "44 points",
+          "WCAG AA"
         ]
       }
     },
@@ -291,7 +296,9 @@
       "probe": {
         "question": "How are users identified in analytics events?",
         "expect": [
-          "salted hash"
+          "salted hash",
+          "hashed account id",
+          "hash of the account id"
         ]
       }
     },
@@ -306,7 +313,8 @@
       "probe": {
         "question": "Which fields must every API error body carry?",
         "expect": [
-          "requestId"
+          "requestId",
+          "request id"
         ]
       }
     },
@@ -336,10 +344,9 @@
         "web"
       ],
       "probe": {
-        "question": "Which request header must every POST accept, and how long does the server keep its values?",
+        "question": "Which request header must every POST accept?",
         "expect": [
-          "Idempotency-Key",
-          "24 hours"
+          "Idempotency-Key"
         ]
       }
     },
@@ -354,10 +361,13 @@
         "question": "What is the account model, and how many people can be in it? Give only the current value.",
         "expect": [
           "up to 6",
-          "6 members"
+          "6 members",
+          "six members",
+          "up to six",
+          "6 people"
         ],
         "reject": [
-          "separate accounts"
+          "single-user"
         ]
       }
     },
@@ -373,7 +383,11 @@
         "question": "How long is a household invite link valid, and how many times can it be used?",
         "expect": [
           "72 hours",
-          "single-use"
+          "single-use",
+          "72h",
+          "72-hour",
+          "3 days",
+          "one-time"
         ]
       }
     },
@@ -390,7 +404,8 @@
         "question": "Which approach to live sync of list edits was tried and dropped?",
         "expect": [
           "websocket",
-          "websockets"
+          "websockets",
+          "web socket"
         ]
       }
     },
@@ -407,7 +422,8 @@
         "question": "Which payment approach got the iOS build rejected in App Review?",
         "expect": [
           "Stripe",
-          "webview"
+          "webview",
+          "web view"
         ]
       }
     },
@@ -425,7 +441,9 @@
         "question": "How is Larder Plus billed now? Give only the current value.",
         "expect": [
           "App Store",
-          "Google Play"
+          "Google Play",
+          "in-app purchase",
+          "store billing"
         ],
         "reject": [
           "Stripe web checkout"
@@ -457,9 +475,11 @@
         "qa"
       ],
       "probe": {
-        "question": "What must every paid feature have so that any household member can get it back on a fresh install?",
+        "question": "What did QA require of every paid feature after the Android reinstall problem?",
         "expect": [
-          "restore"
+          "restore path",
+          "restore purchases",
+          "any household member"
         ]
       }
     },
@@ -474,9 +494,9 @@
         "analyst"
       ],
       "probe": {
-        "question": "What connectivity behaviour must the grocery list support? Give only the current value.",
+        "question": "What was dropped for launch to make room for the grocery-list change? Give only the current value.",
         "expect": [
-          "offline"
+          "dashboards"
         ]
       }
     },
@@ -491,7 +511,8 @@
       "probe": {
         "question": "How does a client fetch the edits made to a list after a given point?",
         "expect": [
-          "changes?cursor="
+          "changes?cursor=",
+          "change feed"
         ]
       }
     },
@@ -508,7 +529,10 @@
         "question": "Which reconnect approach lost edits made offline?",
         "expect": [
           "whole list",
-          "overwriting the local copy"
+          "full list",
+          "entire list",
+          "overwriting",
+          "overwrite"
         ]
       }
     },
@@ -525,7 +549,9 @@
         "question": "How are sync conflicts resolved?",
         "expect": [
           "delete wins",
-          "last writer wins"
+          "last writer wins",
+          "last write wins",
+          "deletes win"
         ]
       }
     },
@@ -556,7 +582,11 @@
         "question": "Where do we launch first? Give only the current value.",
         "expect": [
           "EU",
-          "Germany"
+          "Germany",
+          "Europe",
+          "Netherlands",
+          "Ireland",
+          "France"
         ]
       }
     },

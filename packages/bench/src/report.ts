@@ -277,13 +277,15 @@ export interface ProbeSection {
   samples: ProbeSamples;
   maxPerScenario?: number;
   groups: Group[];
+  /** True when the no-context control (group "none") was asked as well. */
+  control: boolean;
   maxCost: number;
   price: ModelPrice;
   /** Real usage and cost over every probe request (as the provider reported it). */
   usage: ModelUsage;
   cost: number;
   /** One entry per scenario-group run in which probing was stopped (cost guard, or a fatal API error). */
-  stopped: { scenario: string; group: Group; reason: string }[];
+  stopped: { scenario: string; group: Group | 'none'; reason: string }[];
   records: ProbeRecord[];
 }
 
@@ -297,7 +299,7 @@ function verdictCells(recs: ProbeRecord[]): string[] {
 }
 
 function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): string[] {
-  const groups = ORDER.filter(g => p.records.some(r => r.group === g));
+  const groups = [...ORDER, 'none' as const].filter(g => p.records.some(r => r.group === g));
   const out: string[] = [
     '## Fact probes (real model)', '',
     `Model ${p.model}; max_tokens ${p.maxTokens}; thinking ${p.thinking}; temperature ${p.temperature}; each question asked once (samples ${p.samples}` +
@@ -306,6 +308,13 @@ function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): stri
       '(stale: an old answer appears; wrong: neither expected nor old; error: the request failed or the probe never fired).',
     '',
   ];
+  if (p.records.some(r => r.group === 'none')) {
+    out.push(
+      'Group "none" is the no-context control: each probed fact asked once with the question alone and no project context. ' +
+        'Its correct share is what the model gets right from general knowledge, so read the other groups against it.',
+      '',
+    );
+  }
   if (p.stopped.length > 0) {
     out.push(
       `Probing stopped: ${p.stopped[0]!.reason} (in ${p.stopped.map(x => `${x.scenario}/${x.group}`).join(', ')}). ` +
@@ -367,7 +376,7 @@ function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): stri
 /** The dry-run estimate as Markdown (printed and written as probe-estimate.md). */
 export function renderProbeEstimate(
   est: { rows: ProbeEstimateRow[]; total: Omit<ProbeEstimateRow, 'scenario' | 'group'> },
-  meta: { model: string; maxTokens: number; samples: ProbeSamples; groups: Group[]; maxCost: number | null; maxPerScenario?: number },
+  meta: { model: string; maxTokens: number; samples: ProbeSamples; groups: (Group | 'none')[]; maxCost: number | null; maxPerScenario?: number },
   tiers: Record<string, Tier>,
 ): string {
   const cells = (x: Omit<ProbeEstimateRow, 'scenario' | 'group'>) =>

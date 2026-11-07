@@ -196,7 +196,8 @@
         "question": "What time format must every timestamp in the API, in events and in exported files use?",
         "expect": [
           "ISO 8601",
-          "UTC"
+          "UTC",
+          "ISO8601"
         ]
       }
     },
@@ -213,7 +214,8 @@
       "probe": {
         "question": "Which fields must every API error body carry?",
         "expect": [
-          "requestId"
+          "requestId",
+          "request id"
         ]
       }
     },
@@ -232,7 +234,8 @@
         "expect": [
           "WCAG 2.2 AA",
           "44 by 44",
-          "4.5:1"
+          "4.5:1",
+          "44x44"
         ]
       }
     },
@@ -244,13 +247,15 @@
         "*"
       ],
       "probe": {
-        "question": "Which sign-in methods must workspace authentication support? Give only the current value.",
+        "question": "Which sign-in method did the enterprise trials require us to add for 3.1? Give only the current value.",
         "expect": [
           "SAML",
-          "Okta"
+          "Okta",
+          "Azure AD",
+          "single sign-on"
         ],
         "reject": [
-          "Google sign-in"
+          "Google-only"
         ]
       }
     },
@@ -267,8 +272,7 @@
       "probe": {
         "question": "How long is a refresh token valid?",
         "expect": [
-          "30 days",
-          "rotating"
+          "30 days"
         ]
       }
     },
@@ -283,10 +287,10 @@
         "web"
       ],
       "probe": {
-        "question": "Which second-factor method was recorded as a failed approach?",
+        "question": "In the pilot, what share of one-time codes to Brazil and India arrived after they expired?",
         "expect": [
-          "SMS",
-          "one-time codes"
+          "9%",
+          "9 percent"
         ]
       }
     },
@@ -303,7 +307,9 @@
       "probe": {
         "question": "Where must permissions be enforced?",
         "expect": [
-          "server-side"
+          "server-side",
+          "on the server",
+          "identity service"
         ]
       }
     },
@@ -317,10 +323,9 @@
         "mobile"
       ],
       "probe": {
-        "question": "Which request header must every POST accept, and how long does the server keep its values?",
+        "question": "Which request header must every POST accept?",
         "expect": [
-          "Idempotency-Key",
-          "24 hours"
+          "Idempotency-Key"
         ]
       }
     },
@@ -335,7 +340,9 @@
         "question": "Who must use two-factor authentication, and what happens to an admin without it? Give only the current value.",
         "expect": [
           "owners and admins",
-          "read-only"
+          "read-only",
+          "admins and owners",
+          "owners and administrators"
         ]
       }
     },
@@ -389,7 +396,9 @@
         "question": "How must money amounts be represented in the database, the API, events and exports?",
         "expect": [
           "minor units",
-          "ISO 4217"
+          "ISO 4217",
+          "integer amount",
+          "cents"
         ]
       }
     },
@@ -405,7 +414,6 @@
       "probe": {
         "question": "Which approach to charging seat changes was tried and failed?",
         "expect": [
-          "nightly proration",
           "nightly"
         ]
       }
@@ -420,8 +428,10 @@
       "probe": {
         "question": "How is the Team plan priced? Give only the current value.",
         "expect": [
-          "EUR 8 per seat",
-          "per-seat"
+          "EUR 8",
+          "€8",
+          "8 EUR",
+          "per seat"
         ]
       }
     },
@@ -456,8 +466,9 @@
       "probe": {
         "question": "How must incoming webhooks be checked and de-duplicated?",
         "expect": [
-          "signature",
-          "event id"
+          "Stripe-Signature",
+          "event id",
+          "at most once"
         ]
       }
     },
@@ -476,7 +487,8 @@
         "question": "How must invoices be issued to EU business customers with a valid VAT ID? Give only the current value.",
         "expect": [
           "reverse-charge",
-          "VIES"
+          "VIES",
+          "without VAT"
         ]
       }
     },
@@ -509,7 +521,9 @@
       "probe": {
         "question": "Which approach to concurrent editing was rejected for diverging on real documents?",
         "expect": [
-          "operational transform"
+          "operational transform",
+          "operational transformation",
+          "OT server"
         ]
       }
     },
@@ -541,7 +555,10 @@
       "probe": {
         "question": "Which editing feature beyond comments must be in 3.3? Give only the current value.",
         "expect": [
-          "suggestion mode"
+          "suggestion mode",
+          "suggesting mode",
+          "tracked changes",
+          "suggested edits"
         ]
       }
     },
@@ -577,7 +594,8 @@
         "question": "How are mention and reply emails sent out?",
         "expect": [
           "digest",
-          "10 minutes"
+          "10 minutes",
+          "batched"
         ]
       }
     },
@@ -593,7 +611,8 @@
       "probe": {
         "question": "After how long does a presence entry expire without a heartbeat?",
         "expect": [
-          "30 seconds"
+          "30 seconds",
+          "30s"
         ]
       }
     },
@@ -610,6 +629,7 @@
         "question": "Which routing approach for keeping a document on one sync server was tried and failed?",
         "expect": [
           "sticky sessions",
+          "sticky session",
           "cookie"
         ]
       }
@@ -625,7 +645,14 @@
         "question": "What offline capability must 3.4 provide? Give only the current value.",
         "expect": [
           "offline editing",
-          "edit pinned documents offline"
+          "edit pinned documents offline",
+          "edit offline",
+          "editing offline",
+          "offline edits",
+          "edit pinned documents"
+        ],
+        "reject": [
+          "offline reading"
         ]
       }
     },
@@ -661,7 +688,8 @@
         "question": "What caps offline storage per device?",
         "expect": [
           "offlineDocs",
-          "200 MB"
+          "200 MB",
+          "200MB"
         ]
       }
     },
@@ -675,9 +703,9 @@
         "ops"
       ],
       "probe": {
-        "question": "Where did the first prototype keep pinned documents, which failed?",
+        "question": "At how many MB per origin do Safari and Firefox stop, according to the failed prototype for pinned documents?",
         "expect": [
-          "localStorage"
+          "5 MB"
         ]
       }
     },
@@ -694,7 +722,9 @@
       "probe": {
         "question": "What must every document show wherever it appears?",
         "expect": [
-          "sync state"
+          "sync state",
+          "sync status",
+          "waiting to sync"
         ]
       }
     },
@@ -712,7 +742,13 @@
       "probe": {
         "question": "How are field teams served on their laptops now? Give only the current value.",
         "expect": [
-          "installable web app"
+          "installable web app",
+          "PWA",
+          "progressive web app",
+          "installable"
+        ],
+        "reject": [
+          "Electron"
         ]
       }
     },
@@ -729,7 +765,9 @@
         "question": "Which iOS mechanism for refreshing pinned documents overnight failed?",
         "expect": [
           "background app refresh",
-          "BGAppRefreshTask"
+          "BGAppRefreshTask",
+          "background fetch",
+          "background refresh"
         ]
       }
     },
@@ -745,10 +783,9 @@
         "ops"
       ],
       "probe": {
-        "question": "What does POST /v2/exports return, and how long does the download URL stay valid?",
+        "question": "What status code does POST /v2/exports return?",
         "expect": [
-          "202",
-          "24 hours"
+          "202"
         ]
       }
     },
@@ -796,7 +833,8 @@
       "probe": {
         "question": "What must CI compare every export format against?",
         "expect": [
-          "golden files"
+          "golden files",
+          "golden file"
         ]
       }
     },
@@ -846,7 +884,9 @@
       "probe": {
         "question": "What file name pattern must exported files follow?",
         "expect": [
-          "slug"
+          "slug",
+          "YYYY-MM-DD",
+          "slugified"
         ]
       }
     },
@@ -879,10 +919,12 @@
       "probe": {
         "question": "Which SOC 2 report type must we deliver? Give only the current value.",
         "expect": [
-          "Type II"
+          "Type II",
+          "Type 2"
         ],
         "reject": [
-          "Type I"
+          "Type I",
+          "Type 1"
         ]
       }
     },
@@ -899,7 +941,9 @@
         "question": "How often is production access reviewed, and within how many working days is access nobody can justify removed?",
         "expect": [
           "every quarter",
-          "5 working days"
+          "5 working days",
+          "quarterly",
+          "5 business days"
         ]
       }
     },
@@ -928,9 +972,9 @@
         "analyst"
       ],
       "probe": {
-        "question": "Which placement of the reporting replica broke the residency check?",
+        "question": "How was the reporting replica for the first moved test workspaces fed?",
         "expect": [
-          "us-east-1"
+          "logical replication"
         ]
       }
     },

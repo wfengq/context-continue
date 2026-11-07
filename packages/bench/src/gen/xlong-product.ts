@@ -396,7 +396,7 @@ function cycleAccounts(x: Ctx): void {
   ]);
   b.fact('conv-iso8601-utc', 'CONV-ISO8601-UTC', ['backend', 'web', 'mobile', 'analyst'], {
     question: 'What time format must every timestamp in the API, in events and in exported files use?',
-    expect: ['ISO 8601', 'UTC'],
+    expect: ['ISO 8601', 'UTC', 'ISO8601'],
   });
   x.tick('acct-web', 'acct-mobile', 'acct-api', 'acct-sec');
   x.qa({
@@ -408,7 +408,7 @@ function cycleAccounts(x: Ctx): void {
   });
   b.fact('contract-error-envelope', 'CONTRACT-ERROR-ENVELOPE', ['web', 'mobile', 'qa', 'backend'], {
     question: 'Which fields must every API error body carry?',
-    expect: ['requestId'],
+    expect: ['requestId', 'request id'],
   });
   x.dv('acct-api', 'Revised the identity API: UTC timestamps, paging, and the error format.', 'UTC timestamps, cursor paging on members, error format',
     'Revision after review: every timestamp is ISO 8601 in UTC with a Z suffix; members and invitations use cursor paging (cursor and limit, at most 100). Errors use the {code, message, requestId} body with stable codes such as INVITATION_EXPIRED and LAST_OWNER.',
@@ -424,7 +424,7 @@ function cycleAccounts(x: Ctx): void {
   ]);
   b.fact('conv-wcag-22-aa', 'CONV-WCAG-22-AA', ['design', 'web', 'mobile', 'qa'], {
     question: 'What contrast ratio must text meet, and what is the minimum touch target size?',
-    expect: ['WCAG 2.2 AA', '44 by 44', '4.5:1'],
+    expect: ['WCAG 2.2 AA', '44 by 44', '4.5:1', '44x44'],
   });
   x.tick('acct-req', 'acct-api', 'acct-mobile', 'acct-ux');
   x.dv('acct-ux', 'Fixed contrast and target sizes in the kit and in these flows.', 'Contrast and 44-point targets across the kit',
@@ -439,9 +439,9 @@ function cycleAccounts(x: Ctx): void {
     'Change of requirements (CHANGE-SAML-SSO): the three enterprise trials we are closing all need SAML single sign-on with Okta and Azure AD, and their admins want to enforce it for the whole workspace, instead of the Google-only sign-in we planned. Please add it to 3.1 rather than waiting for a later release.',
   );
   b.fact('change-saml-sso', 'CHANGE-SAML-SSO', ['*'], {
-    question: 'Which sign-in methods must workspace authentication support? Give only the current value.',
-    expect: ['SAML', 'Okta'],
-    reject: ['Google sign-in'],
+    question: 'Which sign-in method did the enterprise trials require us to add for 3.1? Give only the current value.',
+    expect: ['SAML', 'Okta', 'Azure AD', 'single sign-on'],
+    reject: ['Google-only'],
   });
   b.replan({
     workstreams: [
@@ -462,7 +462,7 @@ function cycleAccounts(x: Ctx): void {
   });
   b.fact('contract-session-tokens', 'CONTRACT-SESSION-TOKENS', ['web', 'mobile', 'backend', 'ops'], {
     question: 'How long is a refresh token valid?',
-    expect: ['30 days', 'rotating'],
+    expect: ['30 days'],
   });
   x.tasks('acct-sso', [
     'the SAML library choice and its signature checks',
@@ -497,8 +497,8 @@ function cycleAccounts(x: Ctx): void {
     ),
   ]);
   b.fact('fail-sms-otp', 'FAIL-SMS-OTP', ['ops', 'backend', 'mobile', 'web'], {
-    question: 'Which second-factor method was recorded as a failed approach?',
-    expect: ['SMS', 'one-time codes'],
+    question: 'In the pilot, what share of one-time codes to Brazil and India arrived after they expired?',
+    expect: ['9%', '9 percent'],
   });
   x.tick('acct-ux', 'acct-req', 'acct-api', 'acct-ux');
   x.dv('acct-web', 'First version of the web sign-in and workspace settings.', 'Sign-in, switcher, members page and invitations on the web',
@@ -510,7 +510,7 @@ function cycleAccounts(x: Ctx): void {
   ]);
   b.fact('conv-server-role-check', 'CONV-SERVER-ROLE-CHECK', ['backend', 'web', 'mobile', 'qa'], {
     question: 'Where must permissions be enforced?',
-    expect: ['server-side'],
+    expect: ['server-side', 'on the server', 'identity service'],
   });
   x.tick('acct-api', 'acct-web');
   x.dv('acct-api', 'Added the server-side role check and the session rules.', 'Role matrix enforced on every request; session rotation',
@@ -520,8 +520,8 @@ function cycleAccounts(x: Ctx): void {
     'Every POST accepts an Idempotency-Key header; the server keeps keys for 24 hours and a repeat returns the first response (CONV-IDEMPOTENCY-KEY).',
   ]);
   b.fact('conv-idempotency-key', 'CONV-IDEMPOTENCY-KEY', ['backend', 'web', 'mobile'], {
-    question: 'Which request header must every POST accept, and how long does the server keep its values?',
-    expect: ['Idempotency-Key', '24 hours'],
+    question: 'Which request header must every POST accept?',
+    expect: ['Idempotency-Key'],
   });
   x.tick('acct-mobile', 'acct-tests', 'acct-sso');
   x.dv('acct-api', 'Added idempotency keys to every POST.', 'Idempotency-Key on every POST',
@@ -556,7 +556,7 @@ function cycleAccounts(x: Ctx): void {
   );
   b.fact('change-admin-2fa', 'CHANGE-ADMIN-2FA', ['*'], {
     question: 'Who must use two-factor authentication, and what happens to an admin without it? Give only the current value.',
-    expect: ['owners and admins', 'read-only'],
+    expect: ['owners and admins', 'read-only', 'admins and owners', 'owners and administrators'],
   });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
@@ -839,7 +839,7 @@ function cycleBilling(x: Ctx): void {
   ]);
   b.fact('conv-money-minor-units', 'CONV-MONEY-MINOR-UNITS', ['backend', 'web', 'mobile', 'analyst'], {
     question: 'How must money amounts be represented in the database, the API, events and exports?',
-    expect: ['minor units', 'ISO 4217'],
+    expect: ['minor units', 'ISO 4217', 'integer amount', 'cents'],
   });
   x.tick('bill-web', 'bill-mobile', 'bill-tax');
   x.qa({
@@ -870,7 +870,7 @@ function cycleBilling(x: Ctx): void {
   ]);
   b.fact('fail-nightly-proration', 'FAIL-NIGHTLY-PRORATION', ['backend', 'qa', 'analyst'], {
     question: 'Which approach to charging seat changes was tried and failed?',
-    expect: ['nightly proration', 'nightly'],
+    expect: ['nightly'],
   });
   x.tick('bill-tax', 'bill-mobile', 'bill-web');
 
@@ -880,7 +880,7 @@ function cycleBilling(x: Ctx): void {
   );
   b.fact('change-per-seat-pricing', 'CHANGE-PER-SEAT-PRICING', ['*'], {
     question: 'How is the Team plan priced? Give only the current value.',
-    expect: ['EUR 8 per seat', 'per-seat'],
+    expect: ['EUR 8', '€8', '8 EUR', 'per seat'],
   });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
@@ -922,7 +922,7 @@ function cycleBilling(x: Ctx): void {
   ]);
   b.fact('conv-webhooks-verified', 'CONV-WEBHOOKS-VERIFIED', ['backend', 'ops', 'qa'], {
     question: 'How must incoming webhooks be checked and de-duplicated?',
-    expect: ['signature', 'event id'],
+    expect: ['Stripe-Signature', 'event id', 'at most once'],
   });
   x.tick('bill-service', 'bill-tax', 'bill-ux', 'bill-mobile');
   x.status('Two weeks into 3.2. Short status from each of you, please, and flag anything at risk.', ['bill-req', 'bill-ux', 'bill-service', 'bill-web', 'bill-mobile', 'bill-tax', 'bill-tests']);
@@ -958,7 +958,7 @@ function cycleBilling(x: Ctx): void {
   );
   b.fact('change-vat-reverse-charge', 'CHANGE-VAT-REVERSE-CHARGE', ['backend', 'ops', 'analyst', 'web', 'qa'], {
     question: 'How must invoices be issued to EU business customers with a valid VAT ID? Give only the current value.',
-    expect: ['reverse-charge', 'VIES'],
+    expect: ['reverse-charge', 'VIES', 'without VAT'],
   });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
@@ -1224,7 +1224,7 @@ function cycleCollaboration(x: Ctx): void {
   ]);
   b.fact('fail-ot-server', 'FAIL-OT-SERVER', ['backend', 'web', 'mobile', 'qa'], {
     question: 'Which approach to concurrent editing was rejected for diverging on real documents?',
-    expect: ['operational transform'],
+    expect: ['operational transform', 'operational transformation', 'OT server'],
   });
   x.tick('collab-sync', 'collab-req', 'collab-ux');
   x.dv('collab-req', 'First version of the 3.3 collaboration requirements.', 'Co-editing, presence, comments and mentions; COL-01 to COL-06',
@@ -1260,7 +1260,7 @@ function cycleCollaboration(x: Ctx): void {
   );
   b.fact('change-suggestion-mode', 'CHANGE-SUGGESTION-MODE', ['*'], {
     question: 'Which editing feature beyond comments must be in 3.3? Give only the current value.',
-    expect: ['suggestion mode'],
+    expect: ['suggestion mode', 'suggesting mode', 'tracked changes', 'suggested edits'],
   });
   b.replan({
     workstreams: [
@@ -1298,7 +1298,7 @@ function cycleCollaboration(x: Ctx): void {
   ]);
   b.fact('conv-mention-digest', 'CONV-MENTION-DIGEST', ['backend', 'design', 'web', 'mobile'], {
     question: 'How are mention and reply emails sent out?',
-    expect: ['digest', '10 minutes'],
+    expect: ['digest', '10 minutes', 'batched'],
   });
   x.tick('collab-ux', 'collab-mobile', 'collab-tests', 'collab-web');
   x.dv('collab-ux', 'Added suggestions, the email digest and fixed the presence colours.', 'Suggestion style, notification digest, accessible presence colours',
@@ -1324,7 +1324,7 @@ function cycleCollaboration(x: Ctx): void {
   ]);
   b.fact('conv-presence-ttl', 'CONV-PRESENCE-TTL', ['backend', 'web', 'mobile'], {
     question: 'After how long does a presence entry expire without a heartbeat?',
-    expect: ['30 seconds'],
+    expect: ['30 seconds', '30s'],
   });
   x.tick('collab-sync', 'collab-web', 'collab-req', 'collab-mobile');
   x.status('Halfway through 3.3. Short status from each of you, please, and whether the scope still fits in six weeks.', ['collab-req', 'collab-ux', 'collab-sync', 'collab-web', 'collab-mobile', 'collab-infra', 'collab-tests']);
@@ -1368,7 +1368,7 @@ function cycleCollaboration(x: Ctx): void {
   ]);
   b.fact('fail-sticky-sessions', 'FAIL-STICKY-SESSIONS', ['ops', 'backend', 'qa'], {
     question: 'Which routing approach for keeping a document on one sync server was tried and failed?',
-    expect: ['sticky sessions', 'cookie'],
+    expect: ['sticky sessions', 'sticky session', 'cookie'],
   });
   x.tick('collab-infra', 'collab-docs', 'collab-ux', 'collab-web');
   x.dv('collab-web', 'First version of co-editing and comments in the web editor.', 'Yjs editor binding, cursors, comments, mentions, suggestions, share dialog',
@@ -1613,7 +1613,8 @@ function cycleOffline(x: Ctx): void {
   );
   b.fact('change-offline-editing', 'CHANGE-OFFLINE-EDITING', ['*'], {
     question: 'What offline capability must 3.4 provide? Give only the current value.',
-    expect: ['offline editing', 'edit pinned documents offline'],
+    expect: ['offline editing', 'edit pinned documents offline', 'edit offline', 'editing offline', 'offline edits', 'edit pinned documents'],
+    reject: ['offline reading'],
   });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
@@ -1646,7 +1647,7 @@ function cycleOffline(x: Ctx): void {
   ]);
   b.fact('conv-offline-pin-limit', 'CONV-OFFLINE-PIN-LIMIT', ['mobile', 'web', 'design', 'qa', 'analyst'], {
     question: 'What caps offline storage per device?',
-    expect: ['offlineDocs', '200 MB'],
+    expect: ['offlineDocs', '200 MB', '200MB'],
   });
   x.tick('off-req', 'off-sync', 'off-mobile');
   x.start('off-mobile', 'Starting the offline apps with an encrypted SQLite store for pinned documents.', 'off-mobile: SQLCipher store of snapshots + local updates; fetch on launch and push; edit offline; wipe rules.', 'c-off-resync-mobile');
@@ -1666,8 +1667,8 @@ function cycleOffline(x: Ctx): void {
     ),
   ]);
   b.fact('fail-localstorage-quota', 'FAIL-LOCALSTORAGE-QUOTA', ['web', 'qa', 'ops'], {
-    question: 'Where did the first prototype keep pinned documents, which failed?',
-    expect: ['localStorage'],
+    question: 'At how many MB per origin do Safari and Firefox stop, according to the failed prototype for pinned documents?',
+    expect: ['5 MB'],
   });
   x.tick('off-web', 'off-mobile', 'off-ux', 'off-req');
   x.qa({
@@ -1686,7 +1687,7 @@ function cycleOffline(x: Ctx): void {
   ]);
   b.fact('conv-sync-state-visible', 'CONV-SYNC-STATE-VISIBLE', ['design', 'web', 'mobile', 'qa'], {
     question: 'What must every document show wherever it appears?',
-    expect: ['sync state'],
+    expect: ['sync state', 'sync status', 'waiting to sync'],
   });
   x.tick('off-ux', 'off-web', 'off-desktop', 'off-sync', 'off-mobile');
   x.status('Two weeks into 3.4. Status from each of you, please, and say whether your estimate still holds.', ['off-req', 'off-ux', 'off-sync', 'off-web', 'off-desktop', 'off-mobile', 'off-sec', 'off-tests']);
@@ -1697,7 +1698,8 @@ function cycleOffline(x: Ctx): void {
   );
   b.fact('change-pwa-not-desktop', 'CHANGE-PWA-NOT-DESKTOP', ['web', 'design', 'qa', 'analyst', 'ops'], {
     question: 'How are field teams served on their laptops now? Give only the current value.',
-    expect: ['installable web app'],
+    expect: ['installable web app', 'PWA', 'progressive web app', 'installable'],
+    reject: ['Electron'],
   });
   b.replan({
     workstreams: b.currentPlan.workstreams
@@ -1763,7 +1765,7 @@ function cycleOffline(x: Ctx): void {
   ]);
   b.fact('fail-ios-background-fetch', 'FAIL-IOS-BACKGROUND-FETCH', ['mobile', 'backend', 'qa'], {
     question: 'Which iOS mechanism for refreshing pinned documents overnight failed?',
-    expect: ['background app refresh', 'BGAppRefreshTask'],
+    expect: ['background app refresh', 'BGAppRefreshTask', 'background fetch', 'background refresh'],
   });
   x.tick('off-mobile', 'off-sec', 'off-req');
   x.qa({
@@ -1838,8 +1840,8 @@ function cycleExport(x: Ctx): void {
     ],
   });
   b.fact('contract-export-jobs', 'CONTRACT-EXPORT-JOBS', ['backend', 'web', 'mobile', 'qa', 'ops'], {
-    question: 'What does POST /v2/exports return, and how long does the download URL stay valid?',
-    expect: ['202', '24 hours'],
+    question: 'What status code does POST /v2/exports return?',
+    expect: ['202'],
   });
 
   x.tasks('exp-req', [
@@ -2050,7 +2052,7 @@ function cycleExport(x: Ctx): void {
   ]);
   b.fact('conv-golden-files', 'CONV-GOLDEN-FILES', ['backend', 'qa', 'ops'], {
     question: 'What must CI compare every export format against?',
-    expect: ['golden files'],
+    expect: ['golden files', 'golden file'],
   });
   x.tick('exp-engine', 'exp-web', 'exp-workers', 'exp-req');
   x.status('Two weeks into 3.5. Status from each of you, please, and say whether the Word work moved your dates.', ['exp-req', 'exp-ux', 'exp-engine', 'exp-web', 'exp-mobile', 'exp-workers', 'exp-tests']);
@@ -2138,7 +2140,7 @@ function cycleExport(x: Ctx): void {
   ]);
   b.fact('conv-export-filenames', 'CONV-EXPORT-FILENAMES', ['backend', 'web', 'mobile', 'qa'], {
     question: 'What file name pattern must exported files follow?',
-    expect: ['slug'],
+    expect: ['slug', 'YYYY-MM-DD', 'slugified'],
   });
   x.tick('exp-web', 'exp-mobile', 'exp-engine', 'exp-web');
   x.dv('exp-web', 'Moved file naming to the shared pattern and added the admin workspace export page.', 'ASCII-safe dated file names; workspace export page',
@@ -2404,8 +2406,8 @@ function cycleCompliance(x: Ctx): void {
   );
   b.fact('change-soc2-type2', 'CHANGE-SOC2-TYPE2', ['*'], {
     question: 'Which SOC 2 report type must we deliver? Give only the current value.',
-    expect: ['Type II'],
-    reject: ['Type I'],
+    expect: ['Type II', 'Type 2'],
+    reject: ['Type I', 'Type 1'],
   });
   b.replan({
     workstreams: b.currentPlan.workstreams.map(w =>
@@ -2440,7 +2442,7 @@ function cycleCompliance(x: Ctx): void {
   ]);
   b.fact('conv-access-review', 'CONV-ACCESS-REVIEW', ['ops', 'analyst', 'backend'], {
     question: 'How often is production access reviewed, and within how many working days is access nobody can justify removed?',
-    expect: ['every quarter', '5 working days'],
+    expect: ['every quarter', '5 working days', 'quarterly', '5 business days'],
   });
   x.tick('comp-soc2', 'comp-audit', 'comp-ux', 'comp-infra', 'comp-req');
   x.start('comp-admin', 'Starting the admin console in the web app against the audit and policy endpoints.', 'comp-admin: console shell for owners/admins; audit table with server filters; policy pages; retention; overview.', 'c-comp-audit-admin');
@@ -2528,8 +2530,8 @@ function cycleCompliance(x: Ctx): void {
     ),
   ]);
   b.fact('fail-us-read-replica', 'FAIL-US-READ-REPLICA', ['ops', 'backend', 'analyst'], {
-    question: 'Which placement of the reporting replica broke the residency check?',
-    expect: ['us-east-1'],
+    question: 'How was the reporting replica for the first moved test workspaces fed?',
+    expect: ['logical replication'],
   });
   x.tick('comp-residency', 'comp-admin', 'comp-ux', 'comp-audit', 'comp-infra', 'comp-tests');
   x.dv('comp-infra', 'First version of the infrastructure controls, each leaving evidence for the observation window.', 'Production access, central logs, restores, vulnerability deadlines, change management',

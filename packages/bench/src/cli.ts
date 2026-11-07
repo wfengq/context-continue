@@ -7,7 +7,7 @@ import { computeMetrics, type GroupMetrics } from './metrics.js';
 import type { Model } from './model.js';
 import { AnthropicModel, DEFAULT_MAX_TOKENS, resolveApiKey } from './models/anthropic.js';
 import { createPolicy } from './policies/index.js';
-import type { ProbeSamples } from './probe.js';
+import { runControl, type ProbeSamples } from './probe.js';
 import { renderProbeEstimate, renderReport, writeResults, type ProbeSection } from './report.js';
 import { DEFAULT_RESTREAM_TOKENS } from './policies/stream.js';
 import { runScenario } from './runner.js';
@@ -34,7 +34,7 @@ const USAGE =
   'Usage: bench run --scenario <id|path.json|standard|long|xlong|all> --group <A..F|all> [--window 128000] [--compact-ratio 0.8] ' +
   '[--summary-tokens 1500] [--cache-ratio 0.1] [--c-public default|none|all|directives,contracts,failures] ' +
   '[--c-stream off|on|core|auto] [--restream-tokens 8000] [--c-stream-own off|on] [--auto-after <n>] [--out results] [--stamp <s>] ' +
-  '[--probes [--dry-run] [--max-cost <usd>] [--model claude-haiku-5-5] [--probe-groups A,C,D,E] [--probe-samples fml|all|<n>] [--max-probes <n>]]';
+  '[--probes [--dry-run] [--max-cost <usd>] [--model claude-haiku-5-5] [--probe-groups A,C,D,E] [--probe-samples fml|all|<n>] [--max-probes <n>] [--no-probe-control]]';
 
 /** Fact probes with a real model (spec 2026-11-07-real-model-probes); absent without --probes. */
 interface ProbeArgs {
@@ -46,13 +46,15 @@ interface ProbeArgs {
   samples: ProbeSamples;
   maxPerScenario: number | undefined;
   dryRun: boolean;
+  /** Also ask each probed fact once with no project context (group "none"); on unless --no-probe-control. */
+  control: boolean;
   /** Required for a real run. */
   maxCost: number | undefined;
 }
 
 const DEFAULT_PROBE_GROUPS: Group[] = ['A', 'C', 'D', 'E'];
-const PROBE_FLAGS = ['--dry-run', '--max-cost', '--model', '--probe-groups', '--probe-samples', '--max-probes'];
-const BOOLEAN_FLAGS = ['--probes', '--dry-run'];
+const PROBE_FLAGS = ['--dry-run', '--max-cost', '--model', '--probe-groups', '--probe-samples', '--max-probes', '--no-probe-control'];
+const BOOLEAN_FLAGS = ['--probes', '--dry-run', '--no-probe-control'];
 
 /** What main uses from the outside world for probes; tests inject a fake fetch and environment. */
 export interface MainDeps {
@@ -262,7 +264,7 @@ function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArg
   const maxCost = rawCost === undefined ? undefined : number('--max-cost', rawCost, n => n > 0, 'a positive number of US dollars');
   if (!dryRun && maxCost === undefined) throw new UsageError('--probes sends paid requests: give --max-cost <usd> (or --dry-run for an estimate)');
   const dropped = groups.filter(g => !runGroups.includes(g));
-  return { model, price, groups: probed, dropped, samples, maxPerScenario, dryRun, maxCost };
+  return { model, price, groups: probed, dropped, samples, maxPerScenario, dryRun, control: !seen.has('--no-probe-control'), maxCost };
 }
 
 /** Runs the bench; returns the process exit code. Errors go to stderr. */
@@ -328,7 +330,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
     }
   }
   const probeRecords: ProbeRecord[] = [];
-  const stopped: { scenario: string; group: Group; reason: string }[] = [];
+  const stopped: { scenario: string; group: Group | 'none'; reason: string }[] = [];
   const opts = {
     window: args.window,
     compactRatio: args.compactRatio,
@@ -339,6 +341,16 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   const records: CallRecord[] = [];
   const metrics: GroupMetrics[] = [];
   for (const s of scenarios) {
+    if (pa !== undefined && pa.control) {
+      // The no-context control: each fact the sampling would probe, asked once with only the question.
+      const c = await runControl(s, {
+        model: probeModel!, samples: pa.samples,
+        ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
+        ...(pa.dryRun ? {} : { onProbe: (rec: ProbeRecord) => appendFileSync(join(dir, 'probes.jsonl'), JSON.stringify(rec) + '\n') }),
+      });
+      probeRecords.push(...c.records);
+      if (c.stopped !== undefined) stopped.push({ scenario: s.id, group: 'none', reason: c.stopped });
+    }
     for (const g of groups) {
       const probe =
         pa !== undefined && pa.groups.includes(g)
@@ -363,7 +375,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
       ? {
           model: pa.model, maxTokens: DEFAULT_MAX_TOKENS, thinking: 'disabled', temperature: 'not sent (model default)', samples: pa.samples,
           ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }),
-          groups: pa.groups, maxCost: pa.maxCost!, price: pa.price, usage: guard!.spent.usage, cost: guard!.spent.cost, stopped, records: probeRecords,
+          groups: pa.groups, control: pa.control, maxCost: pa.maxCost!, price: pa.price, usage: guard!.spent.usage, cost: guard!.spent.cost, stopped, records: probeRecords,
         }
       : undefined;
   const report = renderReport(metrics, { scenarios: scenarios.map(s => s.id), params, cPublic: args.cPublic.canonical, cStream: cStreamLine(args.cStream), dsbotRef: 'f823773', tiers, ...(section === undefined ? {} : { probes: section }) });
@@ -371,7 +383,7 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
   process.stdout.write(`bench: wrote ${join(dir, 'results.json')} and ${join(dir, 'report.md')}\n`);
   if (pa !== undefined && pa.dryRun) {
     const est = estimateProbes(probeRecords, pa.price, DEFAULT_MAX_TOKENS);
-    const meta = { model: pa.model, maxTokens: DEFAULT_MAX_TOKENS, samples: pa.samples, groups: pa.groups, maxCost: pa.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
+    const meta = { model: pa.model, maxTokens: DEFAULT_MAX_TOKENS, samples: pa.samples, groups: [...pa.groups, ...(pa.control ? ['none' as const] : [])], maxCost: pa.maxCost ?? null, ...(pa.maxPerScenario === undefined ? {} : { maxPerScenario: pa.maxPerScenario }) };
     const md = renderProbeEstimate(est, meta, tiers);
     writeFileSync(join(dir, 'probe-estimate.json'), JSON.stringify({ ...meta, price: pa.price, ...est }, null, 2) + '\n');
     writeFileSync(join(dir, 'probe-estimate.md'), md);

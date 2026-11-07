@@ -123,7 +123,11 @@
       "probe": {
         "question": "What currency and tax treatment must every cost figure follow?",
         "expect": [
-          "including VAT"
+          "including VAT",
+          "incl. VAT",
+          "VAT included",
+          "inclusive of VAT",
+          "VAT inclusive"
         ]
       }
     },
@@ -139,7 +143,9 @@
         "expect": [
           "VAT",
           "projection",
-          "microphones"
+          "microphones",
+          "cleaning",
+          "security"
         ]
       }
     },
@@ -154,11 +160,17 @@
         "question": "What is the expected number of guests and the budget now? Give only the current value.",
         "expect": [
           "25,000",
-          "200 people"
+          "200 people",
+          "25k",
+          "25000",
+          "200 guests",
+          "200 attendees"
         ],
         "reject": [
           "15,000",
-          "120 people"
+          "120 people",
+          "120 guests",
+          "15k"
         ]
       }
     },

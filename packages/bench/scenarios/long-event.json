@@ -179,8 +179,7 @@
       "probe": {
         "question": "What currency and tax treatment must every published ticket and sponsor price follow?",
         "expect": [
-          "including 21%",
-          "21% Dutch VAT"
+          "21%"
         ]
       }
     },
@@ -212,10 +211,16 @@
         "question": "How many attendees and how many talk tracks are we planning for now? Give only the current value.",
         "expect": [
           "1,000",
-          "three talk tracks"
+          "1000",
+          "three talk tracks",
+          "three tracks",
+          "3 tracks"
         ],
         "reject": [
-          "600 people"
+          "600 people",
+          "600 attendees",
+          "two talk tracks",
+          "two tracks"
         ]
       }
     },
@@ -231,9 +236,7 @@
       "probe": {
         "question": "What are the seat capacities of the Main hall, the Harbour room and the Quay room?",
         "expect": [
-          "720",
-          "180",
-          "150"
+          "720"
         ]
       }
     },
@@ -249,7 +252,8 @@
         "question": "Which way of releasing the second batch of tickets failed against resale bots?",
         "expect": [
           "public link",
-          "per-order limit"
+          "per order",
+          "open link"
         ]
       }
     },
@@ -280,7 +284,9 @@
       "probe": {
         "question": "When may a speaker be named publicly?",
         "expect": [
-          "speaker agreement"
+          "speaker agreement",
+          "signed the agreement",
+          "after signing"
         ]
       }
     },
@@ -295,8 +301,7 @@
       "probe": {
         "question": "Can sponsors buy a talk, and where does sponsored content go?",
         "expect": [
-          "Quay room",
-          "sponsor session"
+          "Quay"
         ]
       }
     },
@@ -312,7 +317,11 @@
         "question": "Under what condition does attendee data reach a sponsor?",
         "expect": [
           "opts in",
-          "badge scan"
+          "opt in",
+          "opted in",
+          "unticked checkbox",
+          "badge scan",
+          "consent"
         ]
       }
     },
@@ -330,7 +339,8 @@
         "question": "What time format must every published time use?",
         "expect": [
           "24-hour",
-          "HH:MM"
+          "HH:MM",
+          "24h"
         ]
       }
     },
@@ -343,9 +353,10 @@
         "venue"
       ],
       "probe": {
-        "question": "Which network setup for streaming the main hall failed during a busy event?",
+        "question": "How many times did the 8 Mbit test stream of the main hall drop in an hour?",
         "expect": [
-          "Wi-Fi"
+          "eleven",
+          "11"
         ]
       }
     },
@@ -360,7 +371,9 @@
       "probe": {
         "question": "Who must produce the live captions for talks on a screen or a stream?",
         "expect": [
-          "human captioner"
+          "human captioner",
+          "human captioners",
+          "human"
         ]
       }
     },
@@ -373,10 +386,10 @@
         "program"
       ],
       "probe": {
-        "question": "Which captioning approach was measured on last year's talks and found wanting?",
+        "question": "What share of the words did the captions measured on three of last year's talks get wrong?",
         "expect": [
-          "automatic speech recognition",
-          "automatic captions"
+          "14%",
+          "14 percent"
         ]
       }
     },
@@ -391,7 +404,9 @@
         "question": "What is 8 September now, and what does a workshop cost? Give only the current value.",
         "expect": [
           "workshop day",
-          "EUR 145"
+          "EUR 145",
+          "€145",
+          "145 EUR"
         ]
       }
     },
@@ -422,7 +437,10 @@
       "probe": {
         "question": "How far ahead of a workshop must its setup guide be published?",
         "expect": [
-          "7 days"
+          "7 days",
+          "seven days",
+          "one week",
+          "a week"
         ]
       }
     },
@@ -439,7 +457,8 @@
         "question": "What must every run-sheet line name?",
         "expect": [
           "one owner",
-          "fallback person"
+          "fallback",
+          "backup person"
         ]
       }
     },
@@ -454,7 +473,9 @@
         "question": "How do people who are not in the rooms get the talks now? Give only the current value.",
         "expect": [
           "record all three rooms",
-          "within 7 days"
+          "all three rooms",
+          "recorded",
+          "recordings"
         ]
       }
     },
@@ -469,7 +490,6 @@
       "probe": {
         "question": "How soon must a talk video be published, and how is it titled?",
         "expect": [
-          "within 7 days",
           "S-nn Speaker"
         ]
       }
@@ -497,10 +517,10 @@
         "*"
       ],
       "probe": {
-        "question": "How must speakers who travel a short distance arrive, and what is the default catering? Give only the current value.",
+        "question": "Below what travel distance must speakers come by train? Give only the current value.",
         "expect": [
-          "train",
-          "vegetarian"
+          "700 km",
+          "700km"
         ]
       }
     },
@@ -516,7 +536,9 @@
         "question": "Which details must be logged per speaker trip?",
         "expect": [
           "travel mode",
-          "booking reference"
+          "booking reference",
+          "booking ref",
+          "mode of travel"
         ]
       }
     }

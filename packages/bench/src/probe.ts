@@ -1,3 +1,4 @@
+import { defaultCountTokens } from '@context-continue/core';
 import type { FactProbe, ProbeRecord, ProbeVerdict, Scenario, Step } from './types.js';
 
 /**
@@ -58,9 +59,13 @@ export function probeQuestion(question: string): string {
   return `Question: ${question}\nAnswer briefly.`;
 }
 
-/** Lower case, "×" as "x", no spaces around an "x" between digits ("12 x 12" → "12x12"), whitespace runs as one space, trimmed. */
+/**
+ * Lower case, "×" as "x", "-", "_" and "/" as a space ("last-writer-wins" → "last writer wins",
+ * "past_due" → "past due"), no spaces around an "x" between digits ("12 x 12" → "12x12"), whitespace
+ * runs as one space, trimmed. Applied to the answer and to every expect / reject string alike.
+ */
 export function normaliseAnswer(text: string): string {
-  return text.toLowerCase().replace(/×/g, 'x').replace(/(\d)\s*x\s*(?=\d)/g, '$1x').replace(/\s+/g, ' ').trim();
+  return text.toLowerCase().replace(/×/g, 'x').replace(/[-_/]/g, ' ').replace(/(\d)\s*x\s*(?=\d)/g, '$1x').replace(/\s+/g, ' ').trim();
 }
 
 const ALNUM = /[\p{L}\p{N}]/u;
@@ -153,4 +158,38 @@ export function scheduleProbes(s: Scenario, opts: ProbeOptions = {}): { factId: 
     for (const p of perFact) if (rank < p.steps.length) out.push({ factId: p.factId, step: p.steps[rank]! });
   const cap = opts.maxPerScenario;
   return cap === undefined ? out : out.slice(0, cap);
+}
+
+/**
+ * The no-context control (group "none"): every fact that `scheduleProbes` would probe under `opts`
+ * is asked once with only the question segment, no project context. It shows how much of a fact a
+ * model answers from general knowledge. Records have step -1 and an empty botId, count the question
+ * segment as their only input and cache nothing. A ProbeStop from the model or from `onProbe` ends
+ * the control; the stop reason comes back and the record that caused it is not kept.
+ */
+export async function runControl(s: Scenario, opts: ProbeRunOptions): Promise<{ records: ProbeRecord[]; stopped?: string }> {
+  const ids = [...new Set(scheduleProbes(s, opts).map(p => p.factId))];
+  const records: ProbeRecord[] = [];
+  for (const factId of ids) {
+    const probe = (s.facts ?? []).find(f => f.id === factId)!.probe!;
+    const question = { text: probeQuestion(probe.question), cacheable: false };
+    const base = { group: 'none' as const, scenario: s.id, step: -1, botId: '', factId, question: probe.question, inputTokens: defaultCountTokens(question.text), cacheableTokens: 0 };
+    let rec: ProbeRecord;
+    try {
+      const answer = await opts.model.complete({ botId: '', segments: [question], scripted: null });
+      rec = { ...base, answer: answer.reply, verdict: gradeAnswer(probe, answer.reply) };
+      if (answer.usage !== undefined) rec.usage = answer.usage;
+    } catch (e) {
+      if (e instanceof ProbeStop) return { records, stopped: e.message };
+      rec = { ...base, answer: '', verdict: 'error', error: probeErrorMessage(e) };
+    }
+    records.push(rec);
+    try {
+      await opts.onProbe?.(rec);
+    } catch (e) {
+      if (e instanceof ProbeStop) return { records, stopped: e.message };
+      throw e;
+    }
+  }
+  return { records };
 }

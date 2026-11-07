@@ -205,7 +205,7 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-prices-incl-vat', 'CONV-PRICES-INCL-VAT', ['marketing', 'partners'], {
     question: 'What currency and tax treatment must every published ticket and sponsor price follow?',
-    expect: ['including 21%', '21% Dutch VAT'],
+    expect: ['21%'],
   });
   b.work('production', 'livestream', 'Getting quotes for stage AV and streaming while the venue is being chosen.', [
     op.notes('livestream: quotes from two AV firms; main hall with 3 cameras, stream 1080p to YouTube; second room with sound and slides only.'),
@@ -282,8 +282,8 @@ export function generateLongEvent(): Scenario {
   );
   b.fact('change-capacity-1000', 'CHANGE-CAPACITY-1000', ['*'], {
     question: 'How many attendees and how many talk tracks are we planning for now? Give only the current value.',
-    expect: ['1,000', 'three talk tracks'],
-    reject: ['600 people'],
+    expect: ['1,000', '1000', 'three talk tracks', 'three tracks', '3 tracks'],
+    reject: ['600 people', '600 attendees', 'two talk tracks', 'two tracks'],
   });
   b.replan({
     workstreams: [
@@ -306,7 +306,7 @@ export function generateLongEvent(): Scenario {
   });
   b.fact('contract-room-capacities', 'CONTRACT-ROOM-CAPACITIES', ['production', 'program', 'venue'], {
     question: 'What are the seat capacities of the Main hall, the Harbour room and the Quay room?',
-    expect: ['720', '180', '150'],
+    expect: ['720'],
   });
   b.work('venue', 'venue', '@mira Kraanhal can take 1,000 (CHANGE-CAPACITY-1000): the main hall goes to 720 seats once the expo moves to the south end, and a heated, step-free pavilion on the quay adds the Quay room with 150 seats; with the Harbour room at 180 that matches CONTRACT-ROOM-CAPACITIES. I am getting the revised quote.', [
     op.notes('venue: main hall 720; Harbour room 180 (ground floor); Quay room pavilion 150 with a level ramp; uplinks and AV power per room as in CONTRACT-ROOM-CAPACITIES.'),
@@ -321,7 +321,7 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('fail-open-ticket-link', 'FAIL-OPEN-TICKET-LINK', ['marketing', 'venue'], {
     question: 'Which way of releasing the second batch of tickets failed against resale bots?',
-    expect: ['public link', 'per-order limit'],
+    expect: ['public link', 'per order', 'open link'],
   });
   b.deliver('venue', 'venue', {
     reply: 'The venue plan now holds 1,000 attendees in three step-free rooms.',
@@ -360,7 +360,7 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-signed-confirmation', 'CONV-SIGNED-CONFIRMATION', ['program', 'marketing'], {
     question: 'When may a speaker be named publicly?',
-    expect: ['speaker agreement'],
+    expect: ['speaker agreement', 'signed the agreement', 'after signing'],
   });
   b.deliver('partners', 'sponsors', {
     reply: 'First version of the sponsor packages.',
@@ -377,11 +377,11 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-no-paid-talks', 'CONV-NO-PAID-TALKS', ['partners', 'program'], {
     question: 'Can sponsors buy a talk, and where does sponsored content go?',
-    expect: ['Quay room', 'sponsor session'],
+    expect: ['Quay'],
   });
   b.fact('conv-sponsor-opt-in-only', 'CONV-SPONSOR-OPT-IN-ONLY', ['partners', 'marketing'], {
     question: 'Under what condition does attendee data reach a sponsor?',
-    expect: ['opts in', 'badge scan'],
+    expect: ['opts in', 'opt in', 'opted in', 'unticked checkbox', 'badge scan', 'consent'],
   });
   b.deliver('program', 'speakers', {
     reply: 'Marketing now gets only the signed speakers.',
@@ -431,7 +431,7 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-times-24h', 'CONV-TIMES-24H', ['program', 'marketing', 'production', 'venue'], {
     question: 'What time format must every published time use?',
-    expect: ['24-hour', 'HH:MM'],
+    expect: ['24-hour', 'HH:MM', '24h'],
   });
   b.work('marketing', 'promotion', 'Building the speakers page from the signed speakers.', [
     op.board('c-speakers-promotion'),
@@ -464,8 +464,8 @@ export function generateLongEvent(): Scenario {
     op.message('Heads-up (FAIL-VENUE-WIFI-STREAM): the venue Wi-Fi dropped our test stream eleven times in an hour at a busy event. We stream over the wired stage uplink only, with a 4G backup.', 'inform'),
   ]);
   b.fact('fail-venue-wifi-stream', 'FAIL-VENUE-WIFI-STREAM', ['production', 'venue'], {
-    question: 'Which network setup for streaming the main hall failed during a busy event?',
-    expect: ['Wi-Fi'],
+    question: 'How many times did the 8 Mbit test stream of the main hall drop in an hour?',
+    expect: ['eleven', '11'],
   });
   b.work('venue', 'venue', 'Confirmed the wired stage uplinks with Kraanhal after the stream test (FAIL-VENUE-WIFI-STREAM).', [
     op.notes('venue: Kraanhal confirms a dedicated 1 Gbit wired line at each stage on a VLAN separate from the attendee Wi-Fi; EUR 1,800 for both days.'),
@@ -512,7 +512,7 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-human-captions', 'CONV-HUMAN-CAPTIONS', ['production', 'program'], {
     question: 'Who must produce the live captions for talks on a screen or a stream?',
-    expect: ['human captioner'],
+    expect: ['human captioner', 'human captioners', 'human'],
   });
   b.work('production', 'livestream', 'Measured automatic captions on last year\'s recordings; recording the result (FAIL-AUTO-CAPTIONS).', [
     op.failure(
@@ -523,8 +523,8 @@ export function generateLongEvent(): Scenario {
     op.message('Result (FAIL-AUTO-CAPTIONS): automatic captions got 14% of the words wrong on last year\'s talks and lagged 6 seconds. We book human captioners.', 'inform'),
   ]);
   b.fact('fail-auto-captions', 'FAIL-AUTO-CAPTIONS', ['production', 'program'], {
-    question: 'Which captioning approach was measured on last year\'s talks and found wanting?',
-    expect: ['automatic speech recognition', 'automatic captions'],
+    question: 'What share of the words did the captions measured on three of last year\'s talks get wrong?',
+    expect: ['14%', '14 percent'],
   });
   b.ask('production', 'livestream', 'program', {
     reply: 'Booking two human captioners per day (CONV-HUMAN-CAPTIONS).',
@@ -543,7 +543,7 @@ export function generateLongEvent(): Scenario {
   );
   b.fact('change-workshop-day', 'CHANGE-WORKSHOP-DAY', ['*'], {
     question: 'What is 8 September now, and what does a workshop cost? Give only the current value.',
-    expect: ['workshop day', 'EUR 145'],
+    expect: ['workshop day', 'EUR 145', '€145', '145 EUR'],
   });
   b.replan({
     workstreams: [
@@ -616,7 +616,7 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-setup-guide-7d', 'CONV-SETUP-GUIDE-7D', ['program', 'marketing'], {
     question: 'How far ahead of a workshop must its setup guide be published?',
-    expect: ['7 days'],
+    expect: ['7 days', 'seven days', 'one week', 'a week'],
   });
   b.ask('partners', 'sponsors', 'program', {
     reply: 'Following up with the Gold sponsors.',
@@ -657,7 +657,7 @@ export function generateLongEvent(): Scenario {
   ]);
   b.fact('conv-run-sheet-owner', 'CONV-RUN-SHEET-OWNER', ['venue', 'production', 'program'], {
     question: 'What must every run-sheet line name?',
-    expect: ['one owner', 'fallback person'],
+    expect: ['one owner', 'fallback', 'backup person'],
   });
   progress('venue', 'logistics', 'the badge printer rental (two printers, 600 badges an hour each)', 'the volunteer roster');
   b.ask('venue', 'logistics', 'production', {
@@ -674,7 +674,7 @@ export function generateLongEvent(): Scenario {
   );
   b.fact('change-no-livestream', 'CHANGE-NO-LIVESTREAM', ['*'], {
     question: 'How do people who are not in the rooms get the talks now? Give only the current value.',
-    expect: ['record all three rooms', 'within 7 days'],
+    expect: ['record all three rooms', 'all three rooms', 'recorded', 'recordings'],
   });
   b.replan({
     workstreams: [
@@ -706,7 +706,7 @@ export function generateLongEvent(): Scenario {
   });
   b.fact('contract-video-7d', 'CONTRACT-VIDEO-7D', ['production', 'marketing'], {
     question: 'How soon must a talk video be published, and how is it titled?',
-    expect: ['within 7 days', 'S-nn Speaker'],
+    expect: ['S-nn Speaker'],
   });
   b.work('production', 'recordings', 'Re-planning the AV for recordings instead of a stream.', [
     op.board('c-recordings-promotion'),
@@ -801,8 +801,8 @@ export function generateLongEvent(): Scenario {
     ['venue'],
   );
   b.fact('change-green-event', 'CHANGE-GREEN-EVENT', ['*'], {
-    question: 'How must speakers who travel a short distance arrive, and what is the default catering? Give only the current value.',
-    expect: ['train', 'vegetarian'],
+    question: 'Below what travel distance must speakers come by train? Give only the current value.',
+    expect: ['700 km', '700km'],
   });
   b.replan({
     workstreams: [
@@ -831,7 +831,7 @@ export function generateLongEvent(): Scenario {
   });
   b.fact('contract-travel-log', 'CONTRACT-TRAVEL-LOG', ['program', 'venue'], {
     question: 'Which details must be logged per speaker trip?',
-    expect: ['travel mode', 'booking reference'],
+    expect: ['travel mode', 'booking reference', 'booking ref', 'mode of travel'],
   });
   b.ask('program', 'speakers', 'venue', {
     reply: 'Rebooking speaker travel for the green event rules (CHANGE-GREEN-EVENT).',
