@@ -439,7 +439,9 @@ describe('item-level updates', () => {
     await resolveAll(fx);
     const art2 = await brief(fx.p, 'art');
     const p2 = appended(art1, art2, 'projection')!;
-    expect(p2).toMatch(/## Decisions \(part art\)\n- \[d-\d+\] Shared MARK-SHARED\n {2}why: r\n {2}affects: art, audio/);
+    // the project updates of this request carry the decision in full, so both parts add the compact form
+    expect(appended(art1, art2, 'updates')).toMatch(/- \[d-\d+\] Shared MARK-SHARED\n {2}why: r\n {2}affects: art, audio/);
+    expect(p2).toMatch(/## Decisions \(part art\)\n- \[d-\d+\] Shared MARK-SHARED \(seen\)/);
     expect(p2).toMatch(/## Decisions \(part audio\)\n- \[d-\d+\] Shared MARK-SHARED \(seen\)/);
     expect(p2.indexOf('(part art)')).toBeLessThan(p2.indexOf('(part audio)'));
 
@@ -447,7 +449,7 @@ describe('item-level updates', () => {
     await resolveAll(fx);
     const art3 = await brief(fx.p, 'art');
     const p3 = appended(art2, art3, 'projection')!;
-    expect(p3).toMatch(/^# Your part — updates\n\n## Decisions \(part audio\)\n- \[d-\d+\] Audio only MARK-AUDIO\n/);
+    expect(p3).toMatch(/^# Your part — updates\n\n## Decisions \(part audio\)\n- \[d-\d+\] Audio only MARK-AUDIO \(seen\)/);
     expect(p3).not.toContain('(part art)');
 
     // art loses the audio part again: one line for the whole part
@@ -456,7 +458,7 @@ describe('item-level updates', () => {
     expect(appended(art3, art4, 'projection')).toMatch(/^# Your part — updates\n\n\(part audio\)\nno longer: audio \| Sound \| art \| \w+$/);
   });
 
-  test('Focus 2: seen compaction is not a change; a new contract version is appended in full', async () => {
+  test('Focus 2: seen compaction is not a change; a new contract version is appended once in full', async () => {
     const fx = await streamProject();
     const a = await brief(fx.p, 'art');
     expect(a.segments[4]!.text).toContain('- [c1@v1] art -> logic: PNG sprite sheets, 16x16 tiles');
@@ -468,7 +470,25 @@ describe('item-level updates', () => {
     await fx.p.submit('pm', { type: 'proposal', ops: [{ op: 'updateContract', id: 'c1', spec: 'PNG 64x64 MARK-V2' }] });
     await resolveAll(fx);
     const c = await brief(fx.p, 'art');
-    expect(appended(b, c, 'projection')).toBe('# Your part — updates\n\n## Contracts (part art)\n- [c1@v2] art -> logic: PNG 64x64 MARK-V2');
+    // the project updates of this same request carry the contract in full, so the projection adds its compact form
+    expect(appended(b, c, 'updates')).toContain('- [c1@v2] art -> logic: PNG 64x64 MARK-V2');
+    expect(appended(b, c, 'projection')).toBe('# Your part — updates\n\n## Contracts (part art)\n- [c1@v2] art -> logic (seen)');
+    expect(occurrences(all(c), 'MARK-V2')).toBe(1);
+  });
+
+  test('carry-over: an own-projection item already in this request\'s project updates is appended compact; one that is not stays full', async () => {
+    const fx = await streamProject();
+    const a = await brief(fx.p, 'art');
+    await fx.p.submit('pm', { type: 'proposal', ops: [decide('Use MARK-DEC everywhere', ['art'])] });
+    await resolveAll(fx);
+    const b = await brief(fx.p, 'art');
+    expect(appended(a, b, 'updates')).toContain('Use MARK-DEC everywhere');
+    const p = appended(a, b, 'projection')!;
+    expect(p).toMatch(/^# Your part — updates\n\n## Decisions \(part art\)\n- \[[^\]]+\] Use MARK-DEC everywhere \(seen\)$/);
+    expect(occurrences(all(b), 'MARK-DEC')).toBe(2);
+    // nothing changed since: nothing is appended
+    const c = await brief(fx.p, 'art');
+    expect(kinds({ segments: addedOf(b, c) })).not.toContain('projection');
   });
 
   test('a new upstream deliverable appends only its line; the older version is not "no longer"', async () => {
@@ -839,5 +859,96 @@ describe('persistence', () => {
     expect(added[1]!.text).not.toContain('MARK-1');
     b.p.dispose();
     b.store.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// auto mode (Task 4)
+// ---------------------------------------------------------------------------
+
+const entryCount = async (fx: FacadeProject) => (await fx.store.read(fx.projectId, 1)).length;
+const say = (fx: FacadeProject, text: string) => fx.p.ingest({ author: { kind: 'human', id: 'alice' }, text });
+
+describe('auto mode', () => {
+  test('Focus 4: below the threshold it equals off and writes no stream state; the request at the threshold is a snapshot, later ones append', async () => {
+    const off = await makeProject({ approved: true, newId: ids() });
+    const auto = await makeProject({ approved: true, newId: ids(), stream: { mode: 'auto', autoAfterEntries: 1000 } });
+    // find the threshold: two entries more than the ledger holds after setup
+    const base = await entryCount(auto);
+    const fx = await makeProject({ approved: true, newId: ids(), stream: { mode: 'auto', autoAfterEntries: base + 3 } });
+    const step = async (f: FacadeProject, t: string, bot = 'art') => f.p.buildStream(bot, { maxTokens: MAX, trigger: trig(t) });
+    const early: unknown[] = [];
+    const earlyOff: unknown[] = [];
+    for (const f of [off, auto, fx]) {
+      const sink = f === off ? earlyOff : f === auto ? early : [];
+      sink.push(await step(f, 'one'));
+      await say(f, 'MARK-A');
+      sink.push(await step(f, 'two'));
+    }
+    expect(early).toEqual(earlyOff);
+    expect(await auto.store.getMeta(auto.projectId, 'stream:art')).toBeNull();
+    // fx: the ledger is one entry short of the threshold after one more message
+    await say(fx, 'MARK-B');
+    expect(await entryCount(fx)).toBe(base + 2);
+    expect(((await step(fx, 'almost')) as StreamBundle).snapshot).toBeUndefined();
+    expect(await fx.store.getMeta(fx.projectId, 'stream:art')).toBeNull();
+    await say(fx, 'MARK-B2');
+    expect(await entryCount(fx)).toBe(base + 3);
+    const snap = (await step(fx, 'three')) as StreamBundle;
+    expect(snap.snapshot).toBe(true);
+    expect(kinds(snap)).toEqual(['common', 'memory', 'workspace', 'board', 'projection', 'trigger']);
+    await say(fx, 'MARK-C');
+    const next = (await step(fx, 'four')) as StreamBundle;
+    expect(next.snapshot).toBe(false);
+    expect(isPrefix(texts(snap), texts(next))).toBe(true);
+    expect(appended(snap, next, 'updates')).toContain('MARK-C');
+  });
+
+  test('every bot starts its stream with a snapshot after the switch; recordOwnOutput before it is a no-op', async () => {
+    const base = await entryCount(await makeProject({ approved: true, newId: ids() }));
+    const fx = await makeProject({ approved: true, newId: ids(), stream: { mode: 'auto', autoAfterEntries: base + 1 } });
+    await fx.p.recordOwnOutput('art', 'before MARK-EARLY');
+    expect(await fx.store.getMeta(fx.projectId, 'stream:art')).toBeNull();
+    await say(fx, 'MARK-1');
+    for (const bot of ['art', 'logic']) expect(((await brief(fx.p, bot)) as StreamBundle).snapshot).toBe(true);
+    await fx.p.recordOwnOutput('art', 'after MARK-LATE');
+    const b = (await brief(fx.p, 'art')) as StreamBundle;
+    expect(b.snapshot).toBe(false);
+    expect(all(b)).toContain('MARK-LATE');
+    expect(all(b)).not.toContain('MARK-EARLY');
+  });
+
+  test('once on it stays on, also after reopening with a larger threshold (persisted)', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'cc-auto-')), 'db.sqlite');
+    const open = async (start: boolean, after: number) => {
+      const store = sqliteStore(file);
+      const employees = createEmployeeRegistry({ store });
+      if (start) for (const botId of ['pm', 'art', 'logic', 'audio']) await employees.upsert({ botId, persona: PERSONAS[botId]!, skills: [] });
+      const p = createProject({ projectId: 'p1', store, employees, clock: fakeClock(), publicBoard: { directives: false }, stream: { mode: 'auto', autoAfterEntries: after } });
+      return { store, p };
+    };
+    const a = await open(true, 8);
+    await a.p.start({ goal: 'Ship a tiny platformer demo.', constraints: ['Runs in the browser'], lead: 'pm', by: 'alice' });
+    const { proposalId } = await a.p.proposePlan(FIXTURE_PLAN, { by: 'pm' });
+    await a.p.approvePlan(proposalId, { by: 'alice' });
+    for (let i = 0; (await a.store.read('p1', 1)).length < 8; i++) await a.p.ingest({ author: { kind: 'human', id: 'alice' }, text: `m${i}` });
+    const first = await brief(a.p, 'art');
+    expect(first.snapshot).toBe(true);
+    a.p.dispose();
+    a.store.close();
+    const b = await open(false, 1_000_000);
+    await b.p.ingest({ author: { kind: 'human', id: 'alice' }, text: 'later MARK-L' });
+    const second = await brief(b.p, 'art');
+    expect(second.snapshot).toBe(false);
+    expect(isPrefix(texts(first), texts(second))).toBe(true);
+    // a bot with no stream yet starts with a snapshot, not an off-style brief
+    expect(((await brief(b.p, 'logic')) as StreamBundle).snapshot).toBe(true);
+    b.p.dispose();
+    b.store.close();
+  });
+
+  test('an unknown request kind is INVALID_OP below and above the threshold', async () => {
+    const fx = await makeProject({ approved: true, stream: { mode: 'auto', autoAfterEntries: 1000 } });
+    await expect(fx.p.buildStream('art', { maxTokens: MAX, trigger: trig('x'), request: { kind: 'nope' } as never })).rejects.toMatchObject({ code: 'INVALID_OP' });
   });
 });

@@ -827,7 +827,21 @@ export function createProject(cfg: ProjectConfig): Project {
   // long-project stream mode (spec 2026-11-06)
   // ---------------------------------------------------------------------------
 
-  const streamOn = () => streamOptions.mode === 'on';
+  /** Meta key: `auto` mode has switched this project to the stream; it never switches back. */
+  const AUTO_ON_KEY = 'streamAutoOn';
+  /**
+   * Whether this request uses the stream. `on`: always; `off`: never. `auto`: once the ledger holds
+   * `autoAfterEntries` entries, checked at every request against the current size, and then for good
+   * (persisted, so a reopened project or a raised threshold does not switch it back). Inside the
+   * queue, so the decision and the first snapshot see the same ledger.
+   */
+  async function streamActive(): Promise<boolean> {
+    if (streamOptions.mode !== 'auto') return streamOptions.mode === 'on';
+    if ((await store.getMeta<boolean>(projectId, AUTO_ON_KEY)) === true) return true;
+    if ((await store.latestSeq(projectId)) < streamOptions.autoAfterEntries) return false;
+    await store.setMeta(projectId, AUTO_ON_KEY, true);
+    return true;
+  }
   const streamConfig = { restreamTokens: streamOptions.restreamTokens, snapshotHumanKeep: streamOptions.snapshotHumanKeep, count };
 
   function checkRequest(r: StreamRequest | undefined): StreamRequest {
@@ -1037,13 +1051,16 @@ export function createProject(cfg: ProjectConfig): Project {
 
     async buildStream(botId, o) {
       const req = checkRequest(o.request);
-      if (!streamOn()) return unstreamed(botId, o, req);
-      return serial(() => streamed(botId, o, req));
+      if (streamOptions.mode === 'off') return unstreamed(botId, o, req);
+      // `unstreamed` queues itself, so it runs after the decision, not inside it.
+      const r = await serial(async () => ((await streamActive()) ? await streamed(botId, o, req) : null));
+      return r ?? unstreamed(botId, o, req);
     },
 
     async recordOwnOutput(botId, text) {
       if (typeof text !== 'string') throw new ContextError('INVALID_OP', `recordOwnOutput text must be a string, got ${typeof text}`);
-      if (!streamOn() || text.length === 0) return;
+      // In `auto` before the switch no bot has a stream state, so this finds nothing and does nothing.
+      if (streamOptions.mode === 'off' || text.length === 0) return;
       await serial(async () => {
         const st = await loadStreamState(store, projectId, botId);
         // Without a stream the bot's next request is a snapshot, which never carries own output.

@@ -20,7 +20,7 @@
 - `createProject({ …, stream?: { mode?: 'off' | 'on' | 'auto'; restreamTokens?: number; autoAfterEntries?: number } })`
   - 缺省 `mode: 'off'`：所有现有行为与输出逐字节不变。
   - `on`：所有 Bot 使用流。
-  - `auto`：账本条目数达到 `autoAfterEntries` 后对之后的请求使用流（缺省值由第 3 节的评测决定，写入文档）。
+  - `auto`：每次 `buildStream` 用当前账本条目数（最新 seq）与 `autoAfterEntries` 比较：不足时与 `off` 完全相同（输出相同、不写流状态、`recordOwnOutput` 无操作）；达到的那次请求对该 Bot 是快照，之后为追加。切换单向、按项目持久化（存储里的 `streamAutoOn`）：开启后即使重新打开项目并调大阈值也不再关闭。每个 Bot 的第一次流式请求各自是快照（缺省值由第 3 节的评测决定，写入文档）。
   - `restreamTokens` 缺省 8,000。
   - `snapshotHumanKeep` 缺省 40，可为 0（快照折叠全部人类消息）。
 

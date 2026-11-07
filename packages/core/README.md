@@ -73,6 +73,43 @@ Segments 1 to 4 are the cacheable prefix, ordered from most to least stable. Kee
 
 **Behaviour change (2026-11-04):** hosts that do not set `directives` now get the Directives section and human chat leaves the delta; pass `publicBoard: { directives: false }` for the previous output. Setting only `contracts` or `failures` also keeps directives on.
 
+## Long-project mode (stream mode)
+
+A brief is rebuilt for every request, so its changing parts (the projection, the delta, and a board that changes with every human message) break the provider's prompt cache from segment 4 on. In a long project the stream mode trades that for an append-only request: each bot's request is its previous request byte for byte, plus what is new. Provider prefix caching then reuses everything but the appended tail. Use it for long projects (hundreds of ledger entries or more, many human messages, bots woken often); in a short project the plain brief is smaller and simpler, which is why `auto` exists.
+
+```ts
+const project = createProject({
+  // …
+  stream: { mode: 'auto', autoAfterEntries: 400, restreamTokens: 8_000, snapshotHumanKeep: 40 },
+});
+
+const r = await project.buildStream('art', { maxTokens: 12_000, trigger: { reason: 'assigned', detail: '...' } });
+// r.segments: every segment is cacheable; send them in order, with the cache breakpoint on the last one you can
+const reply = await runModel(r.segments, r.tools);
+await project.recordOwnOutput('art', reply.text); // the bot's reply and tool-call text, so the next request still extends this one
+```
+
+Options (`stream`, all optional):
+
+| option | default | meaning |
+|---|---|---|
+| `mode` | `'off'` | `off`: every method and output is unchanged (`buildStream` returns what `buildBrief` / `buildReviewContext` / `buildPlanningContext` return). `on`: every bot uses a stream. `auto`: see below. |
+| `restreamTokens` | 8,000 | tokens appended since the last snapshot after which the next request is a fresh snapshot |
+| `snapshotHumanKeep` | 40 | a snapshot keeps this many newest human messages in full; older ones are folded to their first 160 characters (0 folds all) |
+| `autoAfterEntries` | 400 (provisional) | `auto` only: ledger size at which the stream starts; a positive integer |
+
+`buildStream(botId, { maxTokens, trigger, request? })` takes the request a bot makes: a brief (default), `{ kind: 'review', deliverableId }` or `{ kind: 'planning' }` (the lead's contexts). It returns a `StreamBundle`, a superset of `ContextBundle` with two more segment kinds, `updates` (project-wide changes since the bot's last request) and `own` (text from `recordOwnOutput`), plus `snapshot: true` when the request starts a new stream. The first request, and any request after more than `restreamTokens` were appended, is a snapshot (the bot's own segments, the whole board, retired contracts, your part, then the trigger); every other request returns the previous segment list unchanged followed by new segments: project updates, then updates to the bot's memory, notes and part, item by item, then the trigger. Only what changed is appended; seen-compaction is not a change, and an item already carried in the same request's project updates is repeated only in its short "(seen)" form. Stream state is stored in the `Store` (memory and SQLite alike), so a reopened project continues each stream as an append. Waking rules, seen confirmation, and the state effects of review and planning contexts are the same as with the plain methods.
+
+`auto` starts the stream by ledger size. At every `buildStream` call the current number of ledger entries is compared with `autoAfterEntries`: below it, the call is exactly the `off` call (same output, no stream state written, `recordOwnOutput` does nothing); the first call at or above it makes the bot's request a snapshot, and later calls append. The switch is one-way and per project: once the threshold has been reached a flag is stored and the project stays on the stream, even if the host reopens it with a larger threshold. Each bot's first streamed request is its own snapshot.
+
+Caching: with the stream on and no new snapshot, the segment list of a bot's previous request is a byte-for-byte prefix of its next one, so every segment is marked cacheable and a breakpoint after the last previous segment hits the cache. The cost is that nothing is rewritten: stale text stays in the prefix until the next snapshot, and each snapshot (one per `restreamTokens` of appends) is a full re-send.
+
+Limits:
+
+- Real provider cache lifetimes are not modelled: a bot that idles longer than the provider keeps its cache pays for a full re-send anyway, and provider limits on the number of cache breakpoints are not enforced; place breakpoints yourself.
+- A snapshot grows with the project: the board and retired contracts are whole, and human messages are bounded only by `snapshotHumanKeep` (older ones cost about 160 characters each).
+- The bot's own output is part of the stream only if the host calls `recordOwnOutput`; without it the stream carries the bot's context but not what it said.
+
 ## What the host does
 
 - Runs the models. The core never calls one.

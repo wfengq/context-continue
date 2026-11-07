@@ -36,7 +36,12 @@ function gone(full: string): string {
 }
 
 /** Items with the same key, in order, paired by occurrence: the n-th `k` now is the n-th `k` known. */
-function multiset(known: readonly KnownItem[], now: readonly ShownItem[], retract: boolean): { lines: string[]; known: KnownItem[] } {
+function multiset(
+  known: readonly KnownItem[],
+  now: readonly ShownItem[],
+  retract: boolean,
+  shown: (x: ShownItem, line: string) => string,
+): { lines: string[]; known: KnownItem[] } {
   const before = new Map<string, string[]>();
   for (const [k, f] of known) before.set(k, [...(before.get(k) ?? []), f]);
   const used = new Map<string, number>();
@@ -45,8 +50,8 @@ function multiset(known: readonly KnownItem[], now: readonly ShownItem[], retrac
     const n = used.get(x.key) ?? 0;
     used.set(x.key, n + 1);
     const was = before.get(x.key)?.[n];
-    if (was === undefined) lines.push(x.text);
-    else if (was !== x.full) lines.push(x.full);
+    if (was === undefined) lines.push(shown(x, x.text));
+    else if (was !== x.full) lines.push(shown(x, x.full));
   }
   if (retract) {
     const seen = new Map<string, number>();
@@ -99,11 +104,15 @@ function rolling(known: readonly KnownItem[], now: readonly ShownItem[]): { line
   return { lines, known: [...k, ...fresh.map((x): KnownItem => [x.key, x.full])] };
 }
 
-function groupUpdate(known: KnownGroup | undefined, now: ItemGroup | undefined): { lines: string[]; known: KnownGroup | null } {
+function groupUpdate(
+  known: KnownGroup | undefined,
+  now: ItemGroup | undefined,
+  shown: (x: ShownItem, line: string) => string,
+): { lines: string[]; known: KnownGroup | null } {
   const heading = (now ?? known)!.heading;
   const leaves = (now ?? known)!.leaves;
   const items = now?.items ?? [];
-  const r = leaves === 'roll' ? rolling(known?.items ?? [], items) : multiset(known?.items ?? [], items, leaves === 'retract');
+  const r = leaves === 'roll' ? rolling(known?.items ?? [], items) : multiset(known?.items ?? [], items, leaves === 'retract', shown);
   return { lines: r.lines, known: r.known.length > 0 ? { heading, leaves, items: r.known } : null };
 }
 
@@ -116,7 +125,14 @@ const partKey = (p: string | null) => (p === null ? '' : `part:${p}`);
  * other items under `<heading> (part <id>)`. A part that is gone says `no longer: <its workstream
  * line>` once, not item by item.
  */
-export function sectionUpdate(title: string, known: readonly KnownPart[], now: readonly ItemPart[]): { text: string | null; known: KnownPart[] } {
+export function sectionUpdate(
+  title: string,
+  known: readonly KnownPart[],
+  now: readonly ItemPart[],
+  /** Texts this request already appends elsewhere (the project updates): an item equal to one is appended compact. */
+  alreadyShown: ReadonlySet<string> = new Set(),
+): { text: string | null; known: KnownPart[] } {
+  const shown = (x: ShownItem, line: string): string => (x.compact !== undefined && alreadyShown.has(x.full) ? x.compact : line);
   const blocks: string[] = [];
   const next: KnownPart[] = [];
   const knownParts = new Map(known.map(p => [partKey(p.part), p]));
@@ -134,7 +150,7 @@ export function sectionUpdate(title: string, known: readonly KnownPart[], now: r
     const nGroups = new Map(p.groups.map(g => [g.heading, g]));
     const groups: KnownGroup[] = [];
     for (const h of headings) {
-      const r = groupUpdate(kGroups.get(h), nGroups.get(h));
+      const r = groupUpdate(kGroups.get(h), nGroups.get(h), shown);
       emit(p.part, h, r.lines);
       if (r.known !== null) groups.push(r.known);
     }

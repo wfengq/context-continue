@@ -10,8 +10,7 @@ export const BOARD_SECTIONS = ['Goal', 'Constraints', 'Conventions', 'Contracts'
 export type BoardSection = (typeof BOARD_SECTIONS)[number];
 
 /** The bot's own segments: whole in a snapshot; the team appended again whole when it changes, the others item by item. */
-export const OWN_KINDS = ['common', 'memory', 'workspace', 'projection'] as const;
-export type OwnKind = (typeof OWN_KINDS)[number];
+export type OwnKind = 'common' | 'memory' | 'workspace' | 'projection';
 /** The own segments compared item by item. */
 export const ITEM_KINDS = ['memory', 'workspace', 'projection'] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];

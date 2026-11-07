@@ -142,6 +142,8 @@ export interface ShownItem {
   key: string;
   text: string;
   full: string;
+  /** The compact "(seen)" form, for items that have one (a projection's board items). */
+  compact?: string;
 }
 
 /**
@@ -299,9 +301,9 @@ export function renderProjection(
   const entries = <T extends Item | Contract>(heading: string, xs: T[], compact: (x: T) => string, full: (x: T) => string): string[] => {
     const shown = xs.map((x): ShownItem => {
       const key = itemKey(x);
-      if (seen.has(key)) return { key: x.id, text: compact(x), full: full(x) };
+      if (seen.has(key)) return { key: x.id, text: compact(x), full: full(x), compact: compact(x) };
       shownKeys.push(key);
-      return same(x.id, full(x));
+      return { ...same(x.id, full(x)), compact: compact(x) };
     });
     group(heading, shown);
     return shown.map((x) => x.text);

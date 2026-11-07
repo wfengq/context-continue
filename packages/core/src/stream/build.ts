@@ -81,9 +81,15 @@ function snapshotBoard(items: Record<BoardSection, Shown>, retired: Shown, human
   return out.join('\n');
 }
 
-/** The `# Project updates` text since `prev`, or null when nothing project-wide changed. */
-function projectUpdates(prev: StreamState, items: Record<BoardSection, Shown>, retired: Shown, humans: readonly LedgerEntry[]): string | null {
+/** The `# Project updates` text since `prev` (null when nothing project-wide changed) and the item texts it carries. */
+function projectUpdates(
+  prev: StreamState,
+  items: Record<BoardSection, Shown>,
+  retired: Shown,
+  humans: readonly LedgerEntry[],
+): { text: string | null; emitted: Set<string> } {
   const lines: string[] = [];
+  const emitted = new Set<string>();
   const fresh = humans.filter(h => h.seq > prev.humanSeq);
   if (fresh.length > 0) lines.push('## Human messages', ...fresh.map(directiveLine));
   const retiredNow = new Map(retired);
@@ -94,12 +100,13 @@ function projectUpdates(prev: StreamState, items: Record<BoardSection, Shown>, r
     // A contract a replan retired is shown under Retired contracts instead.
     const gone = prev.board[s].filter(([k]) => !now.has(k) && !(s === 'Contracts' && retiredNow.has(k))).map(([k]) => k);
     const removed = gone.map(k => (s === 'Workstreams' ? `- workstream ${k} removed from the board` : `- [${k}] removed from the board`));
+    for (const c of changed) emitted.add(c);
     if (changed.length + removed.length > 0) lines.push(`## ${s}`, ...changed, ...removed);
   }
   const shownRetired = new Map(prev.retired);
   const newlyRetired = retired.filter(([k, t]) => shownRetired.get(k) !== t).map(([, t]) => t);
   if (newlyRetired.length > 0) lines.push('## Retired contracts', ...newlyRetired);
-  return lines.length > 0 ? ['# Project updates', '', ...lines].join('\n') : null;
+  return { text: lines.length > 0 ? ['# Project updates', '', ...lines].join('\n') : null, emitted };
 }
 
 /** True when the bot's next request is a snapshot: it has no stream yet, or more than the budget was appended since its last one. */
@@ -159,11 +166,11 @@ export function streamRequest(
   const p = prev!;
   const added: Plain[] = [];
   const updates = projectUpdates(p, items, retired, input.humans);
-  if (updates !== null) added.push({ kind: 'updates', text: updates });
+  if (updates.text !== null) added.push({ kind: 'updates', text: updates.text });
   if (p.common !== input.own.common) added.push({ kind: 'common', text: input.own.common });
   const own = { ...p.own };
   for (const k of ITEM_KINDS) {
-    const r = sectionUpdate(TITLES[k], p.own[k], input.items[k]);
+    const r = sectionUpdate(TITLES[k], p.own[k], input.items[k], k === 'projection' ? updates.emitted : undefined);
     if (r.text !== null) added.push({ kind: k, text: r.text });
     own[k] = r.known;
   }
