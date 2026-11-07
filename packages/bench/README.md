@@ -117,7 +117,7 @@ ignored by git.
 | `--stamp <s>` | UTC time `YYYYMMDDTHHmmssZ` | Name of the run's subdirectory |
 | `--probes` | off | Fact probes with a real model (below). Takes no value. The flags below need it (a usage error otherwise) |
 | `--dry-run` | off | With `--probes`: send nothing; print the estimate and write `probe-estimate.json` and `probe-estimate.md` |
-| `--max-cost <usd>` | required for a real run | With `--probes`: budget in US dollars; probing stops before the probe that would pass it |
+| `--max-cost <usd>` | required for a real run | With `--probes`: budget in US dollars; probing stops before the next probe's estimate would pass it (one probe can overshoot by the difference between its estimate and its real cost) |
 | `--model <id>` | `claude-haiku-5-5` | With `--probes`: the probe model; it must have a price in `PRICES` (`src/cost.ts`) |
 | `--probe-groups <list>` | `A,C,D,E` | With `--probes`: comma list of the groups to probe (those also in `--group`) |
 | `--probe-samples <fml\|all\|n>` | `fml` | With `--probes`: which opportunities of a fact are asked: first, middle and last; all; or n evenly spaced |
@@ -158,9 +158,12 @@ ANTHROPIC_API_KEY=... pnpm -C packages/bench bench run --scenario long --group a
   $0.01 cache read, $0.50 output per million tokens for prompts up to 100K tokens; $0.50 / $0.625 /
   $0.05 / $2.50 above). The dry run counts tokens with the bench's `defaultCountTokens`, an
   approximation of the model's tokenizer, and gives a low (cacheable tokens read) and a high
-  (cacheable tokens written) estimate with output at `max_tokens`. In a real run the cost guard adds
+  (cacheable tokens written) estimate with output at `max_tokens`; the high estimate uses the long rate
+  card once the count x 1.5 passes 100K tokens. In a real run the cost guard adds
   the real cost so far to 1.5 times the next probe's high estimate and stops probing (`ProbeStop`)
-  before it would pass `--max-cost`; the scripted run then finishes and every result is written.
+  before the next probe's estimate would pass `--max-cost`; one probe can overshoot by the difference
+  between its estimate and its real cost. Usage reported on a failed request (a refusal) counts too.
+  The scripted run then finishes and every result is written.
 - **Output.** Each finished probe is appended to `probes.jsonl` as it completes. `results.json`
   gains a `probes` section (settings, prices, real usage and cost, stops, every probe record) and
   `report.md` a "Fact probes" section: answers per group and fact category and per group and tier,

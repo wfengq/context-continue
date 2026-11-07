@@ -41,6 +41,8 @@ interface ProbeArgs {
   model: string;
   price: ModelPrice;
   groups: Group[];
+  /** Groups named in --probe-groups that this run does not include. */
+  dropped: Group[];
   samples: ProbeSamples;
   maxPerScenario: number | undefined;
   dryRun: boolean;
@@ -259,7 +261,8 @@ function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArg
   const rawCost = seen.get('--max-cost');
   const maxCost = rawCost === undefined ? undefined : number('--max-cost', rawCost, n => n > 0, 'a positive number of US dollars');
   if (!dryRun && maxCost === undefined) throw new UsageError('--probes sends paid requests: give --max-cost <usd> (or --dry-run for an estimate)');
-  return { model, price, groups: probed, samples, maxPerScenario, dryRun, maxCost };
+  const dropped = groups.filter(g => !runGroups.includes(g));
+  return { model, price, groups: probed, dropped, samples, maxPerScenario, dryRun, maxCost };
 }
 
 /** Runs the bench; returns the process exit code. Errors go to stderr. */
@@ -295,6 +298,12 @@ export async function main(argv: string[], deps: MainDeps = {}): Promise<number>
 
   // Probes: a dry run sends nothing; a real run needs the key (from the environment only) and a budget.
   const pa = args.probes;
+  if (pa !== undefined && pa.dropped.length > 0) {
+    process.stderr.write(`bench: note: --probe-groups: ${pa.dropped.join(', ')} not in this run (--group ${args.group}); probing ${pa.groups.join(', ')}\n`);
+  }
+  if (pa !== undefined && !scenarios.some(s => (s.facts ?? []).some(f => f.probe !== undefined))) {
+    process.stderr.write('bench: note: --probes: no fact in these scenarios has a probe; nothing will be probed\n');
+  }
   let probeModel: Model | undefined;
   let guard: CostGuardModel | undefined;
   if (pa !== undefined) {

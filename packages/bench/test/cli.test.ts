@@ -435,10 +435,10 @@ describe('bench cli: fact probes', () => {
     expect(r.out + r.err).not.toContain('TOPSECRETKEYVALUE');
   }, 60_000);
 
-  test('--max-cost stops probing before the budget is passed and still writes every finished probe', async () => {
+  test('--max-cost: probing stops once the next probe\'s estimate would pass the budget; spend can exceed it by one probe; finished probes are written', async () => {
     const path = probeScenario();
     const out = tmp();
-    // $0.10 of output per probe.
+    // Deliberately unrealistic usage: $0.10 of output per probe, so three probes ($0.30) pass the $0.25 budget.
     const { fetch, bodies } = stubFetch({ input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 200_000 });
     const r = await run(['run', '--scenario', path, '--group', 'all', '--out', out, '--stamp', 'S', '--probes', '--max-cost', '0.25'],
       { fetch, env: { ANTHROPIC_API_KEY: KEY }, sleep: async () => {} });
@@ -450,6 +450,7 @@ describe('bench cli: fact probes', () => {
     expect(json.probes.stopped.length).toBeGreaterThan(0);
     expect(json.probes.stopped[0].reason).toMatch(/--max-cost 0.25 reached/);
     expect(read(join(out, 'S'), 'report.md')).toMatch(/Probing stopped/);
+    expect(read(join(out, 'S'), 'report.md')).toMatch(/not comparable/);
   }, 60_000);
 
   test('usage errors exit 2 without output or requests', async () => {
@@ -479,6 +480,12 @@ describe('bench cli: fact probes', () => {
     const onlyB = await run(['run', '--scenario', 'flappy-bird', '--group', 'B', '--out', out, '--probes', '--dry-run'], { fetch, env: {} });
     expect(onlyB.code).toBe(2);
     expect(onlyB.err).toMatch(/--probe-groups/);
+    // Groups named in --probe-groups but not run are dropped with a note.
+    const dropped = await run(['run', '--scenario', 'flappy-bird', '--group', 'C', '--out', tmp(), '--stamp', 'S', '--probes', '--dry-run'], { fetch, env: {} });
+    expect(dropped.code).toBe(0);
+    expect(dropped.err).toMatch(/--probe-groups: A, D, E not in this run/);
+    // No fact with a probe: a note.
+    expect(dropped.err).toMatch(/no fact in these scenarios has a probe/);
     const noKey = await run([...base, '--probes', '--max-cost', '1'], { fetch, env: {} });
     expect(noKey.code).toBe(2);
     expect(noKey.err).toMatch(/ANTHROPIC_API_KEY is not set/);

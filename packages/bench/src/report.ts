@@ -307,7 +307,12 @@ function renderProbeSection(p: ProbeSection, tierOf: (sc: string) => Tier): stri
     '',
   ];
   if (p.stopped.length > 0) {
-    out.push(`Probing stopped: ${p.stopped[0]!.reason} (in ${p.stopped.map(x => `${x.scenario}/${x.group}`).join(', ')}).`, '');
+    out.push(
+      `Probing stopped: ${p.stopped[0]!.reason} (in ${p.stopped.map(x => `${x.scenario}/${x.group}`).join(', ')}). ` +
+        'Probes are sent in run order (scenario by scenario, groups in order), so the groups and scenarios after the stop lost their probes first: ' +
+        'their percentages are not comparable with the others; compare the raw probe counts.',
+      '',
+    );
   }
   out.push('Answers per group and fact category (%):', '');
   out.push('| Group | Category | Probes | Correct | Stale | Wrong | Error |', '|---|---|---|---|---|---|---|');

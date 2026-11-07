@@ -1,4 +1,6 @@
-import type { Model, ModelRequest } from '../model.js';
+import { ProbeModelError, type Model, type ModelRequest } from '../model.js';
+
+export { ProbeModelError };
 import { probeErrorMessage, ProbeStop } from '../probe.js';
 import type { ModelUsage, ToolCall } from '../types.js';
 
@@ -150,18 +152,18 @@ export class AnthropicModel implements Model {
   }
 
   private parse(j: ApiResponse): { reply: string; ops: ToolCall[]; usage: ModelUsage } {
-    if (j.stop_reason === 'refusal') throw new Error('Anthropic API: the model declined (stop_reason refusal)');
-    const reply = (j.content ?? []).filter(b => b.type === 'text').map(b => b.text ?? '').join('');
     const u = j.usage ?? {};
-    return {
-      reply,
-      ops: [],
-      usage: {
-        inputTokens: u.input_tokens ?? 0,
-        cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
-        cacheReadTokens: u.cache_read_input_tokens ?? 0,
-        outputTokens: u.output_tokens ?? 0,
-      },
+    const usage: ModelUsage = {
+      inputTokens: u.input_tokens ?? 0,
+      cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
+      cacheReadTokens: u.cache_read_input_tokens ?? 0,
+      outputTokens: u.output_tokens ?? 0,
     };
+    // Failed but possibly billed: the error carries the usage so the cost guard counts it.
+    const billed = j.usage === undefined ? undefined : usage;
+    if (j.stop_reason === 'refusal') throw new ProbeModelError('Anthropic API: the model declined (stop_reason refusal)', billed);
+    if (!Array.isArray(j.content)) throw new ProbeModelError('Anthropic API: malformed response (no content array)', billed);
+    const reply = j.content.filter(b => b.type === 'text').map(b => b.text ?? '').join('');
+    return { reply, ops: [], usage };
   }
 }

@@ -43,6 +43,12 @@ export function priceFor(model: string): ModelPrice {
 
 const ratesFor = (p: ModelPrice, promptTokens: number): Rates => (promptTokens > p.longPromptAbove ? p.long : p.short);
 
+/**
+ * How much the model's tokenizer may count above the bench's `defaultCountTokens`: the high estimate
+ * picks its rate card from inputTokens x this, and the cost guard multiplies the high estimate by it.
+ */
+export const TOKEN_MARGIN = 1.5;
+
 /** The USD cost of one request's reported usage. */
 export function usageCost(p: ModelPrice, u: ModelUsage): number {
   const r = ratesFor(p, u.inputTokens + u.cacheWriteTokens + u.cacheReadTokens);
@@ -52,12 +58,21 @@ export function usageCost(p: ModelPrice, u: ModelUsage): number {
 /**
  * Estimated USD cost of one probe from the bench's token counts (an approximation of the model's
  * tokenizer): `low` reads every cacheable token from the cache, `high` writes every one; the rest
- * is uncached input, and the output is `maxTokens` (its upper bound) in both.
+ * is uncached input, and the output is `maxTokens` (its upper bound) in both. `low` picks the rate
+ * card from the plain count; `high` from the count x `margin`, so a prompt the real tokenizer may
+ * put above 100K tokens is priced on the long card.
  */
-export function estimateProbeCost(p: ModelPrice, t: { inputTokens: number; cacheableTokens: number }, maxTokens: number): { low: number; high: number } {
-  const r = ratesFor(p, t.inputTokens);
-  const rest = (t.inputTokens - t.cacheableTokens) * r.input + maxTokens * r.output;
-  return { low: (t.cacheableTokens * r.cacheRead + rest) / 1e6, high: (t.cacheableTokens * r.cacheWrite + rest) / 1e6 };
+export function estimateProbeCost(
+  p: ModelPrice,
+  t: { inputTokens: number; cacheableTokens: number },
+  maxTokens: number,
+  margin = TOKEN_MARGIN,
+): { low: number; high: number } {
+  const price = (r: Rates, cacheRate: number) =>
+    (t.cacheableTokens * cacheRate + (t.inputTokens - t.cacheableTokens) * r.input + maxTokens * r.output) / 1e6;
+  const lo = ratesFor(p, t.inputTokens);
+  const hi = ratesFor(p, t.inputTokens * margin);
+  return { low: price(lo, lo.cacheRead), high: price(hi, hi.cacheWrite) };
 }
 
 /** Sums the real usage a model reports and its cost. */
@@ -98,7 +113,7 @@ export class CostGuardModel implements Model {
   ) {
     this.spent = new CostAccumulator(price);
     this.count = opts.count ?? defaultCountTokens;
-    this.margin = opts.margin ?? 1.5;
+    this.margin = opts.margin ?? TOKEN_MARGIN;
   }
 
   async complete(r: ModelRequest): Promise<{ reply: string; ops: ToolCall[]; usage?: ModelUsage }> {
@@ -110,15 +125,29 @@ export class CostGuardModel implements Model {
       inputTokens += n;
       if (s.cacheable) cacheableTokens += n;
     }
-    const next = estimateProbeCost(this.price, { inputTokens, cacheableTokens }, this.opts.maxTokens).high * this.margin;
+    const next = estimateProbeCost(this.price, { inputTokens, cacheableTokens }, this.opts.maxTokens, this.margin).high * this.margin;
     if (this.spent.cost + next > this.opts.maxCost) {
       this.stopped = `--max-cost ${this.opts.maxCost} reached: spent $${this.spent.cost.toFixed(4)} on ${this.spent.requests} probes, next probe estimated at up to $${next.toFixed(4)}`;
       throw new ProbeStop(this.stopped);
     }
-    const out = await this.inner.complete(r);
+    let out: Awaited<ReturnType<Model['complete']>>;
+    try {
+      out = await this.inner.complete(r);
+    } catch (e) {
+      // A failed request can still be billed (a refusal): count the usage it reports.
+      const usage = (e as { usage?: unknown } | null)?.usage;
+      if (isUsage(usage)) this.spent.add(usage);
+      throw e;
+    }
     if (out.usage !== undefined) this.spent.add(out.usage);
     return out;
   }
+}
+
+function isUsage(u: unknown): u is ModelUsage {
+  if (typeof u !== 'object' || u === null) return false;
+  const x = u as Record<string, unknown>;
+  return ['inputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'outputTokens'].every(k => typeof x[k] === 'number');
 }
 
 /** The dry-run probe model: sends nothing, answers nothing. */

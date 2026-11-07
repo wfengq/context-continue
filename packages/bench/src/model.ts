@@ -12,6 +12,16 @@ export interface Model {
   complete(r: ModelRequest): Promise<{ reply: string; ops: ToolCall[]; usage?: ModelUsage }>;
 }
 
+/**
+ * A failed model request that was still billed (a refusal, a malformed 200 body): `usage` is what the
+ * provider reported, so a cost guard can count it.
+ */
+export class ProbeModelError extends Error {
+  constructor(message: string, readonly usage?: ModelUsage) {
+    super(message);
+  }
+}
+
 /** Fake model: replays the script, and answers every extra request with `idleReply`. */
 export class ScriptedModel implements Model {
   constructor(private readonly idleReply: string) {}

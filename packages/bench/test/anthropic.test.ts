@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { AnthropicModel, buildMessagesBody, cacheBreakpoints, resolveApiKey, PROXY_KEY_FLAG } from '../src/models/anthropic.js';
+import { AnthropicModel, ProbeModelError, buildMessagesBody, cacheBreakpoints, resolveApiKey, PROXY_KEY_FLAG } from '../src/models/anthropic.js';
 import { CostAccumulator, CostGuardModel, estimateProbeCost, priceFor, usageCost } from '../src/cost.js';
 import type { Model, ModelRequest } from '../src/model.js';
 import { probeErrorMessage, ProbeStop } from '../src/probe.js';
@@ -157,10 +157,29 @@ describe('AnthropicModel', () => {
     expect(calls).toHaveLength(1);
   });
 
-  test('a refusal is an error, not an empty answer', async () => {
-    const res = new Response(JSON.stringify({ content: [], stop_reason: 'refusal', usage: { input_tokens: 1, output_tokens: 0 } }), { status: 200 });
+  test('a refusal is an error, not an empty answer, and carries the usage it was billed', async () => {
+    const res = new Response(JSON.stringify({ content: [], stop_reason: 'refusal', usage: { input_tokens: 1000, output_tokens: 3 } }), { status: 200 });
     const { fetch } = stubFetch([res]);
-    await expect(new AnthropicModel({ model: 'm', apiKey: KEY, fetch, sleep: noSleep }).complete(request([seg('q', false)]))).rejects.toThrow(/refusal/);
+    const err = await new AnthropicModel({ model: 'm', apiKey: KEY, fetch, sleep: noSleep }).complete(request([seg('q', false)])).catch((e: unknown) => e);
+    expect((err as Error).message).toMatch(/refusal/);
+    expect(err).toBeInstanceOf(ProbeModelError);
+    expect((err as ProbeModelError).usage).toEqual({ inputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 3 });
+  });
+
+  test('a malformed 200 body (no content array) is an error that still carries its usage', async () => {
+    const res = new Response(JSON.stringify({ stop_reason: 'end_turn', usage: { input_tokens: 5, output_tokens: 2 } }), { status: 200 });
+    const { fetch } = stubFetch([res]);
+    const err = await new AnthropicModel({ model: 'm', apiKey: KEY, fetch, sleep: noSleep }).complete(request([seg('q', false)])).catch((e: unknown) => e);
+    expect((err as Error).message).toMatch(/malformed/);
+    expect((err as ProbeModelError).usage).toEqual({ inputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 2 });
+  });
+
+  test('a refusal through the cost guard counts toward spent cost', async () => {
+    const res = new Response(JSON.stringify({ content: [], stop_reason: 'refusal', usage: { input_tokens: 1_000_000, output_tokens: 0 } }), { status: 200 });
+    const { fetch } = stubFetch([res]);
+    const guard = new CostGuardModel(new AnthropicModel({ model: 'claude-haiku-5-5', apiKey: KEY, fetch, sleep: noSleep }), priceFor('claude-haiku-5-5'), { maxCost: 5, maxTokens: 200 });
+    await expect(guard.complete(request([seg('q', false)]))).rejects.toThrow(/refusal/);
+    expect(guard.spent.cost).toBeCloseTo(0.5, 10);
   });
 });
 
@@ -179,6 +198,17 @@ describe('cost', () => {
     expect(usageCost(haiku, { inputTokens: 50_000, cacheWriteTokens: 0, cacheReadTokens: 50_000, outputTokens: 100 })).toBeCloseTo(
       (50_000 * 0.1 + 50_000 * 0.01 + 100 * 0.5) / 1e6, 12);
   });
+  test('the high estimate picks the long card once inputTokens x margin passes 100K; low keeps the plain count', () => {
+    // 80K bench tokens x 1.5 = 120K > 100K: high on the long card, low on the short one.
+    const e = estimateProbeCost(haiku, { inputTokens: 80_000, cacheableTokens: 60_000 }, 200);
+    expect(e.high).toBeCloseTo((60_000 * 0.625 + 20_000 * 0.5 + 200 * 2.5) / 1e6, 12);
+    expect(e.low).toBeCloseTo((60_000 * 0.01 + 20_000 * 0.1 + 200 * 0.5) / 1e6, 12);
+    // 66,666 x 1.5 < 100K: both short.
+    const s = estimateProbeCost(haiku, { inputTokens: 66_666, cacheableTokens: 0 }, 200);
+    expect(s.high).toBeCloseTo((66_666 * 0.1 + 200 * 0.5) / 1e6, 12);
+    // An explicit margin of 1 restores the plain count.
+    expect(estimateProbeCost(haiku, { inputTokens: 80_000, cacheableTokens: 60_000 }, 200, 1).high).toBeCloseTo((60_000 * 0.125 + 20_000 * 0.1 + 200 * 0.5) / 1e6, 12);
+  });
   test('estimateProbeCost: low reads every cacheable token, high writes it; output at max_tokens', () => {
     const e = estimateProbeCost(haiku, { inputTokens: 10_000, cacheableTokens: 8_000 }, 200);
     expect(e.low).toBeCloseTo((8_000 * 0.01 + 2_000 * 0.1 + 200 * 0.5) / 1e6, 12);
@@ -195,7 +225,8 @@ describe('cost', () => {
 });
 
 describe('CostGuardModel', () => {
-  const usage: ModelUsage = { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 200_000 }; // $0.10 each
+  // Deliberately unrealistic (200,000 output tokens, $0.10 per request) so that a few requests reach the budget.
+  const usage: ModelUsage = { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 200_000 };
   const inner = (): Model & { n: number } => ({ n: 0, async complete() { this.n++; return { reply: 'x', ops: [], usage }; } });
   test('throws ProbeStop before the probe whose estimate would pass --max-cost, and keeps stopping', async () => {
     const m = inner();
@@ -204,12 +235,29 @@ describe('CostGuardModel', () => {
     await guard.complete(r);
     await guard.complete(r);
     expect(guard.spent.cost).toBeCloseTo(0.2, 10);
-    // 0.20 spent + 0.10 is not used for the estimate: the estimate is of the request (tiny), so the third one fits ...
+    // The guard estimates from the request (a few tokens: well under $0.01), not from past usage, so with
+    // $0.20 spent the third request still fits the $0.25 budget and is sent ...
     await guard.complete(r);
-    // ... and now 0.30 > 0.25: every later call stops without reaching the model.
+    // ... and costs $0.10, so $0.30 is spent: the budget is overshot by one request, and every later call stops
+    // without reaching the model.
     await expect(guard.complete(r)).rejects.toBeInstanceOf(ProbeStop);
     await expect(guard.complete(r)).rejects.toThrow(/max-cost/);
     expect(m.n).toBe(3);
+  });
+  test("the guard's pre-check prices an 80K-token request on the long card", async () => {
+    const m = inner();
+    // 80K counted tokens, all uncached: long card x margin = 80,000 x 0.5 / 1e6 x 1.5 = $0.06 (+ output); short card would be $0.012.
+    const count = (t: string) => (t === 'big' ? 80_000 : 0);
+    const guard = new CostGuardModel(m, priceFor('claude-haiku-5-5'), { maxCost: 0.05, maxTokens: 200, count });
+    await expect(guard.complete(request([seg('big', false)]))).rejects.toBeInstanceOf(ProbeStop);
+    expect(m.n).toBe(0);
+  });
+  test('usage carried by a failed request (a refusal) is counted', async () => {
+    const failing: Model = { async complete() { throw Object.assign(new Error('declined'), { usage }); } };
+    const guard = new CostGuardModel(failing, priceFor('claude-haiku-5-5'), { maxCost: 1, maxTokens: 200 });
+    await expect(guard.complete(request([seg('q', false)]))).rejects.toThrow(/declined/);
+    expect(guard.spent.requests).toBe(1);
+    expect(guard.spent.cost).toBeCloseTo(0.1, 10);
   });
   test('stops before a request whose estimate alone would pass the budget', async () => {
     const m = inner();
