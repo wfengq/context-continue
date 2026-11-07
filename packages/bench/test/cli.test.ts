@@ -692,6 +692,9 @@ describe('bench cli: openai-compatible probes', () => {
       { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,-1,1', '--max-cost', '1'], err: /--price must be/ },
       { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,x,1', '--max-cost', '1'], err: /--price must be/ },
       { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,,1', '--max-cost', '1'], err: /--price must be/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '0x10,1,1', '--max-cost', '1'], err: /--price must be/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1e3,1,1', '--max-cost', '1'], err: /--price must be/ },
+      { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,.5,1', '--max-cost', '1'], err: /--price must be/ },
       { args: ['--provider', 'openai', '--base-url', 'http://x', '--model', 'm', '--price', '1,1,1'], err: /--max-cost/ },
       { args: ['--provider', 'nope', '--max-cost', '1'], err: /--provider must be/ },
     ];

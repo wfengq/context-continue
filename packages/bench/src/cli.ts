@@ -271,7 +271,7 @@ function parseProbeArgs(seen: Map<string, string>, runGroups: Group[]): ProbeArg
     const rawPrice = seen.get('--price')!;
     const parts = rawPrice.split(',');
     const nums = parts.map(x => Number(x));
-    if (parts.length !== 3 || parts.some((x, i) => x.trim() === '' || !Number.isFinite(nums[i]!) || nums[i]! < 0)) {
+    if (parts.length !== 3 || parts.some(x => !/^\d+(\.\d+)?$/.test(x))) {
       throw new UsageError(`--price must be three non-negative numbers <input>,<cache-hit>,<output> (USD per million tokens), got "${rawPrice}"`);
     }
     price = customPrice(nums[0]!, nums[1]!, nums[2]!);

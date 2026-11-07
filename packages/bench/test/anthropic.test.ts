@@ -157,6 +157,18 @@ describe('AnthropicModel', () => {
     expect(calls).toHaveLength(1);
   });
 
+  test('an unreachable host stops probing after the retries, with the cause code and without the key', async () => {
+    const down = () => Object.assign(new TypeError(`fetch failed ${KEY}`), { cause: { code: 'ENOTFOUND' } });
+    const { fetch, calls } = stubFetch(Array.from({ length: 5 }, down));
+    const m = new AnthropicModel({ model: 'm', apiKey: KEY, fetch, sleep: noSleep });
+    const err = await m.complete(request([seg('q', false)])).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProbeStop);
+    expect((err as Error).message).toContain('ENOTFOUND');
+    expect((err as Error).message).not.toContain(KEY);
+    await expect(m.complete(request([seg('q', false)]))).rejects.toBeInstanceOf(ProbeStop);
+    expect(calls).toHaveLength(5);
+  });
+
   test('a refusal is an error, not an empty answer, and carries the usage it was billed', async () => {
     const res = new Response(JSON.stringify({ content: [], stop_reason: 'refusal', usage: { input_tokens: 1000, output_tokens: 3 } }), { status: 200 });
     const { fetch } = stubFetch([res]);

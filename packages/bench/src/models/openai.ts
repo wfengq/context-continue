@@ -103,7 +103,11 @@ export class OpenAIModel implements Model {
           await this.sleep(backoff(attempt, null));
           continue;
         }
-        throw new Error(this.clean(`OpenAI-compatible API request failed after ${attempt + 1} attempts: ${e instanceof Error ? e.message : String(e)}`));
+        const c = (e as { cause?: { code?: unknown } } | null)?.cause?.code;
+        const why = `${e instanceof Error ? e.message : String(e)}${typeof c === 'string' ? ` (${c})` : ''}`;
+        // Every later request would fail the same way: stop probing for the rest of the run.
+        this.fatal = this.clean(`OpenAI-compatible API unreachable after ${attempt + 1} attempts: ${why}`);
+        throw new ProbeStop(this.fatal);
       }
       if (res.ok) {
         let j: ChatResponse;

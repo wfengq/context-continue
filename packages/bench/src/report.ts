@@ -390,7 +390,7 @@ export function renderProbeEstimate(
     `${meta.provider === undefined ? '' : `Provider openai-compatible (host ${meta.baseUrlHost}); `}Model ${meta.model}; max_tokens ${meta.maxTokens}; samples ${meta.samples}${meta.maxPerScenario === undefined ? '' : `; at most ${meta.maxPerScenario} probes per scenario`}; groups ${meta.groups.join(', ')}.`,
     '',
     "Tokens are the bench's count (defaultCountTokens: about 4 characters, or 1 CJK character, per token), an approximation of the model's real tokenizer, " +
-      'which may count noticeably more. Low: every R-B19 cacheable token is a cache read; high: every one is a cache write. Output is counted at max_tokens (its upper bound).',
+      `which may count noticeably more. Low: every R-B19 cacheable token is a cache read; high: every one is ${meta.provider === undefined ? 'a cache write' : 'at the input price'}. Output is counted at max_tokens (its upper bound).`,
     '',
     '| Scenario | Tier | Group | Probes | Input tokens | Cacheable | Output (max) | Cost low | Cost high |',
     '|---|---|---|---|---|---|---|---|---|',

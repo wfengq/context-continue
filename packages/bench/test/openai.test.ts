@@ -112,6 +112,17 @@ describe('errors and retries', () => {
     const t = stubFetch(Array.from({ length: 5 }, () => new Error('down')));
     await expect(model(t.fetch).complete(request())).rejects.toThrow(/after 5 attempts/);
   });
+  test('unreachable host: after the retries a sticky ProbeStop with the cause code and no key', async () => {
+    const down = () => Object.assign(new TypeError(`fetch failed ${KEY}`), { cause: { code: 'ECONNREFUSED' } });
+    const s = stubFetch(Array.from({ length: 5 }, down));
+    const m = model(s.fetch);
+    const e = await m.complete(request()).catch(x => x);
+    expect(e).toBeInstanceOf(ProbeStop);
+    expect((e as Error).message).toContain('ECONNREFUSED');
+    expect((e as Error).message).not.toContain(KEY);
+    await expect(m.complete(request())).rejects.toBeInstanceOf(ProbeStop);
+    expect(s.calls).toHaveLength(5);
+  });
   test('the key never appears in an error message', async () => {
     const s = stubFetch([err(400, `bad key ${KEY} here`)]);
     const e = (await model(s.fetch).complete(request()).catch(x => x)) as Error;

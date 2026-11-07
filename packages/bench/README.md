@@ -198,11 +198,15 @@ Take the prices from DeepSeek's pricing page, in USD per 1M tokens: input (cache
 (cache hit), output. The bench has no price table for these models: you are responsible for the
 prices you give, and the cost guard and the report's costs are only as good as they are. A custom
 price has one tier and no cache-write premium; the high estimate prices every cacheable token at the
-input rate. Local server (no key needed; a note is printed if the variable is unset):
+input rate. Node's `fetch` does not use `HTTPS_PROXY`, so the server must be reachable directly.
+
+Local server: `LOCAL_API_KEY` is deliberately a variable you leave unset for a server that needs no
+key, so that a key such as `OPENAI_API_KEY` is never sent to localhost (a note is printed when the
+variable is unset):
 
 ```sh
 pnpm -C packages/bench bench run --scenario long --group all --probes --provider openai \
-  --base-url http://localhost:11434/v1 --model <name> --price 0,0,0 --max-cost 1
+  --base-url http://localhost:11434/v1 --model <name> --api-key-env LOCAL_API_KEY --price 0,0,0 --max-cost 1
 ```
 
 `results.json` and the report record the provider, model, the `--base-url` host (never the full URL
